@@ -5,6 +5,8 @@ PD.DM.Main.tbl = {}
 
 util.AddNetworkString("TESTTESTTESTTEST")
 
+local dir = "deadshot/dm"
+
 local blanc_clone = { -- ply:SteamID64()
     puls = 60, -- Puls der person
     spo2 = 90, -- Sauerstoffsättigung der person
@@ -12,49 +14,43 @@ local blanc_clone = { -- ply:SteamID64()
     species = "Mensch", -- Spezies der person
     triage_card = 0, -- Triage einstuffung der person | 0 = nnon | 1 = delayed | 2 = asap | 3 = Immediately
     blood_type = "0-", -- Blutgruppe der person | A+ | A- | B+ | B- | AB+ | AB- | O+ | O-
+    blood_amount = 5.5, -- Blutmenge der person
     pain_level = 0, -- Schmerzlevel der person | 0 = normal | 1 = mild | 2 = moderate | 3 = severe | 4 = critical
     body_part = { -- Alle Körpergruppen einer Person mit ensprechenden relevanten informationen
         [1] = {
             name = "Kopf",
-            status = 100,
             tourniquet = false,
-            bleed = false
+            bleading_level = 0
         },
         [2] = {
             name = "Torso",
-            status = 100,
             tourniquet = false,
-            bleed = false
+            bleading_level = 0
         },
         [3] = {
             name = "Bauch",
-            status = 100,
             tourniquet = false,
-            bleed = false
+            bleading_level = 0
         },
         [4] = {
             name = "Arm Links",
-            status = 100,
             tourniquet = false,
-            bleed = false
+            bleading_level = 0
         },
         [5] = {
             name = "Arm Rechts",
-            status = 100,
             tourniquet = false,
-            bleed = false
+            bleading_level = 0
         },
         [6] = {
             name = "Bein Links",
-            status = 100,
             tourniquet = false,
-            bleed = false
+            bleading_level = 0
         },
         [7] = {
             name = "Bein Rechts",
-            status = 100,
             tourniquet = false,
-            bleed = false
+            bleading_level = 0
         }
     },
     injureys = { -- Alle Verletzungen welche eine Person momentan hat so wie Hitgroup und behandlungs status
@@ -105,8 +101,6 @@ hook.Add("PostPDLoaded", "PD.DM.CreateEntryFromLoad", function()
         PD.DM.Main.tbl[ply:SteamID64()] = blanc_clone
     end
 
-    local dir = "deadshot/dm"
-
     PD.DM.LoadDir(dir)
 
     PD.DM.Injury.tbl = PD.DM.LoadFill(dir .. "/injuries.json", PD.DM.Injury.tbl)
@@ -128,12 +122,16 @@ function PD.DM.LoadFill(file, tbl)
     return PD.JSON.Read(file)
 end
 
-function PD.DM.SaveDir(file, tbl)
-    if PD.JSON.Exists(file) then
-        PD.JSON.Delete(file)
-    end
+-- function PD.DM.SaveDir(file, tbl) TODO: Spieler verletzungen Speichern
+--     if PD.JSON.Exists(file) then
+--         PD.JSON.Delete(file)
+--     end
 
-    PD.JSON.Write(file, tbl)
+--     PD.JSON.Write(file, tbl)
+-- end
+
+function PD.DM.AddPlayerEntry(ply)
+    PD.DM.Main.tbl[ply:SteamID64()] = blanc_clone
 end
 
 concommand.Add("pd_dm_prints", function()
@@ -141,19 +139,3 @@ concommand.Add("pd_dm_prints", function()
     PrintTable(PD.DM.Main.tbl)
     print("================================Ende=======================================")
 end)
-
-function loadawdwdadawdawd()
-    for _, ply in player.Iterator() do
-        PD.DM.Main.tbl[ply:SteamID64()] = blanc_clone
-    end
-
-    local dir = "deadshot/dm"
-
-    PD.DM.LoadDir(dir)
-
-    -- PD.DM.Injury.tbl = PD.DM.LoadFill(dir .. "/injuries.json", PD.DM.Injury.tbl)
-    -- PD.DM.Treatments.tbl = PD.DM.LoadFill(dir .. "/treatments.json", PD.DM.Treatments.tbl)
-    -- PD.DM.Medication.tbl = PD.DM.LoadFill(dir .. "/medication.json", PD.DM.Medication.tbl)
-end
-
-loadawdwdadawdawd()

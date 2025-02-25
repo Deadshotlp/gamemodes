@@ -6,7 +6,7 @@ PD.DM.Injury.tbl = {
         wo = {1, 2, 3, 4, 5, 6, 7},
         typ = {2},
         needs_desinfication = true,
-        bleading_level = 1,
+        bleading_level = 0,
         pain_level = 1,
         treatment = {
             [1] = {
@@ -20,7 +20,7 @@ PD.DM.Injury.tbl = {
         wo = {1, 2, 3, 4, 5, 6, 7},
         typ = {2},
         needs_desinfication = true,
-        bleading_level = 1,
+        bleading_level = 0.1,
         pain_level = 1,
         treatment = {
             [1] = {
@@ -32,7 +32,6 @@ PD.DM.Injury.tbl = {
 
 }
 
--- https://wiki.facepunch.com/gmod/Enums/DMG
 -- https://docs.google.com/document/d/1FMGeQtCjmIfhwUJ6MItAneQauIpXqoIUE2xyPdc_8bQ/edit?usp=sharing
 
 hook.Add("EntityTakeDamage", "DM.Injury", function(target, dmg)
@@ -74,10 +73,43 @@ function PD.DM:AddInjury(ply, tbl, hitGroup)
         needs_desinfication = tbl.needs_desinfication,
         bleading_level = tbl.bleading_level,
         pain_level = tbl.pain_level,
-        treatment = tbl.treatment
+        treatment = tbl.treatment,
+        calculated = false
     }
 
     table.insert(inj, id)
 
     PD.DM:UpdateTable(ply, "injureys", inj)
+end
+
+function PD.DM:CalculateInjuries(tbl)
+    if not tbl["injureys"] then
+        return
+    end
+
+    for k, v in pairs(tbl["injureys"]) do
+        if not v.calculated then
+            if v.bleading_level > 0 then
+                tbl["body_part"][v.wo].bleed = true
+                tbl["body_part"][v.wo].bleading_level = tbl["body_part"][v.wo].bleading_level + v.bleading_level
+            end
+
+            if v.pain_level > 0 then
+                tbl["pain_level"] = tbl["pain_level"] + v.pain_level
+            end
+
+            v.calculated = true
+        end
+
+        if v.needs_desinfication then
+            PD.DM:AddInfactions(tbl)
+        end
+
+    end
+
+    for k, v in pairs(tbl["body_part"]) do
+        if v.bleading_level > 0 and not v.tourniquet then
+            v.blood_amount = v.blood_amount - v.bleading_level
+        end
+    end
 end
