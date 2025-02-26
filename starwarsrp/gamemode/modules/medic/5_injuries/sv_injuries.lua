@@ -36,6 +36,24 @@ PD.DM.Injury.tbl = {
 
 hook.Add("EntityTakeDamage", "DM.Injury", function(target, dmg)
 
+    --
+    --
+    --
+    --
+
+    --
+    --
+
+    --
+    --
+    --
+
+    --
+
+    --
+
+    --
+
     if target:IsPlayer() then -- and not target:LastHitGroup() == 10 then
         dmg:SetDamage(0)
         local hitGroup = 1 -- target:LastHitGroup()
