@@ -34,10 +34,6 @@ PD.DM.Injury.tbl = {
 
 -- https://docs.google.com/document/d/1FMGeQtCjmIfhwUJ6MItAneQauIpXqoIUE2xyPdc_8bQ/edit?usp=sharing
 
-hook.Add("Think", "bdijhbawiudawudnawd", function()
-    print("test")
-end)
-
 hook.Add("EntityTakeDamage", "DM.Injury", function(target, dmg)
 
     if target:IsPlayer() then -- and not target:LastHitGroup() == 10 then
