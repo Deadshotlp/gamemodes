@@ -6,7 +6,7 @@ local delay = 1
 
 function PD.DM:Update()
     local time1 = os.time()
-    print("Start Update Medical Data: " .. PD.DM:FormatTime())
+    -- print("Start Update Medical Data: " .. PD.DM:FormatTime())
 
     for _, ply in pairs(player.GetAll()) do
         if not PD.DM.Main.tbl[ply:SteamID64()] then
@@ -24,11 +24,11 @@ function PD.DM:Update()
 
     local time2 = os.time()
 
-    print(time1)
-    print(time2)
-    print("Time: " .. time2 - time1)
+    -- print(time1)
+    -- print(time2)
+    -- print("Time: " .. time2 - time1)
 
-    print("End Update Medical Data: " .. PD.DM:FormatTime())
+    -- print("End Update Medical Data: " .. PD.DM:FormatTime())
 end
 
 hook.Add("Think", "PD.DM.Update", function()
