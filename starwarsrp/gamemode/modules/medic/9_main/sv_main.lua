@@ -13,10 +13,11 @@ local blanc_clone = { -- ply:SteamID64()
     spo2 = 90, -- Sauerstoffsättigung der person
     bp = {120, 80}, -- Blutdruck der person
     species = "Mensch", -- Spezies der person
-    triage_card = 0, -- Triage einstuffung der person | 0 = nnon | 1 = delayed | 2 = asap | 3 = Immediately
+    triage_card = 0, -- Triage einstuffung der person | 0 = non | 1 = delayed | 2 = asap | 3 = Immediately
     blood_type = "0-", -- Blutgruppe der person | A+ | A- | B+ | B- | AB+ | AB- | O+ | O-
     blood_amount = 5.5, -- Blutmenge der person
     pain_level = 0, -- Schmerzlevel der person | 0 = normal | 1 = mild | 2 = moderate | 3 = severe | 4 = critical
+    is_breatheing = true, -- Person Atmet
     body_part = { -- Alle Körpergruppen einer Person mit ensprechenden relevanten informationen
         [1] = {
             name = "Kopf",
