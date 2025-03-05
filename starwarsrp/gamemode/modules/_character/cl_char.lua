@@ -159,9 +159,9 @@ function PD.Char:Menu(close)
             function modelChar:LayoutEntity(Entity)
                 return
             end
-            function modelChar.Entity:GetPlayerColor()
-                return Vector(1, 0, 0)
-            end
+            -- function modelChar.Entity:GetPlayerColor()
+            --     return Vector(1, 0, 0)
+            -- end
         end
 
         local buttonChar = PD.Button("", panelChar, function()
