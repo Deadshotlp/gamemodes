@@ -132,27 +132,6 @@ function PD.DM.UI.AddTablVal(scrl, tbl, val)
     end
 end
 
--- function PD.DM.UI.CreatePanelContant(parent_panel, v)
---     local count = 2
---     local elements = {}
---
---     for k2, v2 in pairs(v) do
---         local child_panel = PD.Panel("", parent_panel)
---         child_panel:Dock(TOP)
---         child_panel:SetTall(PD.H(35))
---
---         local label = PD.Label(k2 .. ":", child_panel)
---         label:Dock(LEFT)
---
---         local te = PD.TextEntry(k2, child_panel, v2)
---         te:Dock(FILL)
---
---         elements[k2] = te
---         count = count + 1
---     end
---
---     return count, elements
-
 function PD.DM.UI.CreatePanelContant(parent_panel, v)
     local count = 2
     local elements = {}
