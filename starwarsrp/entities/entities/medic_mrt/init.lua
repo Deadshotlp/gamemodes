@@ -31,6 +31,10 @@ function ENT:Initialize()
 
     self.pod:SetColor(Color(0, 0, 0, 0))
     self.pod:SetRenderMode(RENDERMODE_TRANSALPHA)
+
+    table.insert(PD.DM.Props.MRT.tbl, self)
+
+    PrintTable(PD.DM.Props.MRT.tbl)
 end
 
 function ENT:SpawnFunction(ply, tr)

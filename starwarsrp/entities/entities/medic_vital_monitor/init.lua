@@ -17,6 +17,9 @@ function ENT:Initialize()
     end
     self:SetCollisionGroup(COLLISION_GROUP_INTERACTIVE_DEBRIS)
 
+    table.insert(PD.DM.Props.VM.tbl, self)
+
+    PrintTable(PD.DM.Props.VM.tbl)
 end
 
 function ENT:SpawnFunction(ply, tr)
