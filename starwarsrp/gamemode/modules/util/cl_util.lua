@@ -18,19 +18,21 @@ timer.Simple(1, function()
 end)
 
 hook.Add("PreRender", "JOaGPU", function()
-    -- if not system.HasFocus() then
+    if not system.HasFocus() then
+        if LocalPlayer():IsAdmin() then return end
 
-    --     cam.Start2D()
+        cam.Start2D()
 
-    --     draw.RoundedBox(0,0,0,ScrW(),ScrH(),Color(0,0,0,255))
+        draw.RoundedBox(0,0,0,ScrW(),ScrH(),Color(0,0,0,255))
 
-    --     draw.DrawText("Hm, scheit so als hättest du dein Spiel nicht mehr aktiv!", "MLIB.50", ScrW() / 2, ScrH() / 2, Color(255,255,255), TEXT_ALIGN_CENTER)
+        draw.DrawText("Hm, scheit so als hättest du dein Spiel nicht mehr aktiv!", "MLIB.50", ScrW() / 2, ScrH() / 2, Color(255,255,255), TEXT_ALIGN_CENTER)
 
-    --     cam.End2D()
+        cam.End2D()
     
-    --     return true
-    -- end
+        return true
+    end
 end)
+
 
 local videourl = ""
 local VideoStart = 0
@@ -116,12 +118,62 @@ hook.Add("Think", "PD.YoutubeSkip", function()
     end
 end)
 
+local longtext = [[
+Bevor du den Server betrittst, musst du diese Regeln lesen und bestätigen. Verstöße können zu Kicks, Bans oder permanentem Ausschluss führen.
+
+1. Roleplay (RP) Verhalten
+Du spielst deinen Charakter immersiv – kein Metagaming oder Powergaming.
+
+FailRP (z.B. unrealistisches Verhalten deines Charakters) ist verboten.
+
+RP-Tod: Du vergisst alles, was passierte.
+
+2. Kommunikation
+Voice & Chat dienen dem RP – kein OOC im IC!
+
+Respektiere andere Spieler, kein Trolling oder Beleidigungen.
+
+Rassismus, Sexismus und andere diskriminierende Inhalte sind sofort bannwürdig.
+
+3. Verbotenes Verhalten
+Kein RDM (Random Deathmatch) oder VDM (Fahrzeuge als Waffe ohne RP).
+
+Kein Cheating, Exploiting oder Bugusing.
+
+Werbung für andere Server, Discords oder Communities ist untersagt.
+
+4. Fraktionsverhalten
+Befehle der Vorgesetzten sind zu befolgen – Befehlsverweigerung kann Ingame-Strafen haben.
+
+Eigenmächtiges Handeln außerhalb deines Rangs/Jobs ist untersagt.
+
+Klassen- oder Ausrüstungsregeln deiner Einheit müssen eingehalten werden.
+
+5. Allgemeines Verhalten
+Kein Spammen, Griefen oder Belästigen anderer Spieler.
+
+Du brauchst ein funktionierendes Mikrofon und solltest im Voicechat klar verständlich sein.
+
+Ich habe die Regeln gelesen, verstanden und akzeptiere sie.
+]]
+
 local function RulePopup()
     if IsValid(frame) then return end
 
-    frame = PD.Frame("Regeln", PD.W(600), PD.H(800), false)
+    frame = PD.Frame("📜 Server-Regeln – Galactic Liberation", PD.W(600), PD.H(800), true, function(self, w, h)
+        -- draw.DrawText(longtext, "MLIB.20", PD.W(10), PD.H(10), Color(255, 255, 255), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+    end)
 
-    local lbl = PD.Label("Regeln", frame)
+    local scrl = PD.Scroll(frame)
+
+    local pnl = PD.Panel("", scrl, function(self, w, h)
+        -- draw.DrawText(longtext, "MLIB.20", PD.W(10), PD.H(10), Color(255, 255, 255), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+        local longText = markup.Parse("<font=MLIB.20>"..longtext,self:GetWide()-PD.W(20))
+        longText:Draw(PD.W(10), PD.H(10),TEXT_ALIGN_LEFT,TEXT_ALIGN_TOP)
+    end)
+    surface.SetFont("MLIB.20")
+    local w, h = surface.GetTextSize(longtext)
+    pnl:SetTall(PD.H(h + 20))
 
     local accept = PD.Button("Akzeptieren", frame, function()
         frame:Remove()

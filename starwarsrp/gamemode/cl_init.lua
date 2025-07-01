@@ -8,8 +8,8 @@ DeriveGamemode("sandbox")
 DEFINE_BASECLASS("gamemode_sandbox")
 GM.Sandbox = BaseClass
 
-if GAMEMODE_LOADED then return end
-GAMEMODE_LOADED = true
+-- if GAMEMODE_LOADED then return end
+-- GAMEMODE_LOADED = true
 
 include("shared.lua")
 

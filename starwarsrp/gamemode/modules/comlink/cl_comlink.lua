@@ -110,7 +110,8 @@ end
 -- local text = "N/A"
 local textChannel = "N/A"
 local textExtra1, textExtra2, textExtra3 = "N/A", "N/A", "N/A"
-hook.Add("HUDPaint", "PD.Comlink.HUDPaint", function()
+
+AddSmoothElement(ScrW() - PD.W(20), PD.H(20), PD.W(10) , PD.H(10), function(smoothX, smoothY)
     textChannel = LocalPlayer().ActiveChannel or "N/A"
 
     -- if PD.Comlink.Muted[textChannel] then
@@ -120,7 +121,7 @@ hook.Add("HUDPaint", "PD.Comlink.HUDPaint", function()
     -- end
 
     if LocalPlayer().ActiveChannel then
-        draw.DrawText("DU BIST AKTIV", "MLIB.20", ScrW() - PD.W(15), PD.H(70), Color(255, 0, 0), TEXT_ALIGN_RIGHT)
+        draw.DrawText("DU BIST AKTIV", "MLIB.20", smoothX, smoothY, Color(255, 0, 0), TEXT_ALIGN_RIGHT)
     end
 
     textExtra1 = LocalPlayer().Extra1 or "N/A"
@@ -130,18 +131,22 @@ hook.Add("HUDPaint", "PD.Comlink.HUDPaint", function()
     surface.SetFont("MLIB.20")
     local tw1, th1 = surface.GetTextSize(text)
 
-    draw.SimpleText(text, "MLIB.20", ScrW() - PD.W(15), PD.H(10), Color(255, 255, 255, 255), TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
+    draw.RoundedBox(0, smoothX - tw1, smoothY, tw1 + PD.W(10), PD.H(22), PD.UI.Colors["Background"])
 
-    surface.SetDrawColor(255, 255, 255)
-    surface.DrawOutlinedRect(ScrW() - PD.W(20) - tw1, PD.H(9), tw1 + PD.W(10), PD.H(22), 2)
+    draw.SimpleText(text, "MLIB.20", smoothX + PD.W(3), smoothY, Color(255, 255, 255, 255), TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
+
+    surface.SetDrawColor(DEFCON:GetColor())
+    surface.DrawOutlinedRect(smoothX - tw1, smoothY, tw1 + PD.W(10), PD.H(22), 2)
 
     surface.SetFont("MLIB.20")
     local tw2, th2 = surface.GetTextSize("E1: " .. textExtra1 .. " - E2: " .. textExtra2 .. " - E3: " .. textExtra3)
 
-    draw.SimpleText("E1: " .. textExtra1 .. " - E2: " .. textExtra2 .. " - E3: " .. textExtra3, "MLIB.20", ScrW() - PD.W(15), PD.H(40), Color(255, 255, 255, 255), TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
+    draw.RoundedBox(0, smoothX - tw2, smoothY + PD.H(30), tw2 + PD.W(10), PD.H(24), PD.UI.Colors["Background"])
 
-    surface.SetDrawColor(255, 255, 255)
-    surface.DrawOutlinedRect(ScrW() - PD.W(20) - tw2, PD.H(38), tw2 + PD.W(10), PD.H(24), 2)
+    draw.SimpleText("E1: " .. textExtra1 .. " - E2: " .. textExtra2 .. " - E3: " .. textExtra3, "MLIB.20", smoothX + PD.W(5), smoothY + PD.H(32), Color(255, 255, 255, 255), TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
+
+    surface.SetDrawColor(DEFCON:GetColor())
+    surface.DrawOutlinedRect(smoothX - tw2, smoothY + PD.H(30), tw2 + PD.W(10), PD.H(24), 2)
 end)
 
 local cache = {} 

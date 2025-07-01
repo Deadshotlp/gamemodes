@@ -7,8 +7,8 @@ PD.WB.Weigths = true
 PD.WB.MaxWeigth = 100 -- Maximalgewicht in Kg
 
 PD.WB.DontStrip = {
-    "weapon_physgun",
-    "gmod_tool"
+    "idcard",
+    "mhands"
 }
 
 PD.WB.CategoryAmount = {

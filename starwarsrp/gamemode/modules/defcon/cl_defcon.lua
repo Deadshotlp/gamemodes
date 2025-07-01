@@ -41,34 +41,37 @@ local function DrawBlur( x, y, w, h, layers, density, alpha )
 	end
 end
 
-hook.Add("HUDPaint","MarioDefconSystem",function()
-    if not LocalPlayer():Alive() then return end
+AddSmoothElement(PD.W(20), PD.H(20), function(smoothX, smoothY)
     if not DEFCON.Enabled then return end
     
-    if DEFCON.Picture then
-        surface.SetDrawColor(255,255,255,255)
-        surface.SetMaterial(Material(DEFCON.Active.bild))
-        surface.DrawTexturedRect(PD.W(DEFCON.XPostion) - PD.W(DEFCON.PictureSize)/2,PD.H(DEFCON.YPostion) - PD.H(DEFCON.PictureSize)/2,PD.W(DEFCON.PictureSize),PD.H(DEFCON.PictureSize))
-    else
-        -- draw.DrawText("Defcon: "..DEFCON.Active.nr,"MLIB.25",PD.W(DEFCON.XPostion),PD.H(DEFCON.YPostion) + PD.H(5),DEFCON.Active.col,TEXT_ALIGN_CENTER)
-        -- draw.RoundedBox(10,PD.W(DEFCON.XPostion) - PD.W(100),PD.H(DEFCON.YPostion) + PD.H(30),PD.W(200),PD.H(3),CONFIG:GetConfig("secondarycolor"))
-        -- draw.DrawText(DEFCON.Active.txt,"MLIB.20",PD.W(DEFCON.XPostion) ,PD.H(DEFCON.YPostion) + PD.H(35),Color(255, 255, 255),TEXT_ALIGN_CENTER)
+    -- if DEFCON.Picture then
+    --     surface.SetDrawColor(255,255,255,255)
+    --     surface.SetMaterial(Material(DEFCON.Active.bild))
+    --     surface.DrawTexturedRect(PD.W(DEFCON.XPostion) - PD.W(DEFCON.PictureSize)/2,PD.H(DEFCON.YPostion) - PD.H(DEFCON.PictureSize)/2,PD.W(DEFCON.PictureSize),PD.H(DEFCON.PictureSize))
+    -- else
+    --     -- draw.DrawText("Defcon: "..DEFCON.Active.nr,"MLIB.25",PD.W(DEFCON.XPostion),PD.H(DEFCON.YPostion) + PD.H(5),DEFCON.Active.col,TEXT_ALIGN_CENTER)
+    --     -- draw.RoundedBox(10,PD.W(DEFCON.XPostion) - PD.W(100),PD.H(DEFCON.YPostion) + PD.H(30),PD.W(200),PD.H(3),CONFIG:GetConfig("secondarycolor"))
+    --     -- draw.DrawText(DEFCON.Active.txt,"MLIB.20",PD.W(DEFCON.XPostion) ,PD.H(DEFCON.YPostion) + PD.H(35),Color(255, 255, 255),TEXT_ALIGN_CENTER)
         
-        surface.SetFont("MLIB.25")
-        local tw, th = surface.GetTextSize("Defcon: "..DEFCON.Active.nr)
+    --     surface.SetFont("MLIB.25")
+    --     local tw, th = surface.GetTextSize("Defcon: "..DEFCON.Active.nr)
 
-        surface.SetDrawColor(DEFCON.Active.col)
-        surface.DrawOutlinedRect(PD.W(DEFCON.XPostion) - PD.W(10),PD.H(DEFCON.YPostion),tw + PD.W(20),PD.H(37), 3)
-        DrawBlur(PD.W(DEFCON.XPostion) - PD.W(9.5),PD.H(DEFCON.YPostion) + PD.H(1),tw + PD.W(18),PD.H(35), 4, 4, 255)
+    --     surface.SetDrawColor(DEFCON.Active.col)
+    --     surface.DrawOutlinedRect(smoothX - PD.W(10), smoothY,tw + PD.W(20),PD.H(37), 3)
+    --     DrawBlur(smoothX - PD.W(9.5), smoothY + PD.H(1),tw + PD.W(18),PD.H(35), 4, 4, 255)
 
-        draw.DrawText("Defcon: "..DEFCON.Active.nr,"MLIB.25",PD.W(DEFCON.XPostion),PD.H(DEFCON.YPostion) + PD.H(5),Color(255,255,255),TEXT_ALIGN_LEFT)
-        -- draw.DrawText(DEFCON.Active.txt,"MLIB.20",PD.W(DEFCON.XPostion) ,PD.H(DEFCON.YPostion) + PD.H(35),Color(255, 255, 255),TEXT_ALIGN_LEFT)
+    --     draw.DrawText("Defcon: "..DEFCON.Active.nr,"MLIB.25",smoothX, smoothY + PD.H(5),Color(255,255,255),TEXT_ALIGN_LEFT)
+    --     -- draw.DrawText(DEFCON.Active.txt,"MLIB.20",PD.W(DEFCON.XPostion) ,PD.H(DEFCON.YPostion) + PD.H(35),Color(255, 255, 255),TEXT_ALIGN_LEFT)
 
-    end
+    -- end
 end)
 
 function DEFCON:GetDefcon()
     return DEFCON.Active
+end
+
+function DEFCON:GetColor()
+    return DEFCON.Active.col
 end
 
 function DEFCON:GetText()

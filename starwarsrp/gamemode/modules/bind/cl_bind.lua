@@ -8,7 +8,7 @@ PD.Binds.btn["ansicht"] = {
     name = "Ansicht",
     desc = "Wechselt die Spieler Ansicht",
     defaultkey = KEY_T,
-    downFunc = function() RunConsoleCommand("stp") end,
+    downFunc = function() PD.CAM.thirdPerson = not PD.CAM.thirdPerson end,
     upFunc = function() end
 }
 
@@ -37,6 +37,13 @@ PD.Binds.btn["arccw_toggle"] = {
     upFunc = function() end
 }
 
+PD.Binds.btn["inv_open"] = {
+    name = "Inventar",
+    desc = "Öffnet das Inventar",
+    defaultkey = KEY_I,
+    downFunc = function() PD.INV:Menu() end,
+    upFunc = function() end
+}
 
 -- PD.Binds.btn["handsanima"] = {
 --     name = "",
@@ -175,19 +182,23 @@ hook.Add("InitPostEntity", "bindsload", function()
 end)
 load()
 
+local radius = PD.H(15)
+
 function PD.Binds:Menu()
     if IsValid(self.base) then return end
 
-    self.base = PG.Frame("Bind-Menu",PG.W(600),PG.H(800),true)
+    self.base = PD.Frame("Bind-Menu",PD.W(600),PD.H(800),true)
 
-    local save = PG.Button("Speichern",self.base,function()
+    local save = PD.Button("Speichern",self.base,function()
         PD.Binds:SaveBinds()
 
         self.base:Remove()
     end)
     save:Dock(BOTTOM)
+    save:SetTall(PD.H(50))
+    save:SetRadius(radius)
 
-    local reset = PG.Button("Reset",self.base,function()
+    local reset = PD.Button("Reset",self.base,function()
         for k, v in pairs(PD.Binds.List) do
             v.Key = v.DefaultKey
         end
@@ -196,31 +207,35 @@ function PD.Binds:Menu()
         PD.Binds:Menu()
     end)
     reset:Dock(BOTTOM)
+    reset:SetTall(PD.H(50))
+    reset:SetRadius(radius)
 
-    scrl = PG.Scroll(self.base)
+    scrl = PD.Scroll(self.base)
 
     for k,v in SortedPairs(self.List) do
-        local pnl = PG.Panel("",scrl,function(self,w,h)
+        local pnl = PD.Panel("",scrl,function(self,w,h)
             draw.DrawText(v.Name,"MLIB.25",10,5,Color(255,255,255),TEXT_ALIGN_LEFT)
 
-            local text = markup.Parse("<font=MLIB.20>"..v.Help.."</font>",PG.W(350))
+            local text = markup.Parse("<font=MLIB.20>"..v.Help.."</font>",PD.W(350))
             text:Draw(10,35,TEXT_ALIGN_LEFT,TEXT_ALIGN_TOP)
         end)
-        --local h = PG.H(35) + markup.Parse("<font=MLIB.20>"..v.Help.."</font>",PG.W(350)):GetHeight()
-        pnl:SetTall(PG.H(70))
+        --local h = PD.H(35) + markup.Parse("<font=MLIB.20>"..v.Help.."</font>",PD.W(350)):GetHeight()
+        pnl:SetTall(PD.H(70))
 
-        local pnlreset = PG.Button("Reset",pnl,function()
+        local pnlreset = PD.Button("Reset",pnl,function()
             v.Key = v.DefaultKey
             self.base:Remove()
             PD.Binds:Menu()
         end)
         pnlreset:Dock(RIGHT)
+        pnlreset:SetWide(PD.W(100))
+        pnlreset:SetRadius(radius)
 
-        local bpnl, binder = PG.Binder(pnl,"",v.Key,function(self, key)
+        local bpnl, binder = PD.Binder(pnl,"",v.Key,function(self, key)
             v.Key = key
         end)
         bpnl:Dock(RIGHT)
-        bpnl:SetWide(PG.W(100))
+        bpnl:SetWide(PD.W(100))
         
 
     end

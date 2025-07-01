@@ -3,6 +3,7 @@ PD.VD = PD.VD or {}
 util.AddNetworkString("PD.VD:SpawnVehicle")
 util.AddNetworkString("PD.VD:RemoveVehicle")
 util.AddNetworkString("PD.VD:Sync")
+util.AddNetworkString("PD.VD:SyncTable")
 
 local VehicleTable = {}
 local activeVahicle = {}

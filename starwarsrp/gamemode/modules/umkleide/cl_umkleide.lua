@@ -32,7 +32,15 @@ function PD.Entity.Umkleide:Load()
     end
 
     if tbl.model == LocalPlayer():GetModel() then
+        local armor = LocalPlayer():PDGetArmor()
         for k, v in pairs(tbl.bodygroups) do
+            if k == 1 then 
+                if armor.panzer == 0 then continue end
+            elseif k == 2 then
+                if armor.beine  == 0 then continue end
+            elseif k == 3 then
+                if armor.helm  == 0 then continue end
+            end
             net.Start("ChangeBodygroup")
             net.WriteInt(k, 32)
             net.WriteInt(v, 32)
@@ -60,6 +68,51 @@ function PD.Entity.Umkleide:OpenFrame()
 
     mainFrame = PD.Frame("Umkleide", PD.W(1600), PD.H(900), true)
     local bodygroups = LocalPlayer():GetBodyGroups()
+    local activeArmor = LocalPlayer():PDGetArmor()
+
+    local deleteIDs = {
+        1, 2, 3, 4
+    }
+
+    for _, i in pairs(deleteIDs) do
+        bodygroups[i] = nil
+    end
+
+    if activeArmor then
+        if activeArmor.helm < 1 then
+            local deleteIDs = {
+                5, 6
+            }
+
+            for _, i in pairs(deleteIDs) do
+                bodygroups[i] = nil
+            end
+        end
+
+        if activeArmor.panzer < 1 then
+            local deleteIDs = {
+                7, 10, 11, 12, 13
+            }
+
+            for _, i in pairs(deleteIDs) do
+                bodygroups[i] = nil
+            end
+        else
+            print("Panzer")
+        end
+
+        if activeArmor.beine < 1 then
+            local deleteIDs = {
+                8, 9
+            }
+
+            for _, i in pairs(deleteIDs) do
+                print(i)
+                print(bodygroups[i])
+                bodygroups[i] = nil
+            end
+        end
+    end
 
     local sub_panel = PD.Panel("Model", mainFrame)
     sub_panel:SetSize(mainFrame:GetWide() / 2, mainFrame:GetTall())
@@ -71,8 +124,6 @@ function PD.Entity.Umkleide:OpenFrame()
     PD.Entity.Umkleide:ShowAttachments(mainFrame, bodygroups, pm)
 end
 
--- PrintTable(LocalPlayer():GetBodyGroups())
-
 function PD.Entity.Umkleide:ShowAttachments(mainFrame, bodygroups, pm)
     local sub_panel = PD.Panel("Attachments", mainFrame)
     sub_panel:Dock(FILL)
@@ -80,11 +131,16 @@ function PD.Entity.Umkleide:ShowAttachments(mainFrame, bodygroups, pm)
 
     local ScrollList = PD.Scroll(sub_panel)
 
+    -- Check ob etwas entfernt wurde
+    if table.Count(bodygroups) ~= table.Count(LocalPlayer():GetBodyGroups()) then
+        local lbl = PD.Label("Zieh deine Rüstung an um weitere Attachments zu bekommen!", ScrollList, Color(255, 0, 0))
+    end
+
     for k, v in pairs(bodygroups) do
         pm.Entity:SetBodygroup(k, LocalPlayer():GetBodygroup(k))
 
         if (bodygroups[k].id >= 0) and (bodygroups[k].num >= 0) then
-            local bodygroupName = PD.Label(bodygroups[k].name .. " | ID: " .. bodygroups[k].id, ScrollList)
+            local bodygroupName = PD.Label(bodygroups[k].name .. " | ID: " .. bodygroups[k].id .. " k:" .. k, ScrollList)
             bodygroupName:Dock(TOP)
 
             local y = (k - 1) * 75
@@ -126,14 +182,14 @@ function PD.Entity.Umkleide:ShowAttachments(mainFrame, bodygroups, pm)
         end
     end
 
-    local save = PD.Button("Save", sub_panel, function()
-        PD.Entity.Umkleide:Save()
-    end)
-    save:Dock(BOTTOM)
+    -- local save = PD.Button("Save", sub_panel, function()
+    --     PD.Entity.Umkleide:Save()
+    -- end)
+    -- save:Dock(BOTTOM)
 
-    local load = PD.Button("Load", sub_panel, function()
-        PD.Entity.Umkleide:Load()
-    end)
-    load:Dock(BOTTOM)
+    -- local load = PD.Button("Load", sub_panel, function()
+    --     PD.Entity.Umkleide:Load()
+    -- end)
+    -- load:Dock(BOTTOM)
 end
 

@@ -6,6 +6,14 @@ timer.Create("PD.Money:GiveTimer", 600, 0, function()
         local jobID, jobTable = v:GetJob()
         local salary = jobTable.salary
 
+        -- if not PD.Config.PayDayEnabled then
+        --     return
+        -- end
+
+        if v:Nick() == "Unknown" then
+            return
+        end
+
         if PD.Admin.PayDayPercent[v:GetUserGroup()] then
             salary = salary * PD.Admin.PayDayPercent[v:GetUserGroup()]
         end

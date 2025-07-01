@@ -274,7 +274,12 @@ function PLAYER:SetJob(jobID, jobTbl)
 end
 
 function PLAYER:GetJob()
-    return self.JobID, self.JobTbl or nil, nil
+    local fallbackID, fallbackTbl = PD.JOBS.GetJob(false, false)
+
+    self.JobID = self.JobID or fallbackID
+    self.JobTbl = self.JobTbl or fallbackTbl
+
+    return self.JobID, self.JobTbl
 end
 
 hook.Add("PlayerSpawn", "PD.Char.PlayerSpawnSetJobEquip", function(ply)

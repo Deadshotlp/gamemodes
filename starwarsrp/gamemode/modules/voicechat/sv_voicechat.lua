@@ -2,10 +2,10 @@ PD.VC = PD.VC or {}
 
 -- Definiere die verschiedenen Sprachmodi
 PD.VC.Config = {
-    ["Whisper"] =  100,
+    ["Flüstern"] =  100,
     ["Reden"] = 500,
-    ["Loud"] = 1000,
-    ["Shout"] = 1500
+    ["Rufen"] = 1000,
+    ["Schreien"] = 1500
 }
 
 PD.VC.FUNK = {}
@@ -15,6 +15,13 @@ PD.VC.FUNK.Hide = {
 	["CHudVoiceSelfStatus"] = true,
 	["CHudVoiceStatus"] = true
 }
+
+util.AddNetworkString("PD.VC.SendVoiceRange")
+
+local function SendToPlayer(ply)
+    net.Start("PD.VC.SendVoiceRange")
+    net.Send(ply)
+end
 
 --Sollte die sprachanzeige in der linken unteren ecke verstecken
 hook.Add( "HUDShouldDraw", "HideHUD", function( name )
@@ -47,19 +54,16 @@ hook.Add("PlayerButtonDown", "ChangeVoiceMode", function(ply, button)
 
         if currentMode == "Flüstern" then
             nextMode = "Reden"
-            PD.Notify("Sprachlautstärke: " .. nextMode, Color(0,255,0,255), false, ply)
         elseif currentMode == "Reden" then
             nextMode = "Rufen"
-            PD.Notify("Sprachlautstärke: " .. nextMode, Color(255,200,0,255), false, ply)
         elseif currentMode == "Rufen" then
             nextMode = "Schreien"
-            PD.Notify("Sprachlautstärke: " .. nextMode, Color(255,0,0,255), false, ply)
         else
             nextMode = "Flüstern"
-            PD.Notify("Sprachlautstärke: " .. nextMode, Color(255,255,255,255), false, ply)
         end
 
         ply:SetNWString("VoiceMode", nextMode)
+        SendToPlayer(ply)
     end
 end)
 

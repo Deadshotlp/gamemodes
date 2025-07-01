@@ -15,34 +15,45 @@ function PD.DataPad.GetCategory(name)
     return PD.DataPad.Table[name]
 end
 
-function PD.DataPad.AddEntry(category, name, data)
+function PD.DataPad.AddSubCategory(category, name)
     if not PD.DataPad.Table[category] then return end
+    if PD.DataPad.Table[category][name] then return end
 
-    PD.DataPad.Table[category][name] = data
+    PD.DataPad.Table[category][name] = {}
 end
 
-function PD.DataPad.GetEntry(category, name)
-    if not PD.DataPad.Table[category] then return end
+function PD.DataPad.GetSubCategory(category, name)
+    if not PD.DataPad.Table[category] then return {} end
 
-    if name then
+    if not PD.DataPad.Table[category][name] then return {} end
+
+    return PD.DataPad.Table[category][name]
+end
+
+function PD.DataPad.AddEntry(category, subcategory, name, data)
+    if not PD.DataPad.Table[category] then return end
+    if not PD.DataPad.Table[category][subcategory] and subcategory then return end
+    if not name or not data then return end
+
+    if PD.DataPad.Table[category][subcategory] then
+        PD.DataPad.Table[category][subcategory][name] = {}
+        PD.DataPad.Table[category][subcategory][name] = data
+    end
+end
+
+function PD.DataPad.GetEntry(category, subcategory, name)
+    if not PD.DataPad.Table[category] then return nil end
+
+    if subcategory then
+        if not PD.DataPad.Table[category][subcategory] then return nil end
+        return PD.DataPad.Table[category][subcategory][name]
+    else
         return PD.DataPad.Table[category][name]
     end
-
-    return PD.DataPad.Table[category]
 end
 
-function PD.DataPad.CheckEntry(category, name)
-    if not PD.DataPad.Table[category] then return print("NIcht gefunden") end
-
-    return PD.DataPad.Table[category][name] and true or false
+function PD.DataPad.GetTable()
+    return PD.DataPad.Table
 end
 
-if CLIENT then 
-    concommand.Add("print_getEntry", function()
-        PrintTable(PD.DataPad.GetEntry("Akten"))
-    end)
-
-    concommand.Add("print_datapadtable", function()
-        PrintTable(PD.DataPad.Table)
-    end)
-end
+if CLIENT then PrintTable(PD.DataPad.Table) end

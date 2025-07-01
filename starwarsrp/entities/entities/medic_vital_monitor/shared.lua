@@ -1,8 +1,6 @@
 PD.DM = PD.DM or {}
 PD.DM.Props = PD.DM.Props or {}
-PD.DM.Props.VM = PD.DM.Props.VM or {}
-
-PD.DM.Props.VM.tbl = {}
+PD.DM.Props.MRT = PD.DM.Props.MRT or {}
 
 DEFINE_BASECLASS("base_gmodentity")
 

@@ -4,15 +4,10 @@ PD.Char.Data = PD.Char.Data or {}
 local scrw, scrh = ScrW(), ScrH()
 local txt = ""
 
-PD.Char.AdminData = {}
 PD.Char.Data = {}
 
 net.Receive("PD.Char.Synccl", function()
     PD.Char.Data = net.ReadTable()
-end)
-
-net.Receive("PD.Char.AdminSync", function()
-    PD.Char.AdminData = net.ReadTable()
 end)
 
 net.Receive("PD.Char.Open", function()
@@ -20,6 +15,14 @@ net.Receive("PD.Char.Open", function()
 end)
 
 net.Receive("PD.Char.JobChange", function()
+    local ply = net.ReadEntity()
+    local jobID = net.ReadString()
+    local jobTbl = net.ReadTable()
+
+    ply:SetJob(jobID, jobTbl)
+end)
+
+net.Receive("PD.Char.SetJobFunction", function()
     local ply = net.ReadEntity()
     local jobID = net.ReadString()
     local jobTbl = net.ReadTable()
@@ -35,7 +38,7 @@ local function Error(text, panel, time)
         draw.RoundedBox(0, 0, 0, ScrW(), ScrH(), Color(22, 22, 22, 255))
         draw.RoundedBox(0, 0, 0, w * barStatus, 5, Color(255, 0, 0))
 
-        draw.DrawText(text, "MLIB.25", w / 2, h / 2 - 12.5, CONFIG:GetConfig("textcolor"), TEXT_ALIGN_CENTER)
+        draw.DrawText(text, "MLIB.25", w / 2, h / 2 - 12.5, PD.UI.Colors["Text"], TEXT_ALIGN_CENTER)
     end)
     error:Dock(NODOCK)
     error:SetSize(PD.W(800), PD.H(100))
@@ -57,7 +60,7 @@ function PD.Char:Menu(close)
 
     CharBase = PD.Frame("", scrw, scrh, close, function(self, w, h)
         surface.SetDrawColor(255, 255, 255)
-        surface.SetMaterial(Material(CONFIG:GetConfig("charakter_backgroundbild")))
+        surface.SetMaterial(Material(PD.Char.Background))
         surface.DrawTexturedRect(0, 0, w, h)
     end)
     CharBase:SetBarColor(Color(0, 0, 0, 0))
@@ -70,7 +73,7 @@ function PD.Char:Menu(close)
     centerpnl:SetBackColor(Color(0, 0, 0, 0))
 
     local infobuttondc = PD.Button("", CharBase, function()
-        gui.OpenURL(CONFIG:GetConfig("charakter_discord"))
+        gui.OpenURL(PD.Char.Discord)
     end, function(self, w, h)
         PD.DrawImgur(0, 0, w, h, "HeQlEmy")
     end)
@@ -81,7 +84,7 @@ function PD.Char:Menu(close)
     infobuttondc:SetBackgroundDisabled(true)
 
     local infobuttonkolli = PD.Button("", CharBase, function()
-        gui.OpenURL(CONFIG:GetConfig("charakter_kolli"))
+        gui.OpenURL(PD.Char.Kollektion)
     end, function(self, w, h)
         PD.DrawImgur(0, 0, w, h, "lXVious")
     end)
@@ -112,7 +115,7 @@ function PD.Char:Menu(close)
     showInfo:SetSize(PD.W(410), PD.H(600))
     showInfo:SetPos(PD.W(1310), PD.H(110))
 
-    for i = 1, CONFIG:GetConfig("charakter_maxchars") do
+    for i = 1, PD.Char.MaxChars do
         local data = PD.Char.Data[i]
         if not data then
             data = {
@@ -121,7 +124,7 @@ function PD.Char:Menu(close)
                 rank = "",
                 job = {
                     name = "Rekrut",
-                    model = "models/player/skeleton.mdl",
+                    model = CONFIG.BackModel,
                     unit = "Rekruten",
                     id = "Rekrut"
                 },
@@ -137,7 +140,7 @@ function PD.Char:Menu(close)
             }
         end
 
-        if CONFIG:GetConfig("charakter_usergroupchar")[LocalPlayer():GetUserGroup()] < i then
+        if PD.Char.UserGroupChar[LocalPlayer():GetUserGroup()] < i then
             data.name = "GESPERRT"
         end
 
@@ -151,6 +154,10 @@ function PD.Char:Menu(close)
         end
 
         if data.name ~= "Frei" then
+            if not string.find(data.job.model, ".mdl") then
+                data.job.model = CONFIG.BackModel
+            end
+
             local modelChar = panelChar:Add("DModelPanel")
             modelChar:SetPos(0, 0)
             modelChar:SetSize(panelChar:GetWide(), PD.H(600))
@@ -159,13 +166,13 @@ function PD.Char:Menu(close)
             function modelChar:LayoutEntity(Entity)
                 return
             end
-            -- function modelChar.Entity:GetPlayerColor()
-            --     return Vector(1, 0, 0)
-            -- end
+            function modelChar.Entity:GetPlayerColor()
+                return Vector(1, 0, 0)
+            end
         end
 
         local buttonChar = PD.Button("", panelChar, function()
-            if CONFIG:GetConfig("charakter_usergroupchar")[LocalPlayer():GetUserGroup()] < i then
+            if PD.Char.UserGroupChar[LocalPlayer():GetUserGroup()] < i then
                 Error("Dieser Platz ist für dich gesperrt", CharBase, 5)
                 return
             end
@@ -173,7 +180,7 @@ function PD.Char:Menu(close)
             if data.name == "Frei" then
                 showInfo:Clear()
 
-                local pnl, name = PD.TextEntryLabel("Gib hier dein Namen ein ohne ID", showInfo, "Name")
+                local pnl, name = PD.TextEntryLabel("Gib hier dein Namen ein, ohne eine ID", showInfo, "Name")
 
                 local create = PD.Button("Erstellen", showInfo, function()
                     local gn = name:GetValue()
@@ -182,18 +189,18 @@ function PD.Char:Menu(close)
                         Error("Du musst einen Namen eingeben!", CharBase, 5)
                         return
                     end
-                    if #gn < CONFIG:GetConfig("charakter_minname") then
+                    if #gn < PD.Char.MinName then
                         Error(
-                            "Dein Name ist zu kurz du brauchst mindestens " .. CONFIG:GetConfig("charakter_minname") ..
+                            "Dein Name ist zu kurz du brauchst mindestens " .. PD.Char.MinName ..
                                 " Buchstaben!", CharBase, 5)
                         return
                     end
-                    if #gn > CONFIG:GetConfig("charakter_maxname") then
-                        Error("Dein Name ist zu lang du darfst maximal " .. CONFIG:GetConfig("charakter_maxname") ..
+                    if #gn > PD.Char.MaxName then
+                        Error("Dein Name ist zu lang du darfst maximal " .. PD.Char.MaxName ..
                                   " Buchstaben haben!", CharBase, 5)
                         return
                     end
-                    if CONFIG:GetConfig("charakter_nameblacklist")[gn] then
+                    if PD.Char.NameBlacklist[gn] then
                         Error("Dein Name ist nicht erlaubt!", CharBase, 5)
                         return
                     end
@@ -211,7 +218,7 @@ function PD.Char:Menu(close)
             else
                 showInfo:Clear()
 
-                local lbl = PD.Label("Name: " .. data.name .. "\n\nID: " .. data.id .. "\n\nGeld: " .. data.money ..
+                local lbl = PD.Label("Rufname: " .. data.name .. "\n\nID: " .. data.id .. "\n\nCredits: " .. data.money ..
                                          "\n\nErstellungsdatum: " .. data.cratedate .. "\n\nZuletzt gespielt: " ..
                                          data.lastplaytime .. "\n\nSpielzeit: " .. Mario.FormatTime(data.playtime) ..
                                          "\n\nEinheit: " .. data.faction.unit .. "\n\nUntereinheit: " ..
@@ -224,12 +231,12 @@ function PD.Char:Menu(close)
                         net.Start("PD.Char.Play")
                         net.WriteEntity(LocalPlayer())
                         net.WriteUInt(i, 32)
-                        -- net.WriteTable(data)
                         net.SendToServer()
                     end)
                     playbutton:Dock(BOTTOM)
                     playbutton:SetTall(PD.H(50))
                     playbutton:SetRadius(20)
+                    playbutton:SetHoverColor(PD.UI.Colors["Green"])
                     if LocalPlayer():Nick() == data.id .. " " .. data.name then
                         playbutton:SetDisabled(true)
                     end
@@ -246,8 +253,7 @@ function PD.Char:Menu(close)
                     deletebutton:Dock(BOTTOM)
                     deletebutton:SetTall(PD.H(50))
                     deletebutton:SetRadius(20)
-                    deletebutton:SetHoverColor(Color(CONFIG:GetConfig("colorred").r, CONFIG:GetConfig("colorred").g,
-                        CONFIG:GetConfig("colorred").b, 50))
+                    deletebutton:SetHoverColor(PD.UI.Colors["SithRed"])
                 else
                     local lbl = PD.Label("Du spielst bereits mit diesem Charakter!", showInfo, Color(255, 0, 0))
                     lbl:Dock(BOTTOM)
@@ -264,16 +270,15 @@ function PD.Char:Menu(close)
                     deletebutton:Dock(BOTTOM)
                     deletebutton:SetTall(PD.H(50))
                     deletebutton:SetRadius(20)
-                    deletebutton:SetHoverColor(Color(CONFIG:GetConfig("colorred").r, CONFIG:GetConfig("colorred").g,
-                        CONFIG:GetConfig("colorred").b, 50))
+                    deletebutton:SetHoverColor(PD.UI.Colors["SithRed"])
                 end
             end
         end, function(self, w, h)
             if data.name == "Frei" then
-                draw.DrawText(data.name, "MLIB.25", w / 2, h / 2 - PD.H(12.5), CONFIG:GetConfig("textcolor"),
+                draw.DrawText(data.name, "MLIB.25", w / 2, h / 2 - PD.H(12.5), PD.UI.Colors["Text"],
                     TEXT_ALIGN_CENTER)
             else
-                draw.DrawText(data.name, "MLIB.25", w / 2, h / 2 - PD.H(12.5), CONFIG:GetConfig("textcolor"),
+                draw.DrawText(data.name, "MLIB.25", w / 2, h / 2 - PD.H(12.5), PD.UI.Colors["Text"],
                     TEXT_ALIGN_CENTER)
             end
         end)
@@ -289,106 +294,13 @@ function PD.Char:Menu(close)
             buttonChar:SetRadius(20)
         end
 
-        local name = {
-            -- ["Frei"] = true,
-            ["GESPERRT"] = true
-        }
-
-        if name[data.name] then
+        if data.name == "GESPERRT" then
             buttonChar:SetDisabled(true)
         end
 
         if data.name ~= "Frei" then
             buttonChar:SetBackColor(Color(0, 0, 0, 0))
         end
-    end
-end
-
-local name = ""
-function PD.Char:AdminMenu()
-    if IsValid(AdminBase) then
-        return
-    end
-
-    AdminBase = PD.Frame("Charakter Admin Menu", PD.W(600), PD.H(800), true)
-
-    local scrl = PD.Scroll(AdminBase)
-
-    for k, v in SortedPairs(PD.Char.AdminData) do
-        if FindPlayerbyID(k) then
-            name = FindPlayerbyID(k):Nick()
-        else
-            name = "Offline"
-        end
-
-        local pnl = PD.Button(steamworks.GetPlayerName(k), scrl, function()
-            -- if name == "Offline" then chat.AddText(CONFIG:GetConfig("colorred"),"Der Spieler ist Offline!") return end
-            scrl:Clear()
-
-            for a, b in ipairs(v) do
-                local pnl = PD.Button("", scrl, function()
-                    scrl:Clear()
-
-                    local pnl, id = PD.TextEntryLabel("Spieler ID", scrl, "", b.id)
-                    local pnl, name = PD.TextEntryLabel("Spieler Name", scrl, "", b.name)
-                    local pnl, money = PD.TextEntryLabel("Spieler Credits", scrl, "", b.money)
-                    local job = PD.ComboBox(b.job.name, scrl)
-
-                    for k, v in ipairs(PD.JOBS.GetJob(false, true)) do
-                        job:AddChoice(k)
-                    end
-
-                    local info = PD.Label("Erstellungsdatum: " .. b.cratedate .. "\n\nZuletzt gespielt: " ..
-                                              b.lastplaytime .. "\n\nSpielzeit: " .. Mario.FormatTime(b.playtime), scrl)
-
-                    local setPlayer = PD.Button("Löschen", AdminBase, function()
-                        net.Start("PD.Char.AdminDelete")
-                        net.WriteString(k)
-                        net.WriteUInt(a, 32)
-                        net.SendToServer()
-
-                        AdminBase:Remove()
-                    end)
-                    setPlayer:Dock(BOTTOM)
-                    setPlayer:SetTall(PD.H(50))
-
-                    local setPlayer = PD.Button("Setzen", AdminBase, function()
-                        net.Start("PD.Char.Play")
-                        net.WriteEntity(FindPlayerbyID(k))
-                        net.WriteUInt(a, 32)
-                        net.SendToServer()
-
-                        AdminBase:Remove()
-                    end)
-                    setPlayer:Dock(BOTTOM)
-                    setPlayer:SetTall(PD.H(50))
-
-                    local save = PD.Button("Speichern", AdminBase, function()
-                        net.Start("PD.Char.AdminSave")
-                        net.WriteString(k)
-                        net.WriteUInt(a, 32)
-                        net.WriteString(id:GetValue())
-                        net.WriteString(name:GetValue())
-                        net.WriteString(job:GetSelectedID())
-                        net.WriteUInt(money:GetValue(), 32)
-                        net.SendToServer()
-
-                        AdminBase:Remove()
-                    end)
-                    save:Dock(BOTTOM)
-                    save:SetTall(PD.H(50))
-                end, function(self, w, h)
-                    draw.DrawText("Char: " .. a, "MLIB.25", PD.W(10), h / 2 - PD.H(12.5), CONFIG:GetConfig("textcolor"),
-                        TEXT_ALIGN_LEFT)
-                    draw.DrawText(b.id .. " " .. b.name, "MLIB.25", w / 2, h / 2 - PD.H(12.5),
-                        CONFIG:GetConfig("textcolor"), TEXT_ALIGN_CENTER)
-                end)
-                pnl:Dock(TOP)
-                pnl:SetTall(PD.H(50))
-            end
-        end)
-        pnl:Dock(TOP)
-        pnl:SetTall(PD.H(50))
     end
 end
 
@@ -403,7 +315,7 @@ hook.Add("PlayerButtonDown", "PD.Char:MenuKeyBind", function(ply, key)
         timer.Simple(0.5, function()
             PD.Char:Menu(true)
         end)
-    elseif (key == KEY_F7) then -- PD.Char.OpenAdminMenu
+    elseif (key == KEY_F7) then
         if not ply:IsAdmin() then
             return
         end
@@ -420,8 +332,6 @@ end)
 hook.Add("InitPostEntity", "SyncCharMenuCharsProgama057", function()
     net.Start("PD.Char.Syncsv")
     net.WriteBool(true)
-    net.SendToServer()
-    net.Start("PD.Char.AdminSync")
     net.SendToServer()
 end)
 
@@ -447,3 +357,4 @@ end
 function PLAYER:GetJob()
     return self.JobID, self.JobTbl
 end
+

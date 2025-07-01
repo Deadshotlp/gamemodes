@@ -57,40 +57,48 @@ concommand.Add("printcomlink", function(ply)
 end)
 
 hook.Add("PlayerCanHearPlayersVoice", "PD.Comlink.Voice", function(listener, talker)
+    local talkerData = playerTalkerTable[talker:Nick()]
+    local listenerData = playerTalkerTable[listener:Nick()]
 
-    if not playerTalkerTable[talker:Nick()] then return false end
-    if not playerTalkerTable[listener:Nick()] then return false end
+    -- Wenn einer von beiden nicht im Comlink ist, dann normale Voice durch Nähe
+    if not talkerData or not listenerData then
+        return listener:GetPos():DistToSqr(talker:GetPos()) <= 250000, true
+    end
 
-    local talkerChannel = playerTalkerTable[talker:Nick()].active 
-    local listenerChannel = playerTalkerTable[listener:Nick()]
+    local talkerChannel = talkerData.active
+    local listenerChannel = listenerData
+
+    if not talkerChannel then
+        return listener:GetPos():DistToSqr(talker:GetPos()) <= 250000, true
+    end
+
     local talkerJobID, talkerJobTable = talker:GetJob()
     local listenerJobID, listenerJobTable = listener:GetJob()
-    local channelTable = PD.Comlink.Table[talkerChannel]
     local unit = talkerJobTable.unit
 
-    if not talkerChannel then return false end
-    if not PD.Comlink.Table[talkerChannel].check(talker, unit) then return false end
+    -- Channel existiert nicht oder Check schlägt fehl
+    local channelConfig = PD.Comlink.Table[talkerChannel]
+    if not channelConfig or not channelConfig.check(talker, unit) then
+        return false
+    end
 
-    if not listenerChannel then return false end
-    if not PD.Comlink.Table[listenerChannel].check(listener, unit) then return false end
+    if not listenerChannel.active then
+        return listener:GetPos():DistToSqr(talker:GetPos()) <= 250000, true
+    end
 
-    -- if listener:GetPos():DistToSqr(talker:GetPos()) > 250000 then return false end
-    
-    if channelTable[talkerChannel] then
-        -- net.Start("PD.Comlink.SendTalkerInfo")
-        --     net.WriteString(talkerChannel)
-        --     net.WriteEntity(talker)
-        -- net.Send(talker)
+    -- Check auch für Listener
+    if not PD.Comlink.Table[listenerChannel.active].check(listener, unit) then
+        return false
+    end
+
+    -- Selber Channel oder passiv verbunden → hören erlaubt
+    if listenerChannel.active == talkerChannel
+        or listenerChannel.passive1 == talkerChannel
+        or listenerChannel.passive2 == talkerChannel
+        or listenerChannel.passive3 == talkerChannel then
 
         return true, false
     end
 
-    if listenerChannel.active == talkerChannel or listenerChannel.passive1 == talkerChannel or listenerChannel.passive2 == talkerChannel or listenerChannel.passive3 == talkerChannel then
-        -- net.Start("PD.Comlink.SendListenerInfo")
-        --     net.WriteString(talkerChannel)
-        --     net.WriteEntity(talker)
-        -- net.Send(listener)
-
-        return true, false
-    end
+    return false
 end)

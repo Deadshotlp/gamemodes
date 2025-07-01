@@ -57,4 +57,10 @@ hook.Add("PlayerSpawn", "PD.WB:PlayerSpawn", function(ply)
 
         wepDeadTbl[ply:SteamID64()] = nil
     end
+
+    if PD.Admin.Equip then
+        for _, wep in ipairs(PD.Admin.Equip) do
+            ply:Give(wep)
+        end
+    end
 end)

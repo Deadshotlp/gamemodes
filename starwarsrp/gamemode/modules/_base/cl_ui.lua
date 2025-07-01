@@ -162,6 +162,12 @@ function PD.SideTab(base, rightPanel)
         PD.ShowItem()
     end
 
+    local function deactive()
+        for k, v in pairs(check) do
+            v:Deactivate()
+        end
+    end
+
     function PD.ShowItem()
         for k, v in SortedPairs(tabs) do
             if check[k] then continue end
@@ -169,12 +175,9 @@ function PD.SideTab(base, rightPanel)
             local btn = PD.Button(v.name, scrl, function(self)
                 rightPanel:Clear()
 
-                -- local child = scrl:GetChildren()
-                -- for k, v in pairs(child) do
-                --     v:Deactivate()
-                -- end
+                deactive()
 
-                -- self:Activate()
+                self:Activate()
 
                 v.func(rightPanel)
             end)
@@ -186,7 +189,7 @@ function PD.SideTab(base, rightPanel)
                 btn:DockMargin(indent, PD.H(5), PD.W(5), PD.H(5))
             end
 
-            check[k] = true
+            check[k] = btn
         end
     end
 
@@ -194,14 +197,11 @@ function PD.SideTab(base, rightPanel)
         local item = tabs[name]
         if not item then return end
 
-        -- local child = scrl:GetChildren()
-
-        -- for k, v in pairs(child) do
-        --     v:Deactivate()
-        -- end
-
         item.func(rightPanel)
-        -- item:Activate()
+
+        if not check[name] then return end
+
+        check[name]:Activate()
     end
 
     function PD.Print()
@@ -235,7 +235,7 @@ function PD.Frame(title, w, h, close, paint, test)
         if self.Blur then
             PD.DrawBlur(self, 6)
         else
-            draw.RoundedBoxEx(5, 0, 0, w, h, self.backcol, false, false, true, true)
+            draw.RoundedBoxEx(PD.H(5), 0, 0, w, h, self.backcol, false, false, true, true)
         end
 
         if paint then
@@ -250,7 +250,7 @@ function PD.Frame(title, w, h, close, paint, test)
     topPanel:SetSize(Mbase:GetWide(), PD.H(30))
     topPanel:Dock(TOP)
     topPanel.Paint = function(self, w, h)
-        draw.RoundedBoxEx(5, 0, 0, w, h, Mbase.tobbarcol, true, true, false, false)
+        draw.RoundedBoxEx(PD.H(5), 0, 0, w, h, Mbase.tobbarcol, true, true, false, false)
         
         if self:IsDraggable() and self:IsHovered() then
             self:SetCursor("sizeall")
@@ -288,6 +288,9 @@ function PD.Frame(title, w, h, close, paint, test)
             draw.DrawText("X","MLIB.25",w/2,h/2-PD.H(12.5),PD.UI.Colors["Text"],TEXT_ALIGN_CENTER)
         end
         close.DoClick = function()
+            if isfunction(Mbase.OnClose) then
+                Mbase:OnClose()
+            end
             Mbase:Remove()
         end
 
@@ -315,6 +318,20 @@ function PD.Frame(title, w, h, close, paint, test)
     return Mbase
 end
 
+function SmoothLerp(current, target, speed, deltaTime)
+    return Lerp(math.Clamp(speed * deltaTime, 0, 1), current, target)
+end
+
+function SmoothColorLerp(colA, colB, speed, deltaTime)
+    local t = math.Clamp(speed * deltaTime, 0, 1)
+    return Color(
+        Lerp(t, colA.r, colB.r),
+        Lerp(t, colA.g, colB.g),
+        Lerp(t, colA.b, colB.b),
+        Lerp(t, colA.a or 255, colB.a or 255)
+    )
+end
+
 function PD.Button(name, wo, doclick, paint)
     local btn = wo:Add("DButton")
     btn:SetText("")
@@ -325,25 +342,34 @@ function PD.Button(name, wo, doclick, paint)
     btn:SetWide(tw + PD.W(20))
     btn:DockMargin(PD.H(5),PD.H(5),PD.H(5),PD.H(5))
     btn.bgcol = PD.UI.Colors["Button"]
-    btn.bghcol = PD.UI.Colors["Button"]
+    btn.bghcol = PD.UI.Colors["ButtonHover"]
     btn.textcol = PD.UI.Colors["Text"]
     btn.OutlineColor = PD.UI.Colors["Button"]
     btn.disabled = false
     btn.Active = false
     btn.visible = true
+    btn.Animation = true
     btn.Font = 25
-    btn.radius = 150
+    btn.radius = PD.H(50)
     btn.disabledBackground = false
     btn.TextAlign = TEXT_ALIGN_CENTER
     local posX = PD.W(10)
-    local tc = btn.textcol
+    local tc = btn.OutlineColor
 
     local middle = Color(0,0,0,255)
+    local mainW, mainH = 0, 0
+    local moveW, moveH = PD.W(4), PD.H(4)
+    -- local font = btn.Font * 0.7
     btn.Paint = function(self, w, h)
+        mainW, mainH = w, h
+        local time, moveTime = 1.5, 5 * FrameTime()
 
         if self.visible and !self.disabledBackground then
-            draw.RoundedBox(self.radius, 0, 0, w, h, self.OutlineColor)
-            draw.RoundedBox(self.radius, PD.W(2), PD.H(2), w - PD.W(4), h - PD.H(4), middle)
+            -- draw.RoundedBox(self.radius + 2, 0, 0, w, h, self.OutlineColor)
+            -- draw.RoundedBox(self.radius, PD.W(2), PD.H(2), w - PD.W(4), h - PD.H(4), middle)
+
+            draw.RoundedBox(self.radius, PD.W(0) + moveW, PD.H(0) + moveH, w - moveW * 2, h - moveH * 2, tc)
+            draw.RoundedBox(self.radius - 4, PD.W(2) + moveW, PD.H(2) + moveH, w - PD.W(4) - moveW * 2, h - PD.H(4) - moveH * 2, middle)
         end
 
         if self.disabled then 
@@ -351,20 +377,29 @@ function PD.Button(name, wo, doclick, paint)
         else
             self:SetCursor("hand")
             if self:IsHovered() or self.Active then
-                tc = PD.UI.Colors["Background"]
-                
-                draw.RoundedBox(self.radius, PD.W(5), PD.H(5), w - PD.W(10), h - PD.H(10), self.bghcol)
+                -- tc = PD.UI.Colors["Background"]
 
-                PD.HUD.x = self:GetX()
-                PD.HUD.y = self:GetY()
+                -- draw.RoundedBox(self.radius - 4, PD.W(5), PD.H(5), w - PD.W(10), h - PD.H(10), self.bghcol)
 
-                -- if name == "Frei" or nameTbl[name] then
-                    -- PD.INV.HoverBtn = self
-                -- end
+                if self.Animation then
+                    -- font = SmoothLerp(font, self.Font, time, moveTime)
+
+                    tc = SmoothColorLerp(tc, self.bghcol, 5, FrameTime())
+                    moveW = SmoothLerp(moveW, 0, time, moveTime)
+                    moveH = SmoothLerp(moveW, 0, time, moveTime)
+                end
+               
             else
                 self.bgcol = PD.UI.Colors["Button"]
                 tc = self.textcol
                 middle = Color(0,0,0,255)
+                
+                if self.Animation then
+                    -- font = SmoothLerp(font, self.Font * 0.7, time, moveTime)
+                    tc = SmoothColorLerp(tc, self.OutlineColor, 5, FrameTime())
+                    moveW = SmoothLerp(moveW, PD.W(4), time, moveTime)
+                    moveH = SmoothLerp(moveW, PD.H(4), time, moveTime)
+                end
             end
         end
 
@@ -381,7 +416,7 @@ function PD.Button(name, wo, doclick, paint)
         end
 
         self.name = name
-        draw.DrawText(name, "MLIB." .. self.Font, posX, h / 2 - PD.H(self.Font / 2), tc, self.TextAlign)
+        draw.DrawText(name, "MLIB." .. math.Round(self.Font), posX, h / 2 - PD.H(math.Round(self.Font) / 2), tc, self.TextAlign)
     end
 
     btn.SetRadius = function(self, rad)
@@ -468,6 +503,10 @@ function PD.Button(name, wo, doclick, paint)
         self.Active = false
     end
 
+    btn.DeactivateAnimation = function(self)
+        self.Animation = false
+    end
+
     btn.Toggle = function(self)
         if self.Active then
             self.Active = false
@@ -501,7 +540,7 @@ end
 function PD.Panel(title, wo, paint)
     local pnl = wo:Add("DPanel")
     pnl:Dock(TOP)
-    pnl:DockMargin(PD.H(5),PD.H(5),PD.H(5),PD.H(5))
+    pnl:DockMargin(PD.W(5),PD.H(5),PD.W(5),PD.H(5))
     pnl:SetSize(wo:GetWide(),PD.H(50))
     pnl:SetText("")
     pnl.bgcol = PD.UI.Colors["Grey1"]
@@ -509,7 +548,7 @@ function PD.Panel(title, wo, paint)
     pnl.radius = 5
 
     pnl.Paint = function(self,w,h)
-       draw.RoundedBox(self.radius,0,0,w,h,self.bgcol)
+        draw.RoundedBox(self.radius,0,0,w,h,self.bgcol)
 
         if paint then
             paint(self,w,h)
@@ -628,9 +667,6 @@ function PD.SimpleCheck(wo, text, val, change)
     local txt = markup.Parse("<font=MLIB.20>\n<colour=255,255,255>"..text,wo:GetWide() - PD.W(20))
     local posX = PD.W(5)
 
-    if value then
-        posX = PD.W(35)
-    end
 
     local panel = PD.Panel("", wo, function(self, w, h)
         local c = CONFIG:GetConfig("textcolor")
@@ -639,29 +675,32 @@ function PD.SimpleCheck(wo, text, val, change)
     panel:SetTall(txt:GetHeight() + PD.H(20))
     panel:SetBackColor(Color(0, 0, 0, 0))
 
+    local color = PD.UI.Colors["SithRed"]
+    local targetX = value and PD.W(35) or PD.W(5)
     local check = PD.Button("", panel, function(self)
         value = not value
 
-        if posX == PD.W(5) then
-            posX = Lerp(1, posX, PD.W(35))
-        else
-            posX = Lerp(1, posX, PD.W(5))
-        end
+        targetX = value and PD.W(35) or PD.W(5)
 
         change(value)
     end, function(self, w, h)
-        if posX == PD.W(35) then
-            draw.RoundedBox(100, PD.W(2), PD.H(2), w - PD.W(4), h - PD.H(4), PD.UI.Colors["Green"])
+            posX = SmoothLerp(posX, targetX, 5, FrameTime())
+
+        if value then
+            color = SmoothColorLerp(color, PD.UI.Colors["Green"], 5, FrameTime())
         else
-            draw.RoundedBox(100, PD.W(2), PD.H(2), w - PD.W(4), h - PD.H(4), PD.UI.Colors["SithRed"])
+            color = SmoothColorLerp(color, PD.UI.Colors["SithRed"], 5, FrameTime())
         end
 
-        draw.RoundedBox(100, posX, h / 2 - PD.H(10), PD.H(20), PD.H(20), PD.UI.Colors["Text"])
+        draw.RoundedBox(PD.H(100), PD.W(2), PD.H(2), w - PD.W(4), h - PD.H(4), color)
+        draw.RoundedBox(PD.H(100), posX, h / 2 - PD.H(10), PD.H(20), PD.H(20), PD.UI.Colors["Text"])
     end)
     check:Dock(LEFT)
     check:SetWide(PD.H(60))
     check:SetHoverColor(Color(0, 0, 0, 0))
     check:SetOutlineColor(PD.UI.Colors["Text"])
+    check:DeactivateAnimation()
+    check:SetBackgroundDisabled(true)
 
     check.GetChecked = function()
         return value
@@ -778,7 +817,7 @@ function PD.ComboBox(value, wo, func)
         search = bool
     end
 
-    return box
+    return box, box
 end
 
 function PD.Label(text, wo, col)
@@ -861,7 +900,7 @@ function PD.NumSlider(text, wo, min, max, value, func)
         self:MouseCapture(false)
 
         if func then
-            func(currentValue)
+            func(math.Round(currentValue))
         end
     end
     
@@ -1048,6 +1087,31 @@ function PD.Model(wo, setmodel, x, y, w, h)
     return model
 end
 
+function PD.Progress(wo, start, func)
+    local progress = wo:Add("DProgress")
+    progress:Dock(TOP)
+    progress:DockMargin(PD.H(5),PD.H(5),PD.H(5),PD.H(5))
+    progress:SetTall(PD.H(50))
+    progress:SetFraction(start or 0)
+
+    progress.OnUpdate = function(self, fraction)
+        if func then
+            func(fraction)
+        end
+    end
+
+    progress.SetProgress = function(self, fraction)
+        self:SetFraction(fraction)
+        self:OnUpdate(fraction)
+    end
+
+    progress.GetProgress = function(self)
+        return self:GetFraction()
+    end
+
+    return progress
+end
+
 local x, y = ScrW() - 10, ScrH() - 10
 local ptbl = {}
 function PD.Popup(text, color)
@@ -1069,9 +1133,9 @@ function PD.Popup(text, color)
     Popup:SetSize(w, PD.H(50))
     Popup:SetPos(x - w, posY - PD.H(50))
     Popup.Paint = function(self,w,h)
-        draw.RoundedBox(0,0,0,w,h,Color(255,255,255, 10))
+        draw.RoundedBox(0,0,0,w,h,PD.UI.Colors["Background"])
 
-        draw.DrawText(text,"MLIB.20",w/2,h/2-PD.H(10),CONFIG:GetConfig("textcolor"),TEXT_ALIGN_CENTER)
+        draw.DrawText(text,"MLIB.20",w/2,h/2-PD.H(10),PD.UI.Colors["Text"],TEXT_ALIGN_CENTER)
 
         barStatus = math.Clamp(barStatus + (speedBar / 5) * FrameTime(), 0, 1)
 		draw.RoundedBox(0, 0,h - PD.H(5), w * barStatus, PD.H(5), color)
@@ -1088,8 +1152,10 @@ function PD.Popup(text, color)
                 v.pnl:MoveTo(x - w, y - (i - 1) * PD.H(50), 0.5, 0, 1)
             end
 
-            Popup:Remove()
-            table.RemoveByValue(ptbl, Popup)
+            timer.Simple(2, function()
+                table.RemoveByValue(ptbl, Popup)
+                Popup:Remove()
+            end)
         end)
     end)
 
@@ -1145,40 +1211,40 @@ function PD.DrawImgur(x, y, w, h, id)
 end
 
 local function FrameMenu()
-    if IsValid(Base) then return end
+    if IsValid(TestBase) then return end
 
-    Base = PD.Frame("Test UI", PD.W(600), PD.H(600), true)
+    TestBase = PD.Frame("Test UI", PD.W(600), PD.H(600), true)
 
-    -- local scrl = PD.Scroll(Base)
+    local scrl = PD.Scroll(TestBase)
 
-    -- local Button = PD.Button("Test", scrl, function()
-    --     PD.Notify("Test", CONFIG:GetConfig("colorred"))
-    -- end)
-    -- Button:Dock(TOP)
-    -- Button:SetTall(PD.H(50))
+    local Button = PD.Button("Test", scrl, function()
+        PD.Notify("Test", CONFIG:GetConfig("colorred"))
+    end)
+    Button:Dock(TOP)
+    Button:SetTall(PD.H(50))
 
-    -- local switch = PD.SimpleCheck(scrl, "Test", false, function(val)
-    --     print(val)
-    -- end)
+    local switch = PD.SimpleCheck(scrl, "Test", false, function(val)
+        print(val)
+    end)
 
-    -- local panel = PD.Panel("Test", scrl)
+    local panel = PD.Panel("Test", scrl)
 
-    -- local textlbl = PD.TextEntryLabel("Test", scrl, "Test", "Test")
-    -- local text = PD.TextEntry("Test", scrl)
+    local textlbl = PD.TextEntryLabel("Test", scrl, "Test", "Test")
+    local text = PD.TextEntry("Test", scrl)
 
-    -- local slider = PD.NumSlider("Test", scrl, 0, 250, 135, function(self, val)
-    --     print(val)
-    -- end)
+    local slider = PD.NumSlider("Test", scrl, 0, 250, 135, function(self, val)
+        print(val)
+    end)
 
-    -- local multi = PD.SelectMulti(scrl, "Test", {"Test1", "Test2", "Test3"}, {["Test1"] = true, ["Test3"] = true}, function(val, v)
-    --     print(val, v)
-    -- end)
+    local multi = PD.SelectMulti(scrl, "Test", {"Test1", "Test2", "Test3"}, {["Test1"] = true, ["Test3"] = true}, function(val, v)
+        print(val, v)
+    end)
 
-    -- local color = PD.ColorPicker(scrl, "Test", CONFIG:GetConfig("colorred"), function(col)
-    --     print(col)
-    -- end)
+    local color = PD.ColorPicker(scrl, "Test", CONFIG:GetConfig("colorred"), function(col)
+        print(col)
+    end)
 
-    local combo = PD.ComboBox("Test", Base, function(val)
+    local combo = PD.ComboBox("Test", TestBase, function(val)
         print(val)
     end)
     combo:SetSearch(true)
@@ -1187,9 +1253,14 @@ local function FrameMenu()
     combo:AddChoice("Test2")
     combo:AddChoice("Test3")
 
-    -- local binder = PD.Binder(scrl, "Test", KEY_F1, function(self, val)
-    --     print(val)
-    -- end)
+    local binder = PD.Binder(scrl, "Test", KEY_F1, function(self, val)
+        print(val)
+    end)
 
 end
 
+-- if TestBase then
+--     TestBase:Remove()
+-- end
+
+-- FrameMenu()

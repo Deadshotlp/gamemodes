@@ -3,12 +3,12 @@ AddCSLuaFile("shared.lua")
 include('shared.lua')
 
 function ENT:Initialize()
-    self:SetModel("models/reizer_props/alysseum_project/medicine_obj/med_sofa_01/med_sofa_01.mdl")
-    self:PhysicsInit(SOLID_VPHYSICS)
-    self:SetMoveType(MOVETYPE_VPHYSICS)
-    self:SetSolid(SOLID_VPHYSICS)
+    self.Entity:SetModel("models/reizer_props/alysseum_project/medicine_obj/med_sofa_01/med_sofa_01.mdl")
+    self.Entity:PhysicsInit(SOLID_VPHYSICS)
+    self.Entity:SetMoveType(MOVETYPE_VPHYSICS)
+    self.Entity:SetSolid(SOLID_VPHYSICS)
 
-    local phys = self:GetPhysicsObject()
+    local phys = self.Entity:GetPhysicsObject()
     self.nodupe = true
     self.ShareGravgun = true
 
@@ -31,10 +31,6 @@ function ENT:Initialize()
 
     self.pod:SetColor(Color(0, 0, 0, 0))
     self.pod:SetRenderMode(RENDERMODE_TRANSALPHA)
-
-    table.insert(PD.DM.Props.MRT.tbl, self)
-
-    PrintTable(PD.DM.Props.MRT.tbl)
 end
 
 function ENT:SpawnFunction(ply, tr)
@@ -58,6 +54,7 @@ function ENT:Use(ply)
     end -- Someone is already in it
 
     ply:EnterVehicle(self.pod)
+
     return
 end
 

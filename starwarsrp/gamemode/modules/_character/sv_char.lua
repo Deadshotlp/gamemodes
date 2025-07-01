@@ -6,13 +6,11 @@ util.AddNetworkString("PD.Char.Delete")
 util.AddNetworkString("PD.Char.Play")
 util.AddNetworkString("PD.Char.Synccl")
 util.AddNetworkString("PD.Char.Syncsv")
-util.AddNetworkString("PD.Char.AdminSync")
-util.AddNetworkString("PD.Char.AdminSave")
-util.AddNetworkString("PD.Char.AdminDelete")
 util.AddNetworkString("OpenCharbyDelete")
 util.AddNetworkString("PD.Char.Open")
 util.AddNetworkString("PD.Char.JobChange")
 util.AddNetworkString("PD.Char.SetJobFunction")
+util.AddNetworkString("PD.Char.DefaultFaction")
 
 -- Funktion zur Generierung einer Zufallszahl im Format XX-XXXX
 local function GenerateRandomNumber()
@@ -33,6 +31,27 @@ local function IDCheck(id)
     end
     return true
 end
+
+timer.Simple(0.1, function()
+    for k, v in pairs(player.GetAll()) do
+        local jobID, jobTable = v:GetJob()
+
+        net.Start("PD.Char.SetJobFunction")
+            net.WriteEntity(v)
+            net.WriteString(jobID)
+            net.WriteTable(jobTable)
+        net.Send(v)
+        
+    end
+end)
+
+net.Receive("PD.Char.DefaultFaction", function()
+    local ply = net.ReadEntity()
+    local charID = net.ReadUInt(32)
+    local tbl = PD.Char:LoadChar(ply:SteamID64(), "PD.Char.DefaultFaction")
+
+    PD.List:SetPlayerDefaultFaction(ply)
+end)
 
 net.Receive("PD.Char.Create",function()
     local ply = net.ReadEntity()
@@ -165,55 +184,6 @@ net.Receive("PD.Char.Syncsv",function(len,ply)
             net.Start("PD.Char.Open")
             net.Send(ply)
         end)
-    end
-end)
-
-net.Receive("PD.Char.AdminSave",function()
-    local plyid = net.ReadString()
-    local charid = net.ReadUInt(32)
-    local id = net.ReadString()
-    local name = net.ReadString()
-    local job = net.ReadString()
-    local money = net.ReadUInt(32)
-    local jobName, jobTable = PD.JOBS.GetJob(job, false)
-
-    local tbl = PD.Char:LoadChar(plyid, "AdminSave")
-
-    if tbl then
-        tbl[charid].id = id
-        tbl[charid].name = name
-        tbl[charid].job = {
-            name = jobName,
-            model = jobTable.model[1],
-            unit = jobTable.unit,
-            id = jobName
-        }
-        tbl[charid].money = money
-
-        PD.Char:SaveChar(plyid,tbl)
-    end
-end)
-
-net.Receive("PD.Char.AdminSync",function(len,ply)
-    local tbl = PD.Char:LoadAllChars()
-
-    -- print("AdminSync")
-    -- PrintTable(tbl)
-
-    net.Start("PD.Char.AdminSync")
-    net.WriteTable(tbl)
-    net.Send(ply)
-end)
-
-net.Receive("PD.Char.AdminDelete",function(len,ply)
-    local plyid = net.ReadString()
-    local charid = net.ReadUInt(32)
-
-    local tbl = PD.Char:LoadChar(plyid, "AdminDelete: " .. plyid)
-
-    if tbl then
-        table.remove(tbl,charid)
-        PD.Char:SaveChar(plyid,tbl)
     end
 end)
 
