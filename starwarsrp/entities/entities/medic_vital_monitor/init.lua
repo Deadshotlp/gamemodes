@@ -54,16 +54,26 @@ end
 local time = 0
 local delay = 1
 
+local tbl = {
+    [1] = {"head", false, false},
+    [2] = {"torso", false, false},
+    [3] = {"belly", false, false},
+    [4] = {"arm_l", false, false},
+    [5] = {"arm_r", false, false},
+    [6] = {"leg_l", false, false},
+    [7] = {"leg_r", false, false},
+}
+
 function ENT:Think()
+    if not self:GetNW2Bool("active", false) or (self.LinkedEnt == nil) then
+        return
+    end
+
     if os.time() < (time + delay) then
         return
     end
 
     time = os.time()
-
-    if not self:GetNW2Bool("active", false) or (self.LinkedEnt == nil) then
-        return
-    end
 
     local ply = self.LinkedEnt.pod:GetDriver()
 
@@ -75,6 +85,14 @@ function ENT:Think()
 
         self:SetNW2Int("spo2", -1)
 
+        for k, v in ipairs(tbl) do
+            if v[2] == -1 then
+                self:SetNW2Int(k, -1)
+            else
+                tbl[k] = {v[1], false, false}
+            end
+        end
+
         return
     end
 
@@ -85,4 +103,27 @@ function ENT:Think()
 
     self:SetNW2Int("spo2", PD.DM:RequestTable(ply, "spo2"))
 
+    --legende: 0 = nichts, 1 = Verletzt,2 = Gebrochen,3 = Verletzt und Gebrochen
+
+    for _, v in ipairs(PD.DM:RequestTable(ply, "body_part")) do
+        if v.fractured == true then
+            tbl[_][3] = true
+        end
+    end
+
+    for _, v in ipairs(PD.DM:RequestTable(ply, "injureys")) do
+        tbl[v.wo][2] = true
+    end
+
+    for k, v in ipairs(tbl) do
+        if v[2] and v[3] then
+            self:SetNW2Int(k, 3)
+        elseif v[2] == true then
+            self:SetNW2Int(k, 1)
+        elseif v[3] == true then
+            self:SetNW2Int(k, 2)
+        else
+            self:SetNW2Int(k, -1)
+        end
+    end
 end
