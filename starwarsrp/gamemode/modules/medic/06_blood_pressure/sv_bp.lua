@@ -9,15 +9,17 @@ local NORMAL_BLOOD_VOLUME = 5.5 -- Normales Blutvolumen (aus sv_main.lua)
 local BLOOD_LOSS_SYSTOLIC_IMPACT = 10 -- Wie stark der systolische Druck pro verlorener Bluteinheit sinkt
 local BLOOD_LOSS_DIASTOLIC_IMPACT = 5 -- Wie stark der diastolische Druck pro verlorener Bluteinheit sinkt
 
-local PAIN_SYSTOLIC_IMPACT = 2 -- Wie stark der systolische Druck pro Schmerzlevel steigt
-local PAIN_DIASTOLIC_IMPACT = 1 -- Wie stark der diastolische Druck pro Schmerzlevel steigt
+local PAIN_SYSTOLIC_IMPACT = 0.25 -- Wie stark der systolische Druck pro Schmerzlevel steigt
+local PAIN_DIASTOLIC_IMPACT = 0.5 -- Wie stark der diastolische Druck pro Schmerzlevel steigt
 
-local MIN_SYSTOLIC = 40 -- Minimaler realistischer systolischer Druck
-local MAX_SYSTOLIC = 220 -- Maximaler realistischer systolischer Druck
-local MIN_DIASTOLIC = 20 -- Minimaler realistischer diastolischer Druck
-local MAX_DIASTOLIC = 140 -- Maximaler realistischer diastolischer Druck
+local MIN_SYSTOLIC = 0 -- Minimaler realistischer systolischer Druck
+local MAX_SYSTOLIC = 300 -- Maximaler realistischer systolischer Druck
+local MIN_DIASTOLIC = 0 -- Minimaler realistischer diastolischer Druck
+local MAX_DIASTOLIC = 200 -- Maximaler realistischer diastolischer Druck
 
 local BP_ADJUSTMENT_RATE = 0.08 -- Wie schnell sich der Blutdruck an den Zielwert anpasst (0 bis 1)
+
+local RANDOM_FLUCTUATION = 15 -- Maximale zufällige Abweichung (+/-) pro Update
 
 --[[
 Berechnet den Blutdruck (systolisch/diastolisch) des Spielers basierend auf
@@ -38,21 +40,16 @@ function PD.DM:CalculateBP(tbl, medication_modifier)
         tbl.bp = {BASE_SYSTOLIC, BASE_DIASTOLIC}
     end
 
+    if tbl.puls and tbl.puls == 0 then
+        tbl.bp[1] = 0
+        tbl.bp[2] = 0
+        return
+    end
+
     -- Standardwerte für fehlende Daten setzen
     local blood = (tbl.blood_amount and type(tbl.blood_amount) == "number") and tbl.blood_amount or NORMAL_BLOOD_VOLUME
     local pain = (tbl.pain_level and type(tbl.pain_level) == "number") and tbl.pain_level or 0
-
-    -- Verarbeite den Medikamenten-Modifikator
-    local med_mod_systolic = 0
-    local med_mod_diastolic = 0
-    if type(medication_modifier) == "table" then
-        med_mod_systolic = medication_modifier.systolic or 0
-        med_mod_diastolic = medication_modifier.diastolic or 0
-    elseif type(medication_modifier) == "number" then
-        -- Wenn nur eine Zahl übergeben wird, wende sie auf beide an (oder entscheide anders)
-        med_mod_systolic = medication_modifier
-        med_mod_diastolic = medication_modifier
-    end
+    local med_mod = (medication_modifier and type(medication_modifier) == "number") and medication_modifier or 0
 
     -- 1. Berechne den Ziel-Blutdruck
     local target_systolic = BASE_SYSTOLIC
@@ -68,8 +65,12 @@ function PD.DM:CalculateBP(tbl, medication_modifier)
     target_diastolic = target_diastolic + (pain * PAIN_DIASTOLIC_IMPACT)
 
     -- Effekt von Medikamenten (additiv)
-    target_systolic = target_systolic + med_mod_systolic
-    target_diastolic = target_diastolic + med_mod_diastolic
+    target_systolic = target_systolic * (1 + med_mod)
+    target_diastolic = target_diastolic * (1 + med_mod)
+
+    -- Füge eine leichte zufällige Schwankung zum Blutdruck hinzu
+    target_systolic = target_systolic + math.random(-RANDOM_FLUCTUATION, RANDOM_FLUCTUATION)
+    target_diastolic = target_diastolic + math.random(-RANDOM_FLUCTUATION, RANDOM_FLUCTUATION)
 
     -- 2. Passe den aktuellen Blutdruck schrittweise an den Zielwert an
     local current_systolic = tbl.bp[1]
@@ -91,6 +92,6 @@ function PD.DM:CalculateBP(tbl, medication_modifier)
     end
 
     -- Optional: Runde die Werte für eine sauberere Anzeige
-    -- tbl.bp[1] = math.Round(tbl.bp[1])
-    -- tbl.bp[2] = math.Round(tbl.bp[2])
+    tbl.bp[1] = math.Round(tbl.bp[1])
+    tbl.bp[2] = math.Round(tbl.bp[2])
 end

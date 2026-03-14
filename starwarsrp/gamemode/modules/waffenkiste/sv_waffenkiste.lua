@@ -6,9 +6,8 @@ util.AddNetworkString("PD.WB:RemoveWeapon")
 net.Receive("PD.WB:GiveWeapon", function(len, ply)
     local wep = net.ReadString()
     local jobID, jobTbl = ply:GetJob()
-    local id, jobTbl = PD.JOBS.GetJob(jobID)
 
-    if jobTbl.equip[wep] then
+    if jobTbl.equip and table.HasValue(jobTbl.equip, wep) then
         ply:Give(wep)
     else
         print(ply:Nick() .. "[" .. ply:SteamID64() .. "] versucht sich " .. wep .. " zu geben, obwohl er es nicht darf!")
@@ -64,3 +63,17 @@ hook.Add("PlayerSpawn", "PD.WB:PlayerSpawn", function(ply)
         end
     end
 end)
+
+hook.Add("PlayerInitialSpawn", "PD.WB:PlayerInitialSpawn", function(ply)
+    if PD.WB.StripWeapons then
+        local wep = ply:GetWeapons()
+        for _, wep in ipairs(wep) do
+            if PD.WB.DontStrip[wep:GetClass()] and ply:IsAdmin() then
+                continue
+            end
+
+            ply:StripWeapon(wep:GetClass())
+        end
+    end
+end)
+

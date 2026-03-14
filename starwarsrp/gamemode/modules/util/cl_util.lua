@@ -1,38 +1,23 @@
---
 
-local mouse = false
-hook.Add("PlayerButtonDown", "PD.GamemodeHUD", function(ply, key)
-    if not IsFirstTimePredicted() then return end
-   
-    if key == KEY_G and mouse then
-        gui.EnableScreenClicker(false)
-        mouse = false
-    elseif key == KEY_G and not mouse then
-        gui.EnableScreenClicker(true)
-        mouse = true
-    end
-end)
 
 timer.Simple(1, function()
     RunConsoleCommand("cl_drawhud", "0")
 end)
 
 hook.Add("PreRender", "JOaGPU", function()
-    if not system.HasFocus() then
-        if LocalPlayer():IsAdmin() then return end
+    -- if not system.HasFocus() then
+    --     if LocalPlayer():IsAdmin() then
+    --         return
+    --     end
 
-        cam.Start2D()
+    --     -- cam.Start2D()
+    --     --     draw.RoundedBox(0, 0, 0, ScrW(), ScrH(), Color(0, 0, 0, 255))
+    --     --     draw.DrawText("Hm, scheit so als hättest du dein Spiel nicht mehr aktiv!", "MLIB.50", ScrW() / 2, ScrH() / 2, Color(255, 255, 255), TEXT_ALIGN_CENTER)
+    --     -- cam.End2D()
 
-        draw.RoundedBox(0,0,0,ScrW(),ScrH(),Color(0,0,0,255))
-
-        draw.DrawText("Hm, scheit so als hättest du dein Spiel nicht mehr aktiv!", "MLIB.50", ScrW() / 2, ScrH() / 2, Color(255,255,255), TEXT_ALIGN_CENTER)
-
-        cam.End2D()
-    
-        return true
-    end
+    --     return true
+    -- end
 end)
-
 
 local videourl = ""
 local VideoStart = 0
@@ -47,7 +32,7 @@ net.Receive("PD.OpenYoutube", function()
     videourl = net.ReadString()
     -- VideoStart = net.ReadInt(32)
     -- VideoEnde = net.ReadInt(32)
-    
+
     local videoID = ExtractVideoID(videourl)
     if videoID then
         YoutubeVideo(videourl)
@@ -57,7 +42,9 @@ net.Receive("PD.OpenYoutube", function()
 end)
 
 function YoutubeVideo(url)
-    if IsValid(frame) then return end
+    if IsValid(frame) then
+        return
+    end
 
     frame = PD.Frame("[E] Zum überspringen", ScrW(), ScrH(), true)
 
@@ -77,7 +64,8 @@ function YoutubeVideo(url)
                         height: '100%',
                         width: '100%',
                         videoId: ']] .. ExtractVideoID(url) .. [[',
-                        playerVars: { 'autoplay': 1, 'controls': 0, 'start': ]] .. VideoStart .. [[, 'end': ]] .. VideoEnde .. [[},
+                        playerVars: { 'autoplay': 1, 'controls': 0, 'start': ]] .. VideoStart .. [[, 'end': ]] ..
+                     VideoEnde .. [[},
                         events: {
                             'onStateChange': onPlayerStateChange
                         }
@@ -158,7 +146,9 @@ Ich habe die Regeln gelesen, verstanden und akzeptiere sie.
 ]]
 
 local function RulePopup()
-    if IsValid(frame) then return end
+    if IsValid(frame) then
+        return
+    end
 
     frame = PD.Frame("📜 Server-Regeln – Galactic Liberation", PD.W(600), PD.H(800), true, function(self, w, h)
         -- draw.DrawText(longtext, "MLIB.20", PD.W(10), PD.H(10), Color(255, 255, 255), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
@@ -168,8 +158,8 @@ local function RulePopup()
 
     local pnl = PD.Panel("", scrl, function(self, w, h)
         -- draw.DrawText(longtext, "MLIB.20", PD.W(10), PD.H(10), Color(255, 255, 255), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
-        local longText = markup.Parse("<font=MLIB.20>"..longtext,self:GetWide()-PD.W(20))
-        longText:Draw(PD.W(10), PD.H(10),TEXT_ALIGN_LEFT,TEXT_ALIGN_TOP)
+        local longText = markup.Parse("<font=MLIB.20>" .. longtext, self:GetWide() - PD.W(20))
+        longText:Draw(PD.W(10), PD.H(10), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
     end)
     surface.SetFont("MLIB.20")
     local w, h = surface.GetTextSize(longtext)
@@ -197,12 +187,14 @@ end
 
 hook.Add("InitPostEntity", "PD.RulePopup", function()
     if not file.Exists("pd_rules.json", "DATA") then
-        RulePopup()
+        --RulePopup()
     end
 end)
 
 local function DeveloperMenu()
-    if IsValid(frame) then return end
+    if IsValid(frame) then
+        return
+    end
 
     frame = PD.Frame("Developer Menu", PD.W(600), PD.H(800), true)
 
@@ -220,15 +212,35 @@ local function DeveloperMenu()
 end
 
 hook.Add("DrawDeathNotice", "NoDeathNOtice", function()
-	return 0, 0
+    return 0, 0
 end)
 
 hook.Add("Initialize", "NoDeathNOtice", function()
-	GM = GM or GAMEMODE
-	function GM:AddDeathNotice()
-		return
-	end
+    GM = GM or GAMEMODE
+    function GM:AddDeathNotice()
+        return
+    end
 end)
 
-function notification.AddLegacy() return end
+function notification.AddLegacy()
+    return
+end
 
+local function color_interpolieren(baseColor, count)
+    local white = Color(255, 255, 255)
+    local black = Color(0, 0, 0)
+    local colors = {white, baseColor, black}
+
+    local upStep = {(white.r - baseColor.r) / count, (white.g - baseColor.g) / count, (white.b - baseColor.b) / count}
+    local downStep = {baseColor.r / count, baseColor.g / count, baseColor.b / count}
+
+    for i = 1, count do
+        local color
+        colors["Base+" .. i] = Color(baseColor.r + upStep[1] * i, baseColor.g + upStep[2] * i,
+            baseColor.b + upStep[3] * i)
+        colors["Base-" .. i] = Color(baseColor.r + downStep[1] * (i - count / 2),
+            baseColor.g + downStep[2] * (i - count / 2), baseColor.b + downStep[3] * (i - count / 2))
+    end
+
+    return colors
+end

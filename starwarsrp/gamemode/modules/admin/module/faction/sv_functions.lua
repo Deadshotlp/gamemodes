@@ -5,7 +5,7 @@ function PD.List:LoadFactions()
     local units = PD.JOBS.GetUnit(false, true)
     local allsubunits = PD.JOBS.GetSubUnit(false, true)
     local alljobs = PD.JOBS.GetJob(false, true)
-    local allplayers = PD.JSON.Read("factions/players.json")
+    local allplayers = PD.JSON.Read("modules/factions/players.json")
 
     for k, unit in SortedPairs(units) do
         PD.List.Tbl[k] = {
@@ -84,38 +84,7 @@ function PD.List.Save()
         end
     end
 
-    PD.JSON.Write("factions/players.json", players)
-end
-
-local playerTimers = {}
-function PD.List:StartTimer(playerSteamID)
-    if not playerTimers[playerSteamID] then
-        playerTimers[playerSteamID] = RealTime()
-    end
-end
-
-function PD.List:GetTimer(playerSteamID)
-    if playerTimers[playerSteamID] then
-        return true
-    else
-        return false
-    end
-end
-
-function PD.List:StopTimer(playerSteamID)
-    if playerTimers[playerSteamID] then
-        local elapsedTime = RealTime() - playerTimers[playerSteamID]
-        playerTimers[playerSteamID] = nil
-        print("Timer gestoppt: " .. elapsedTime)
-
-        if not elapsedTime then
-            return 0
-        end
-
-        return elapsedTime
-    else
-        return 0
-    end
+    PD.JSON.Write("modules/factions/players.json", players)
 end
 
 function PD.List:SetPlayerFaction(ply, factionName, SubFactionName, jobName)
@@ -153,12 +122,15 @@ function PD.List:SetPlayerFaction(ply, factionName, SubFactionName, jobName)
         playtime = 0
     }
 
+    local jobTable = {}
+    local _, sub = PD.JOBS.GetSubUnit(SubFactionName, false)
+    jobTable = sub.jobs[jobName] or {}
+
     PD.List:StartTimer(ply:SteamID64())
     PD.List.Save()
 
     print(ply:Nick().." joined "..factionName.." - "..SubFactionName.." - "..jobName)
-
-    hook.Run("PD_Faction_Change", ply, factionName, SubFactionName, jobName)
+    hook.Run("PD_Faction_Change", ply, factionName, SubFactionName, jobName, jobTable)
 end
 
 function PD.List:GetPlayerFaction(ply)
@@ -191,12 +163,16 @@ function PD.List:RemovePlayerFaction(ply, change)
     -- Setzt den Spieler auf die Default Fraktion
     local factionName, subfactionName, jobName = PD.List:SetPlayerDefaultFaction(ply)
 
+    local jobTable = {}
+    local _, sub = PD.JOBS.GetSubUnit(subfactionName, false)
+    jobTable = sub.jobs[jobName] or {}
+
     -- PD.List:StopTimer(ply:SteamID64())
     PD.List.Save()
 
     print(ply:Nick().." left "..factionName.." - "..subfactionName.." - "..jobName)
 
-    hook.Run("PD_Faction_Change", ply, factionName, subfactionName, jobName)
+    hook.Run("PD_Faction_Change", ply, factionName, subfactionName, jobName, jobTable)
 end
 
 function PD.List:RankUp(ply, factionName, subfactionName, jobName)
@@ -297,7 +273,8 @@ function PD.List:GetPlayerTable(ply)
             return v
         end
     end
-    
+
+    return {}
 end
 
 timer.Simple(1, function()
@@ -314,6 +291,8 @@ hook.Add("PlayerDisconnected", "PD.List.PlayerDisconnected", function(ply)
     local time = PD.List:StopTimer(ply:SteamID64())
     local plyTable = PD.List:GetPlayerTable(ply)
 
+    if not plyTable then return end
+
     plyTable.playtime = plyTable.playtime + time
 
     if time > 0 then
@@ -324,7 +303,7 @@ hook.Add("PlayerDisconnected", "PD.List.PlayerDisconnected", function(ply)
 end)
 
 hook.Add("ShutDown", "PD.List.ShutDown", function()
-
+    local playerTimers = {}
     for k, v in pairs(playerTimers) do
         local time = PD.List:StopTimer(k:SteamID64())
         local plyTable = PD.List:GetPlayerTable(v)

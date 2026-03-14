@@ -50,7 +50,7 @@ net.Receive("PD.Char.DefaultFaction", function()
     local charID = net.ReadUInt(32)
     local tbl = PD.Char:LoadChar(ply:SteamID64(), "PD.Char.DefaultFaction")
 
-    PD.List:SetPlayerDefaultFaction(ply)
+    PD.List:SetDefault(ply)
 end)
 
 net.Receive("PD.Char.Create",function()
@@ -59,6 +59,8 @@ net.Receive("PD.Char.Create",function()
     local id = GenerateRandomNumber()
     local create = os.date("%d.%m.%Y %H:%M:%S", os.time())
     local jobName, jobTable = PD.JOBS.GetJob(false, false)
+
+    PrintTable(jobTable)
         
 
     if jobName then
@@ -102,10 +104,11 @@ net.Receive("PD.Char.Create",function()
             print("Job Change | PD.Char.Create | Zeile 48")
             ply:changeTeam(jobName, true)
            
+            ply.CharID = id
             ply:SetNWString("rpname",id.." "..name)
             PD.Char:SetPlayerCharID(ply,id)
             print("CharID bei erstellung: " .. id)
-            ply:PDSetMoney(0)
+            --ply:PDSetMoney(0)
             ply:SetModel(jobTable.model[1])
             ply:SetNWString("character_id",id)
             PD.Char:StartTimer(ply:SteamID64())
@@ -117,18 +120,26 @@ net.Receive("PD.Char.Create",function()
                 net.WriteTable(jobTable)
             net.Broadcast()
 
-            PD.List:SetPlayerDefaultFaction(ply)
+            PD.List:SetDefault(ply)
             print(name .. " wurde in den Job " .. jobName .. " gesetzt.")
+
+            PD.LOGS.Add("[Char]", "Charakter " .. name .. " (" .. id .. ") wurde erstellt." .. ply:SteamID64(), Color(0, 255, 0))
+
+            hook.Run("PlayerCreateCharacter", ply, data)
         else
             print("Spieler nicht gefunden. (PD.Char.Create: Zeile 180)")
         end
-
-        hook.Run("PlayerCreateCharacter", ply, data)
     else
         print("Job-ID nicht gefunden. (PD.Char.Create: Zeile 185)")
     end
 
     PD.Char:SyncChar(ply, "PD.Char.Create")
+
+    local tbl = PD.Char:LoadAllChars()
+
+    net.Start("PD.Char.AdminSync")
+    net.WriteTable(tbl)
+    net.Send(ply)
 end)
 
 net.Receive("PD.Char.Play",function()
@@ -137,7 +148,13 @@ net.Receive("PD.Char.Play",function()
 
     local jobID = PD.Char:PlayerSetChar(ply,id)
 
-    hook.Run("PlayerSetCharacter", ply, jobID)
+    -- hook.Run("PlayerSetCharacter", ply, {
+    --     jobid = jobID,
+    --     jobsubunit = nil,
+    --     jobunit = nil
+    -- })
+
+    PD.LOGS.Add("[Char]", "Charakter " .. ply:Nick() .. " (" .. id .. ") wurde ausgewählt." .. ply:SteamID64(), Color(0, 255, 0))
 end)
 
 net.Receive("PD.Char.Delete",function()
@@ -149,6 +166,8 @@ net.Receive("PD.Char.Delete",function()
 
     hook.Run("PlayerDeleteCharacter", ply, Atbl[tblID])
 
+    PD.LOGS.Add("[Char]", "Charakter " .. Atbl[tblID].id .. " " .. Atbl[tblID].name .. " wurde gelöscht." .. ply:SteamID64(), Color(255, 0, 0))
+
     if PD.Char:PlayerActiveChar(ply) then
         table.remove(Atbl,tblID)
         ply:KillSilent()
@@ -159,15 +178,16 @@ net.Receive("PD.Char.Delete",function()
         ply:changeTeam(1, true)
         ply:SetNWString("rname",name)
 
-        timer.Simple(0.5,function()
+        timer.Simple(2,function()
             net.Start("OpenCharbyDelete")
             net.Send(ply)
         end)
     else
         table.remove(Atbl,tblID)
         PD.Char:SaveChar(ply:SteamID64(),Atbl)
+        PD.Char:SyncChar(ply, "Player Delete SV")
 
-        timer.Simple(0.5,function()
+        timer.Simple(2,function()
             net.Start("OpenCharbyDelete")
             net.Send(ply)
         end)
@@ -208,12 +228,15 @@ hook.Add("player_disconnect","PD.Char:PlayerDisconnect",function(data)
         local id = FindPlayerCharbyName(string.sub(ply:Nick(),9),tbl)
         tbl[id].playtime = tbl[id].playtime + PD.Char:StopTimer(ply:SteamID64())
         tbl[id].lastplaytime = os.date("%d.%m.%Y %H:%M:%S",os.time())
-        tbl[id].money = ply:PDGetMoney()
+        --tbl[id].money = ply:PDGetMoney()
+
         PD.Char:SaveChar(ply:SteamID64(),tbl)
 
         print("Player: " .. ply:Nick() .. " wurde gespeichert.")
         print("Char: " .. tbl[id].name .. " wurde gespeichert.")
     end
+
+    -- PD.LOGS.Add("[Char]", "Charakter " .. ply:Nick() .. " (" .. tbl[id].id .. ") hat sich ausgeloggt." .. ply:SteamID64(), Color(255, 255, 0))
 end)
 
 hook.Add("ShutDown","PD.Char:ServerDown",function()
@@ -224,7 +247,8 @@ hook.Add("ShutDown","PD.Char:ServerDown",function()
         if tbl and tbl[id] then
             tbl[id].playtime = tbl[id].playtime + PD.Char:StopTimer(v:SteamID64())
             tbl[id].lastplaytime = os.date("%d.%m.%Y %H:%M:%S",os.time())
-            tbl[id].money = v:PDGetMoney()
+            --tbl[id].money = v:PDGetMoney()
+
             PD.Char:SaveChar(v:SteamID64(),tbl)
 
             print("Player: " .. v:Nick() .. " wurde gespeichert.")
@@ -239,41 +263,41 @@ concommand.Add("charprints",function(ply)
     PrintTable(tbl)
 end)
 
-hook.Add("PlayerSetCharacter", "TestHookChar", function(ply, jobID)
-    print("PlayerSetCharacter")
-    print(ply)
+hook.Add("PlayerSetCharacter", "TestHookChar", function(ply, jobinfo)
+    -- print("PlayerSetCharacter")
+    -- print(ply)
 
-    local jobID, jobTbl = PD.JOBS.GetJob(jobID)
+    -- local jobName, jobTable = getRightJob({
+    --     jobid = jobinfo.jobid,
+    --     jobsubunit = jobinfo.jobsubunit,
+    --     jobunit = jobinfo.jobunit
+    -- })
 
-    net.Start("PD.Char.JobChange")
-        net.WriteEntity(ply)
-        net.WriteString(jobID)
-        net.WriteTable(jobTbl)
-    net.Broadcast()
+    -- net.Start("PD.Char.JobChange")
+    --     net.WriteEntity(ply)
+    --     net.WriteString(jobID)
+    --     net.WriteTable(jobTbl)
+    -- net.Broadcast()
 end)
 
-hook.Add("PD_Faction_Change", "PD.Char:PD_Faction_Change", function(ply, factionName, subfactionName, jobName)
-    if not PD.Char:PlayerActiveChar(ply) then return end
-    print("PD_Faction_Change")
+hook.Add("PD_Faction_Change", "PD.Char:PD_Faction_Change", function(ply, factionName, subfactionName, jobName, jobTbl)
+    local tbl = PD.Char:LoadChar(ply:SteamID64(), "PD_Faction_Change")
+    local id = FindPlayerCharbyName(string.sub(ply:Nick(),9),tbl)
+
+    if not tbl[id] then print("Job Table für Faction Change in sv_char.lua nicht gefunden.") return end
 
     local tbl = PD.Char:LoadChar(ply:SteamID64(), "Char_SetFactionInfomations")
     local charID = FindPlayerCharbyName(string.sub(ply:Nick(),9),tbl)
 
     if not tbl[charID] then return end
 
-    tbl[charID].faction.unit = factionName
-    tbl[charID].faction.subunit = subfactionName
-    tbl[charID].faction.job = jobName
-
-    local jobID, jobTbl = PD.JOBS.GetJob(jobName)
+    ply:SetJob(jobName, jobTbl)
 
     net.Start("PD.Char.JobChange")
         net.WriteEntity(ply)
-        net.WriteString(jobID)
+        net.WriteString(jobName)
         net.WriteTable(jobTbl)
     net.Broadcast()
-
-    PD.Char:SaveChar(ply:SteamID64(), tbl)
 
     PD.Char:ChangePlayerJob(ply, jobName)
 end)
@@ -288,4 +312,6 @@ hook.Add("PlayerInitialSpawn", "PD.Char:PlayerInitialSpawn", function(ply)
 
     ply:KillSilent()
 end)
+
+
 

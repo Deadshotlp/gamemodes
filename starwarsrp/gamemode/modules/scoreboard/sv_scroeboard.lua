@@ -5,3 +5,5 @@ hook.Add("PlayerInitialSpawn", "MarioScoreboardReady", function(ply)
         net.WriteUInt(RealTime(), 32)
     net.Send(ply)
 end)
+
+

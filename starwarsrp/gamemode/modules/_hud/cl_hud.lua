@@ -13,6 +13,7 @@ local weaponsTbl = {
     ["repairstool"] = true,
 }
 
+
 PD.HUD = PD.HUD or {}
 PD.HUD.x = PD.W(10)
 PD.HUD.y = ScrH() - PD.H(60)
@@ -37,230 +38,180 @@ end
 
 local lastEyeAngles = Angle(0, 0, 0)
 
--- Base HUD
-AddSmoothElement(PD.W(20), ScrH() - PD.H(90), PD.W(200), PD.H(0), function(smoothX, smoothY)
+-- Base HUD - Star Wars Andor Imperial Style (Zentral über PD.Theme)
+AddSmoothElement(PD.W(20), ScrH() - PD.H(125), PD.W(350), PD.H(105), function(smoothX, smoothY)
+    if PD.FOV.thirdPerson then return end
+    
     local ply = LocalPlayer()
+    if not IsValid(ply) then return end
 
-    surface.SetFont("MLIB.20")
-    local NameW, NameH = surface.GetTextSize(ply:Nick())
+    -- Charakterdaten holen
+    local rpName = ply:GetNWString("rpname", ply:Nick())
+    local jobID, jobTbl = ply:GetJob()
+    local jobName = jobTbl and jobID or "Unbekannt"
+    local unitName = jobTbl and jobTbl.unit or ""
 
-    draw.RoundedBox(0, smoothX, smoothY, NameW + PD.W(20), PD.H(40), PD.UI.Colors["Background"])
+    -- Text-Breiten berechnen
+    surface.SetFont("MLIB.28")
+    local nameW, nameH = surface.GetTextSize(rpName)
+    surface.SetFont("MLIB.18")
+    local jobW, jobH = surface.GetTextSize(jobName)
+    surface.SetFont("MLIB.14")
+    local unitW, unitH = surface.GetTextSize(unitName)
 
-    surface.SetDrawColor(DEFCON:GetColor())
-    surface.DrawOutlinedRect(smoothX, smoothY, NameW + PD.W(20), PD.H(40), 2)
+    local panelW = math.max(nameW, jobW, unitW) + PD.W(50)
+    local panelH = PD.H(105)
 
-    draw.DrawText(ply:Nick(), "MLIB.20", smoothX + PD.W(10), smoothY + PD.H(10), Color(255, 255, 255), TEXT_ALIGN_LEFT)
-end)
+    -- Panel mit zentralem Theme zeichnen
+    PD.DrawPanel(smoothX, smoothY, panelW, panelH, {
+        background = PD.Theme.Colors.BackgroundLight,
+        accent = PD.Theme.Colors.AccentRed,
+        accentTop = false,
+        accentBottom = false,
+        corners = false,
+        borders = false
+    })
 
-local knownPlayers = {}
-local dataFile = "known_players.json"
+    -- Linke Akzentlinie (Imperial Red)
+    surface.SetDrawColor(PD.Theme.Colors.AccentRed)
+    surface.DrawRect(smoothX, smoothY, PD.W(4), panelH)
 
-local function LoadKnown()
-    if file.Exists(dataFile, "DATA") then
-        local json = file.Read(dataFile, "DATA")
-        knownPlayers = util.JSONToTable(json) or {}
+    -- Obere horizontale Akzentlinie
+    surface.SetDrawColor(PD.Theme.Colors.AccentGray)
+    surface.DrawRect(smoothX + PD.W(4), smoothY, panelW - PD.W(4), 1)
+
+    -- Untere horizontale Akzentlinie
+    surface.DrawRect(smoothX + PD.W(4), smoothY + panelH - 1, panelW - PD.W(4), 1)
+
+    -- Trennlinie unter dem Namen
+    PD.DrawDivider(smoothX + PD.W(15), smoothY + PD.H(38), panelW - PD.W(30))
+
+    -- Charaktername
+    draw.DrawText(rpName, "MLIB.28", smoothX + PD.W(15), smoothY + PD.H(8), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+
+    -- Job/Rang
+    draw.DrawText(jobName, "MLIB.18", smoothX + PD.W(15), smoothY + PD.H(45), PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+
+    -- Einheit (wenn vorhanden)
+    if unitName and unitName ~= "" then
+        draw.DrawText(unitName, "MLIB.14", smoothX + PD.W(15), smoothY + PD.H(70), PD.Theme.Colors.AccentGray, TEXT_ALIGN_LEFT)
     end
-end
 
-local function SaveKnown()
-    file.Write(dataFile, util.TableToJSON(knownPlayers, true))
-end
+    -- Imperial Ecken-Dekor (oben rechts)
+    local cornerSize = PD.W(8)
+    surface.SetDrawColor(PD.Theme.Colors.AccentGray)
+    surface.DrawLine(smoothX + panelW - cornerSize, smoothY, smoothX + panelW, smoothY)
+    surface.DrawLine(smoothX + panelW - 1, smoothY, smoothX + panelW - 1, smoothY + cornerSize)
 
-function PD.HUD.GetKnownPlayers(plyID)
-    if plyID == LocalPlayer():SteamID64() then
-        return LocalPlayer():Nick()
-    end
+    -- Imperial Ecken-Dekor (unten rechts)
+    surface.DrawLine(smoothX + panelW - cornerSize, smoothY + panelH - 1, smoothX + panelW, smoothY + panelH - 1)
+    surface.DrawLine(smoothX + panelW - 1, smoothY + panelH - cornerSize, smoothX + panelW - 1, smoothY + panelH)
 
-    return knownPlayers[plyID] or "Unbekannt"
-end
-
-function PD.HUD.GetKnownPlayersAll()
-    return knownPlayers
-end
-
-hook.Add("InitPostEntity", "LoadKnownPlayers", function()
-    LoadKnown()
+    -- Status-Indikator Punkt
+    PD.DrawStatusIndicator(smoothX + panelW - PD.W(18), smoothY + PD.H(12), PD.W(8), PD.Theme.Colors.AccentRed, false)
 end)
 
-hook.Add("KeyPress", "HandleMeetKeyPress_Client", function(ply, key)
-    
-end)
+-- EyeTrace Player HUD - Star Wars Andor Imperial Style (Zentral über PD.Theme)
+AddSmoothElement(PD.W(20), ScrH() - PD.H(200), PD.W(280), PD.H(55), function(smoothX, smoothY)
+    if PD.FOV.thirdPerson then return end
 
-local function KnownMenu(name)
-    if IsValid(knownMenuFrame) then return end
-    if not name or name == "" then
-        name = "Unbekannt"
-    end
-
-    knownMenuFrame = PD.Frame("Wasn das?", PD.W(300), PD.H(150), true, nil, true)
-    knownMenuFrame:SetPos(PD.W(200), PD.H(20))
-
-    local lbl = PD.Label(name .. " möchte deinen\nNamen wissen", knownMenuFrame)
-
-    local bottomPanel = PD.Panel("", knownMenuFrame)
-    bottomPanel:Dock(BOTTOM)
-    bottomPanel:SetTall(PD.H(50))
-
-    local accept = PD.Button("Akzeptieren", bottomPanel, function()
-        knownMenuFrame:Remove()
-    end)
-    accept:Dock(LEFT)
-    accept:SetWide(bottomPanel:GetWide() / 2 - PD.W(10))
-    accept:SetHoverColor(PD.UI.Colors["Green"])
-
-    local decline = PD.Button("Ablehnen", bottomPanel, function()
-        knownMenuFrame:Remove()
-    end)
-    decline:Dock(RIGHT)
-    decline:SetWide(bottomPanel:GetWide() / 2 - PD.W(10))
-    decline:SetHoverColor(PD.UI.Colors["SithRed"])
-end
-
--- if knownMenuFrame then knownMenuFrame:Remove() end
-
--- KnownMenu()
-
-net.Receive("StartMeetRequest", function()
-    local sender = net.ReadEntity()
-    
-end)
-
-net.Receive("ConfirmMeet", function()
-    local p1 = net.ReadEntity()
-    local p2 = net.ReadEntity()
-
-    if p1 == LocalPlayer() then
-        knownPlayers[p2:SteamID64()] = p2:Nick()
-    elseif p2 == LocalPlayer() then
-        knownPlayers[p1:SteamID64()] = p1:Nick()
-    end
-    SaveKnown()
-    chat.AddText(Color(0, 255, 255), "Du hast jemanden kennengelernt!")
-end)
-
--- EyeTrace Player HUD
-AddSmoothElement(PD.W(20), ScrH() - PD.H(135), PD.W(200), PD.H(40), function(smoothX, smoothY)
     local ply = LocalPlayer()
     local trace = ply:GetEyeTrace()
     local ent = trace.Entity
     if not IsValid(ent) or ent == ply then return end
     if not ent:IsPlayer() then return end
+    
     local name = PD.HUD.GetKnownPlayers(ent:SteamID64())
+    
+    -- Target Job holen (wenn bekannt)
+    local targetJobID, targetJobTbl = ent:GetJob()
+    local targetJob = targetJobTbl and targetJobTbl.name or ""
 
     surface.SetFont("MLIB.20")
     local nameW, nameH = surface.GetTextSize(name)
-    
-    draw.RoundedBox(0, smoothX, smoothY, nameW + PD.W(20), PD.H(40), PD.UI.Colors["Background"])
+    surface.SetFont("MLIB.14")
+    local jobW, jobH = surface.GetTextSize(targetJob)
 
-    surface.SetDrawColor(DEFCON:GetColor())
-    surface.DrawOutlinedRect(smoothX, smoothY, nameW + PD.W(20), PD.H(40), 2)
+    local panelW = math.max(nameW, jobW) + PD.W(40)
+    local panelH = PD.H(50)
 
-    draw.DrawText(name, "MLIB.20", smoothX + PD.W(10), smoothY + PD.H(10), Color(255, 255, 255), TEXT_ALIGN_LEFT)
-    -- draw.DrawText(name[2], "MLIB.20", smoothX + PD.W(10), smoothY + PD.H(20), Color(255, 255, 255), TEXT_ALIGN_LEFT)
+    -- Hintergrund
+    draw.RoundedBox(0, smoothX, smoothY, panelW, panelH, PD.Theme.Colors.BackgroundLight)
+
+    -- Linke Akzentlinie (Imperial Blue für Target)
+    surface.SetDrawColor(PD.Theme.Colors.AccentBlue)
+    surface.DrawRect(smoothX, smoothY, PD.W(3), panelH)
+
+    -- Obere Linie
+    surface.SetDrawColor(PD.Theme.Colors.AccentGray)
+    surface.DrawRect(smoothX + PD.W(3), smoothY, panelW - PD.W(3), 1)
+
+    -- Untere Linie  
+    surface.DrawRect(smoothX + PD.W(3), smoothY + panelH - 1, panelW - PD.W(3), 1)
+
+    -- Target Icon (kleines Fadenkreuz)
+    local iconX = smoothX + PD.W(12)
+    local iconY = smoothY + panelH / 2
+    local iconSize = PD.W(4)
+    surface.SetDrawColor(PD.Theme.Colors.AccentBlue)
+    surface.DrawLine(iconX - iconSize, iconY, iconX + iconSize, iconY)
+    surface.DrawLine(iconX, iconY - iconSize, iconX, iconY + iconSize)
+
+    -- Name
+    draw.DrawText(name, "MLIB.20", smoothX + PD.W(22), smoothY + PD.H(6), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+
+    -- Job (wenn bekannt und nicht "Unbekannt")
+    if targetJob ~= "" then
+        draw.DrawText(targetJob, "MLIB.14", smoothX + PD.W(22), smoothY + PD.H(28), PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+    end
 end)
 
--- Radar / Kompass HUD
-AddSmoothElement(PD.W(20), PD.H(20), PD.W(150), PD.H(150), function(smoothX, smoothY)
+-- Kompass HUD
+AddSmoothElement(ScrW() / 2 - PD.W(250), ScrH() - PD.H(110), PD.W(500), PD.H(90), function(smoothX, smoothY)
+    if PD.FOV.thirdPerson then return end
+
     local ply = LocalPlayer()
-    
-    local mapX, mapY = smoothX, smoothY
-    local mapSize = PD.H(150)
-    local centerX, centerY = mapX + mapSize / 2, mapY + mapSize / 2
-    local radarRange = 1000
-
-    surface.SetDrawColor(DEFCON:GetColor())
-    surface.DrawOutlinedRect(smoothX, smoothY, PD.W(150), PD.H(150), 2)
-    
-    surface.SetDrawColor(30, 30, 30, 200)
-    surface.DrawRect(mapX, mapY, mapSize, mapSize)
-
-    surface.SetDrawColor(70, 70, 70, 100)
-    for i = 0, 10 do
-        local offset = i * (mapSize / 10)
-        
-        surface.DrawLine(mapX + offset, mapY, mapX + offset, mapY + mapSize)
-        surface.DrawLine(mapX, mapY + offset, mapX + mapSize, mapY + offset)
-    end
-
-    draw.DrawText("Radar\nBald verfügbar!", "MLIB.20", centerX, mapY + PD.H(55), Color(255, 255, 255), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
-
-    -- local eyeAngles = ply:EyeAngles() 
-
-    -- surface.SetDrawColor(100, 100, 255, 150)
-    -- surface.DrawPoly({
-    --     {x = centerX, y = centerY},
-    --     {x = centerX - 50, y = centerY - 50},
-    --     {x = centerX + 50, y = centerY - 50},
-    -- })
-
-    -- for _, ent in ipairs(ents.GetAll()) do
-    --     if not IsValid(ent) or ent == ply then continue end
-
-    --     local isPlayer = ent:IsPlayer()
-    --     local isNPC = ent:IsNPC()
-    --     local isBot = isPlayer and ent:IsBot()
-    --     local posDiff = ent:GetPos() - ply:GetPos()
-    --     local distance = posDiff:Length()
-
-    --     if distance <= radarRange then
-    --         local radarX = (posDiff.y / radarRange) * (mapSize / 2)
-    --         local radarY = (posDiff.x / radarRange) * (mapSize / 2)
-    --         local angleRad = math.rad(eyeAngles.y)
-    --         local rotatedX = radarX * math.cos(angleRad) + radarY * math.sin(angleRad)
-    --         local rotatedY = radarY * math.cos(angleRad) + radarX * math.sin(angleRad)
-    --         local drawX = centerX + rotatedX
-    --         local drawY = centerY - rotatedY
-
-    --         if isPlayer and isBot then
-    --             surface.SetDrawColor(255, 255, 0, 255) -- 🟡 Bots
-    --         elseif isPlayer then
-    --             surface.SetDrawColor(0, 255, 0) -- 🔵 Spieler
-    --         elseif isNPC then
-    --             surface.SetDrawColor(255, 0, 0, 255) -- 🔴 NPCs
-    --         else
-    --             continue
-    --         end
-
-    --         surface.DrawRect(drawX - 2, drawY - 2, 4, 4)
-    --     end
-    -- end
-
-    -- surface.SetDrawColor(0, 255, 0, 255)
-    -- surface.DrawRect(centerX - 3, centerY - 3, 6, 6)
-
-    -- Kompass unten
-    local directions = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"}
     local yaw = math.NormalizeAngle(ply:EyeAngles().y)
-    local compassWidth = PD.H(150)
+    local compassWidth = PD.W(475)
     local compassX = smoothX
-    local compassY = smoothY + mapSize + PD.H(12)
+    local compassY = smoothY + PD.H(20)
+    local curveDepth = PD.H(25)
+    local scale = 5
+    local directions = {"N","NE","E","SE","S","SW","W","NW"}
 
-    surface.SetDrawColor(30, 30, 30, 200)
-    surface.DrawRect(compassX, compassY - PD.H(7), compassWidth, 20)
-
-    surface.SetDrawColor(DEFCON:GetColor())
-    surface.DrawOutlinedRect(compassX, compassY - PD.H(7), compassWidth, 20, 2)
-
-    for i, dir in ipairs(directions) do
-        local angleOffset = (i - 1) * 45
-        local diff = math.AngleDifference(yaw, angleOffset)
-        local x = compassX + compassWidth / 2 + (diff * 3)
-
+    for i = -180, 180, 5 do
+        local rel = math.AngleDifference(i, yaw)
+        local x = compassX + compassWidth / 2 - rel * scale
         if x > compassX and x < compassX + compassWidth then
-            draw.SimpleText(dir, "MLIB.15", x, compassY, Color(255, 255, 255), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+            local normalized = (x - (compassX + compassWidth / 2)) / (compassWidth / 2)
+            local offsetY = (normalized ^ 2) * curveDepth
+            local alpha = math.Clamp(255 - math.abs(rel * 2), 0, 255)
+            local isMajor = i % 45 == 0
+
+            surface.SetDrawColor(255, 255, 255, alpha)
+            surface.DrawRect(x, compassY + PD.H(25) + offsetY, PD.W(1), isMajor and PD.H(15) or PD.H(8))
+
+            if isMajor then
+                local ang = math.NormalizeAngle(i - 90)
+                local idx = math.floor((ang + 180) / 45) + 1
+                local dir = directions[idx]
+                if dir then
+                    draw.SimpleText(dir, "MLIB.20", x, compassY + offsetY, Color(255, 255, 255, alpha), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+                end
+            end
         end
     end
-end)
-
--- Waffen HUD
-AddSmoothElement(ScrW() - PD.W(200), ScrH() - PD.H(87), PD.W(180), PD.H(67), function(smoothX, smoothY)
-    local ply = LocalPlayer()
-    local wep = ply:GetActiveWeapon()
-
-    draw.RoundedBox(0, smoothX, smoothY, PD.W(180), PD.H(67), PD.UI.Colors["Background"])
 
     surface.SetDrawColor(DEFCON:GetColor())
-    surface.DrawOutlinedRect(smoothX, smoothY, PD.W(180), PD.H(67), 2)
+    surface.DrawLine(compassX + compassWidth / 2, compassY + PD.H(10), compassX + compassWidth / 2, compassY + PD.H(60))
+end)
+
+-- Waffen HUD - Star Wars Andor Imperial Style (Zentral über PD.Theme)
+AddSmoothElement(ScrW() - PD.W(20), ScrH() - PD.H(95), PD.W(0), PD.H(75), function(smoothX, smoothY)
+    if PD.FOV.thirdPerson then return end
+
+    local ply = LocalPlayer()
+    local wep = ply:GetActiveWeapon()
 
     if IsValid(wep) then
         local clip = wep:Clip1()
@@ -270,14 +221,56 @@ AddSmoothElement(ScrW() - PD.W(200), ScrH() - PD.H(87), PD.W(180), PD.H(67), fun
             clip = 0
         end
 
-        draw.DrawText("000", "MLIB.70", smoothX + PD.W(10), smoothY, PD.UI.Colors["Grey3"], TEXT_ALIGN_LEFT)
-        draw.DrawText(clip, "MLIB.70", smoothX + PD.W(10), smoothY, Color(255, 255, 255), TEXT_ALIGN_LEFT)
+        surface.SetFont("MLIB.55")
+        local clipW, clipH = surface.GetTextSize(clip)
+        surface.SetFont("MLIB.25")
+        local ammoW, ammoH = surface.GetTextSize("/" .. ammo)
 
-        draw.DrawText("000", "MLIB.35", smoothX + PD.W(120), smoothY + PD.H(27), PD.UI.Colors["Grey3"], TEXT_ALIGN_LEFT)
-        draw.DrawText(ammo, "MLIB.35", smoothX + PD.W(120), smoothY + PD.H(27), Color(255, 255, 255), TEXT_ALIGN_LEFT)
+        local totalW = clipW + ammoW + PD.W(35)
+        local panelH = PD.H(75)
+        smoothX = smoothX - totalW
+
+        -- Hintergrund
+        draw.RoundedBox(0, smoothX, smoothY, totalW, panelH, PD.Theme.Colors.BackgroundLight)
+
+        -- Rechte Akzentlinie (Imperial Red)
+        surface.SetDrawColor(PD.Theme.Colors.AccentRed)
+        surface.DrawRect(smoothX + totalW - PD.W(4), smoothY, PD.W(4), panelH)
+
+        -- Obere Linie
+        surface.SetDrawColor(PD.Theme.Colors.AccentGray)
+        surface.DrawRect(smoothX, smoothY, totalW - PD.W(4), 1)
+
+        -- Untere Linie
+        surface.DrawRect(smoothX, smoothY + panelH - 1, totalW - PD.W(4), 1)
+
+        -- Linke Eck-Dekor
+        local cornerSize = PD.W(8)
+        surface.DrawLine(smoothX, smoothY, smoothX + cornerSize, smoothY)
+        surface.DrawLine(smoothX, smoothY, smoothX, smoothY + cornerSize)
+        surface.DrawLine(smoothX, smoothY + panelH - 1, smoothX + cornerSize, smoothY + panelH - 1)
+        surface.DrawLine(smoothX, smoothY + panelH - cornerSize, smoothX, smoothY + panelH - 1)
+
+        -- Magazin-Farbe basierend auf Munition
+        local clipColor = PD.Theme.Colors.Text
+        if clip <= 5 and clip > 0 then
+            clipColor = PD.Theme.Colors.StatusWarning
+        elseif clip == 0 then
+            clipColor = PD.Theme.Colors.StatusCritical
+        end
+
+        -- Clip Anzeige (große Zahl)
+        draw.DrawText(clip, "MLIB.55", smoothX + PD.W(12), smoothY + PD.H(8), clipColor, TEXT_ALIGN_LEFT)
+
+        -- Reserve Munition (kleinere Zahl mit Trennstrich)
+        draw.DrawText("/" .. ammo, "MLIB.25", smoothX + PD.W(12) + clipW + PD.W(5), smoothY + PD.H(30), PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+
+        -- "AMMO" Label
+        PD.DrawLabel("AMMO", "MLIB.12", smoothX + PD.W(12), smoothY + panelH - PD.H(18))
     end
 end)
 
+PD.HUD.ShowPoint = PD.HUD.ShowPoint or true
 hook.Add("HUDPaint", "PD.GamemodeHUD", function()
     local ply = LocalPlayer()
     if not IsValid(ply) then return end
@@ -321,8 +314,9 @@ hook.Add("HUDPaint", "PD.GamemodeHUD", function()
     end
 
     -- Mittelpunkt
-    draw.RoundedBox(100, ScrW() / 2 - PD.W(1), ScrH() / 2 - PD.H(1), PD.W(2), PD.H(2), Color(255, 255, 255))
-
+    -- if PD.HUD.ShowPoint then
+    --     draw.RoundedBox(100, ScrW() / 2 - PD.W(1), ScrH() / 2 - PD.H(1), PD.W(2), PD.H(2), Color(255, 255, 255))
+    -- end
     -- Letzte EyeAngles merken
     lastEyeAngles = eyeAngles
 end)

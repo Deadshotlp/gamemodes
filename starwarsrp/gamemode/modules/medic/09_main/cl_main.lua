@@ -2,98 +2,160 @@ PD.DM = PD.DM or {}
 PD.DM.Main = PD.DM.Main or {}
 
 PD.DM.Interactions = {
-    [1] = {
-        id = "tourniquet",
-        name = "Apply Tourniquet",
-        icon = nil,
-        func = function(ply1, ply2, bone)
-            net.Start("PD.DM.ChangeTourniquetStatus")
-            net.WriteEntity(ply1)
-            net.WriteEntity(ply2)
-            net.WriteInt(bone, 16)
-            net.SendToServer()
-        end,
-        not_ad = {1, 2}
+    ["player"] = {
+        -- [1] = {
+        --     id = "tourniquet",
+        --     name = LANG.DM_INTERACTION_APPLY_TOURNICATE,
+        --     icon = nil,
+        --     func = function(ply1, ply2, bone)
+        --         net.Start("PD.DM.ChangeTourniquetStatus")
+        --         net.WriteEntity(ply1)
+        --         net.WriteEntity(ply2)
+        --         net.WriteInt(bone, 16)
+        --         net.SendToServer()
+        --     end,
+        --     ad = {"ValveBiped.Bip01_L_Forearm", "ValveBiped.Bip01_R_Forearm", "ValveBiped.Bip01_L_Calf",
+        --           "ValveBiped.Bip01_R_Calf"}
+        -- },
+        [1] = {
+            id = "check_puls",
+            name = LANG.DM_INTERACTION_CHECK_PULS,
+            icon = nil,
+            func = function(ply1, ply2, bone)
+                net.Start("PD.DM.RequestValue")
+                net.WriteEntity(ply1)
+                net.WriteEntity(ply2)
+                net.WriteInt(bone, 16)
+                net.WriteString("puls")
+                net.SendToServer()
+            end,
+            ad = {"ValveBiped.Bip01_Head1", "ValveBiped.Bip01_Spine", "ValveBiped.Bip01_L_Forearm",
+                  "ValveBiped.Bip01_R_Forearm", "ValveBiped.Bip01_L_Calf", "ValveBiped.Bip01_R_Calf", "self"}
+        },
+        [2] = {
+            id = "check_bp",
+            name = LANG.DM_INTERACTION_CHECK_BP,
+            icon = nil,
+            func = function(ply1, ply2, bone)
+                net.Start("PD.DM.RequestValue")
+                net.WriteEntity(ply1)
+                net.WriteEntity(ply2)
+                net.WriteInt(bone, 16)
+                net.WriteString("bp")
+                net.SendToServer()
+            end,
+            ad = {"ValveBiped.Bip01_Head1", "ValveBiped.Bip01_Spine", "ValveBiped.Bip01_L_Forearm",
+                  "ValveBiped.Bip01_R_Forearm", "ValveBiped.Bip01_L_Calf", "ValveBiped.Bip01_R_Calf", "self"}
+        },
+        [3] = {
+            id = "check_fractured",
+            name = LANG.DM_INTERACTION_CHECK_FRACTURED,
+            icon = nil,
+            func = function(ply1, ply2, bone)
+                net.Start("PD.DM.RequestValue")
+                net.WriteEntity(ply1)
+                net.WriteEntity(ply2)
+                net.WriteInt(bone, 16)
+                net.WriteString("fractured")
+                net.SendToServer()
+            end,
+            ad = {"ValveBiped.Bip01_Head1", "ValveBiped.Bip01_Spine", "ValveBiped.Bip01_L_Forearm",
+                  "ValveBiped.Bip01_R_Forearm", "ValveBiped.Bip01_L_Calf", "ValveBiped.Bip01_R_Calf"}
+        },
+        [4] = {
+            id = "open_interface",
+            name = LANG.DM_INTERACTION_OPEN_INTERFACE,
+            icon = nil,
+            func = function(ply1, ply2, bone)
+                chat.AddText("Try to Open Medical Interface")
+
+                net.Start("PD.DM.UI.RequestTreatmentInterface")
+                net.WriteEntity(ply1)
+                net.WriteEntity(ply2)
+                net.SendToServer()
+            end,
+            ad = {"ValveBiped.Bip01_Spine", "self"}
+        }
     },
-    [2] = {
-        id = "check_puls",
-        name = "Check Puls",
-        icon = nil,
-        func = function(ply1, ply2, bone)
-            net.Start("PD.DM.RequestValue")
-            net.WriteEntity(ply1)
-            net.WriteEntity(ply2)
-            net.WriteInt(bone, 16)
-            net.WriteString("puls")
-            net.SendToServer()
-        end,
-        not_ad = {}
-    },
-    [3] = {
-        id = "check_bp",
-        name = "Check BP",
-        icon = nil,
-        func = function(ply1, ply2, bone)
-            net.Start("PD.DM.RequestValue")
-            net.WriteEntity(ply1)
-            net.WriteEntity(ply2)
-            net.WriteInt(bone, 16)
-            net.WriteString("bp")
-            net.SendToServer()
-        end,
-        not_ad = {}
-    },
-    [4] = {
-        id = "check_fractured",
-        name = "Check for Fractures",
-        icon = nil,
-        func = function(ply1, ply2, bone)
-            net.Start("PD.DM.RequestValue")
-            net.WriteEntity(ply1)
-            net.WriteEntity(ply2)
-            net.WriteInt(bone, 16)
-            net.WriteString("fractured")
-            net.SendToServer()
-        end,
-        not_ad = {}
-    },
-    [5] = {
-        id = "open_interface",
-        name = "Open Medical Interface",
-        icon = nil,
-        func = function(ply1, ply2, bone)
-            net.Start("PD.DM.UI.RequestTreatmentInterface")
-            net.WriteEntity(ply1)
-            net.WriteEntity(ply2)
-            net.SendToServer()
-        end,
-        not_ad = {1, 3, 4, 5, 6, 7}
+    ["prop_ragdoll"] = {
+        -- [1] = {
+        --     id = "tourniquet",
+        --     name = LANG.DM_INTERACTION_APPLY_TOURNICATE,
+        --     icon = nil,
+        --     func = function(ply1, ragdoll, bone)
+        --         local ply2 = ragdoll:GetNW2Entity("PD.DM.RagdollOwner")
+        --         net.Start("PD.DM.ChangeTourniquetStatus")
+        --         net.WriteEntity(ply1)
+        --         net.WriteEntity(ply2)
+        --         net.WriteInt(bone, 16)
+        --         net.SendToServer()
+        --     end,
+        --     ad = {"ValveBiped.Bip01_L_Forearm", "ValveBiped.Bip01_R_Forearm", "ValveBiped.Bip01_L_Calf",
+        --           "ValveBiped.Bip01_R_Calf"}
+        -- },
+        [1] = {
+            id = "check_puls",
+            name = LANG.DM_INTERACTION_CHECK_PULS,
+            icon = nil,
+            func = function(ply1, ragdoll, bone)
+                local ply2 = ragdoll:GetNW2Entity("PD.DM.RagdollOwner")
+                net.Start("PD.DM.RequestValue")
+                net.WriteEntity(ply1)
+                net.WriteEntity(ply2)
+                net.WriteInt(bone, 16)
+                net.WriteString("puls")
+                net.SendToServer()
+            end,
+            ad = {"ValveBiped.Bip01_Head1", "ValveBiped.Bip01_Spine", "ValveBiped.Bip01_L_Forearm",
+                  "ValveBiped.Bip01_R_Forearm", "ValveBiped.Bip01_L_Calf", "ValveBiped.Bip01_R_Calf", "self"}
+        },
+        [2] = {
+            id = "check_bp",
+            name = LANG.DM_INTERACTION_CHECK_BP,
+            icon = nil,
+            func = function(ply1, ragdoll, bone)
+                local ply2 = ragdoll:GetNW2Entity("PD.DM.RagdollOwner")
+                net.Start("PD.DM.RequestValue")
+                net.WriteEntity(ply1)
+                net.WriteEntity(ply2)
+                net.WriteInt(bone, 16)
+                net.WriteString("bp")
+                net.SendToServer()
+            end,
+            ad = {"ValveBiped.Bip01_Head1", "ValveBiped.Bip01_Spine", "ValveBiped.Bip01_L_Forearm",
+                  "ValveBiped.Bip01_R_Forearm", "ValveBiped.Bip01_L_Calf", "ValveBiped.Bip01_R_Calf", "self"}
+        },
+        [3] = {
+            id = "check_fractured",
+            name = LANG.DM_INTERACTION_CHECK_FRACTURED,
+            icon = nil,
+            func = function(ply1, ragdoll, bone)
+                local ply2 = ragdoll:GetNW2Entity("PD.DM.RagdollOwner")
+                net.Start("PD.DM.RequestValue")
+                net.WriteEntity(ply1)
+                net.WriteEntity(ply2)
+                net.WriteInt(bone, 16)
+                net.WriteString("fractured")
+                net.SendToServer()
+            end,
+            ad = {"ValveBiped.Bip01_Head1", "ValveBiped.Bip01_Spine", "ValveBiped.Bip01_L_Forearm",
+                  "ValveBiped.Bip01_R_Forearm", "ValveBiped.Bip01_L_Calf", "ValveBiped.Bip01_R_Calf"}
+        },
+        [4] = {
+            id = "open_interface",
+            name = LANG.DM_INTERACTION_OPEN_INTERFACE,
+            icon = nil,
+            func = function(ply1, ragdoll, bone)
+                local ply2 = ragdoll:GetNW2Entity("PD.DM.RagdollOwner")
+                net.Start("PD.DM.UI.RequestTreatmentInterface")
+                net.WriteEntity(ply1)
+                net.WriteEntity(ply2)
+                net.SendToServer()
+            end,
+            ad = {"ValveBiped.Bip01_Spine", "self"}
+        },
     }
 }
-
-function PD.DM.GetInteractions(index)
-    local tbl = {}
-    local bol
-
-    for k, v in SortedPairs(PD.DM.Interactions) do
-        bol = true
-
-        if v["not_ad"] and v["not_ad"][1] ~= nil then
-            for _, i in ipairs(v.not_ad) do
-                if i == index then
-                    bol = false
-                    continue
-                end
-            end
-        end
-
-        if bol then
-            table.insert(tbl, v)
-        end
-    end
-
-    return tbl
-end
 
 function PD.DM.IsMedic(ply)
     local job_id, job_tbl = ply:GetJob()
@@ -108,7 +170,7 @@ end
 net.Receive("PD.DM.RecieveValue", function()
     local str = net.ReadString()
 
-    if str == "injureys" then
+    if str == "injuries" then
         local val = net.ReadTable()
 
         for k, v in ipairs(val) do
@@ -125,14 +187,44 @@ net.Receive("PD.DM.RecieveValue", function()
     end
 end)
 
-function PD.DM.Main.Interact(task_class, task_tbl, patient)
-    
+function PD.DM:OpenInterface()
+    local ply1 = LocalPlayer()
+    local ply2 = LocalPlayer()
+    local trace = ply1:GetEyeTrace()
+    local ent = trace.Entity
 
+    if IsValid(ent) and ent:IsPlayer() and ply1:GetPos():Distance(ent:GetPos()) < 150 then
+        ply2 = ent
+    elseif ent:GetClass() == "prop_ragdoll" then
+        ply2 = ent:GetNW2Entity("PD.DM.RagdollOwner")
+    elseif ent:GetClass() == "prop_vehicle_prisoner_pod" and IsValid(ent:GetDriver()) then
+        ply2 = ent:GetDriver()
+    end
+
+    net.Start("PD.DM.UI.RequestTreatmentInterface")
+    net.WriteEntity(ply1)
+    net.WriteEntity(ply2)
+    net.SendToServer()
+end
+
+function PD.DM.Main.Interact(task_class, task_name, patient, body_part_index)
     net.Start("PD.DM.Interact")
     net.WriteEntity(LocalPlayer())
     net.WriteEntity(patient)
-    net.WriteString(task_class)
-    net.WriteTable(task_tbl)
+    net.WriteInt(task_class, 4)
+    net.WriteInt(task_name, 11)
+    net.WriteInt(body_part_index or 0, 4)
     net.SendToServer()
 
 end
+
+function PD.DM.Main.EndInteraction(patient)
+    net.Start("PD.DM.UI.CloseTreatmentInterface")
+    net.WriteEntity(LocalPlayer())
+    net.WriteEntity(patient)
+    net.SendToServer()
+end
+
+hook.Add("PD.Interaction.Requested", "PD.DM.Interaction.Answer", function(ent_class)
+    PD.IA.AddEntityActions(PD.DM.Interactions[ent_class], LANG.DM_INTERACTION_MEDIC_OPTIONS)
+end)

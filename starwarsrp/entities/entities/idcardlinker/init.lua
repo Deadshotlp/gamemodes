@@ -21,15 +21,76 @@ function ENT:Initialize()
     end
 end
 
+local JobRanks = {
+    ["Major"] = 4,
+    ["Captain"] = 4,
+    ["1st Lieutenant"] = 3,
+    ["2nd Lieutenant"] = 3,
+    ["Master Sergeant"] = 2,
+    ["Staff Sergeant"] = 2,
+    ["Sergeant"] = 6,
+    ["Corporal"] = 1,
+    ["Lance Corporal"] = 1,
+    ["Specialist"] = 1,
+    ["Private First Class"] = 1,
+    ["Private"] = 1
+}
+
+local JobRanksNavy = {
+    ["Commodore"] = 4,
+    ["Captain"] = 4,
+    ["Lt. Commander"] = 3,
+    ["Jr. Lieutenant"] = 3,
+    ["Ensign"] = 2,
+    ["Chief Warrant Officer"] = 2,
+    ["Warrant Officer"] = 2,
+    ["Master Chief Petty Officer"] = 1,
+    ["Chief Petty Officer"] = 1,
+    ["Petty Officer First Class"] = 1,
+    ["Petty Officer"] = 1,
+    ["Crewman"] = 1
+}
+
+local function CheckPermission(ply, level)
+    local uni, sub, job = PD.List:GetPlayerData(ply)
+    local num = 0
+
+    if unit == "Republic Navy" then
+        for k, v in SortedPairs(JobRanksNavy) do
+            if k == job then
+                num = v
+            end
+        end
+    else
+        for k, v in SortedPairs(JobRanks) do
+            if k == job then
+                num = v
+            end
+        end
+    end
+
+    return num >= level
+end
+
 function ENT:Use(activator)
     if not activator:HasWeapon("idcard") then
         activator:ChatPrint("Du hast keine ID-Card!")
         return
     end
 
-    activator:ChatPrint("ID-Card benutzen...")
+    activator:ChatPrint("ID-Card wird geprüft...")
     
-    
+    if CheckPermission(activator, self.entTable["Level"]) then
+        activator:ChatPrint("Zutritt gewährt.")
+        self:UnlockDoors()
+        timer.Simple(5, function() 
+            if IsValid(self) then
+                self:LockDoors() 
+            end
+        end)
+    else
+        activator:ChatPrint("Zutritt verweigert.")
+    end
 end
 
 util.AddNetworkString("DoorLinker")
@@ -102,6 +163,19 @@ function ENT:LockDoors()
             door:Fire("Close", "", 0)
         end
     end
+
+    for _, ent in pairs(ents.FindByClass("idcardlinker")) do
+        if ent != self then
+            if ent:GetPos():Distance(self:GetPos()) > 50 then continue end
+
+            for _, door in pairs(ent.entTable["Doors"]) do
+                if IsValid(door) then
+                    door:Fire("Lock", "", 0)
+                    door:Fire("Close", "", 0)
+                end
+            end
+        end
+    end
 end
 
 function ENT:UnlockDoors()
@@ -109,6 +183,19 @@ function ENT:UnlockDoors()
         if IsValid(door) then
             door:Fire("Unlock", "", 0)
             door:Fire("Open", "", 0)
+        end
+    end
+
+    for _, ent in pairs(ents.FindByClass("idcardlinker")) do
+        if ent != self then
+            if ent:GetPos():Distance(self:GetPos()) > 50 then continue end
+
+            for _, door in pairs(ent.entTable["Doors"]) do
+                if IsValid(door) then
+                    door:Fire("Unlock", "", 0)
+                    door:Fire("Open", "", 0)
+                end
+            end
         end
     end
 end

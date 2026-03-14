@@ -5,7 +5,7 @@ include('shared.lua')
 util.AddNetworkString("ShowBodygroups")
 
 function ENT:Initialize()
-    self.Entity:SetModel("models/reizer_props/srsp/sci_fi/armory_02_2/armory_02_2.mdl")
+    self.Entity:SetModel("models/reizer_props/srsp/sci_fi/armory_02_3/armory_02_3.mdl")
     self.Entity:PhysicsInit(SOLID_VPHYSICS)
     self.Entity:SetMoveType(MOVETYPE_VPHYSICS)
     self.Entity:SetSolid(SOLID_VPHYSICS)

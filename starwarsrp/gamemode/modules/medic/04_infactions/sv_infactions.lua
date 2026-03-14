@@ -22,5 +22,5 @@ function PD.DM:AddInfactions(tbl, injury)
         return
     end
 
-    print("player got infection")
+    --print("player got infection")
 end

@@ -54,7 +54,7 @@ function PD.List:LoadFactions()
     for k, v in pairs(allplayers) do
         if PD.List.Tbl[v.unit] and not PD.List.Tbl[v.unit].subunits[v.subunit].jobs[v.job].players[k] then
             PD.List.Tbl[v.unit].subunits[v.subunit].jobs[v.job].players[k] = v
-            print("Player: " .. v.name .. " wurde geladen.")
+            -- print("Player: " .. v.name .. " wurde geladen.")
         end
     end
 end

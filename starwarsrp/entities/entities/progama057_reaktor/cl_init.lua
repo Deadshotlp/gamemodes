@@ -61,7 +61,7 @@ local function InfoBar(type, w1, w2, x, y, w, h, col, rounds, reverse, text)
     -- surface.DrawOutlinedRect(x, y, w, h, 2)
 
     if text then
-        draw.DrawText(w1, "MLIB.20", tx + w / 2, y, CONFIG:GetConfig("textcolor"), TEXT_ALIGN_CENTER)
+        draw.DrawText(w1, "MLIB.20", tx + w / 2, y, getColor("Text"), TEXT_ALIGN_CENTER)
     end
 end
 
@@ -95,10 +95,10 @@ function ENT:Draw()
 		draw.RoundedBox(20, 0, 0, 120, 110, backcol)
 
 		if dist <= 300 then		
-			draw.DrawText("Brennmittel: " .. PD.REAKTOR:GetFuel() .. "L", "MLIB.10", 10, 10, CONFIG:GetConfig("textcolor"), TEXT_ALIGN_LEFT)
+			draw.DrawText("Brennmittel: " .. PD.REAKTOR:GetFuel() .. "L", "MLIB.10", 10, 10, getColor("Text"), TEXT_ALIGN_LEFT)
 			InfoBar("l", PD.REAKTOR:GetFuel(), 50000, 10, 30, 100, 10, Color(255,255,255), {false, false, false, false}, false, false)
 
-            draw.DrawText("Verbrauch: " .. f .. "l", "MLIB.10", 10, 50, CONFIG:GetConfig("textcolor"), TEXT_ALIGN_LEFT)
+            draw.DrawText("Verbrauch: " .. f .. "l", "MLIB.10", 10, 50, getColor("Text"), TEXT_ALIGN_LEFT)
 		end
 
 		imgui.End3D2D()
@@ -109,10 +109,10 @@ function ENT:Draw()
 		draw.RoundedBox(20, 0, 0, 120, 110, backcol)
 
 		if dist <= 300 then		
-			draw.DrawText("Kühlflüssigkeit: " .. PD.REAKTOR:GetCool() .. "L", "MLIB.10", 10, 10, CONFIG:GetConfig("textcolor"), TEXT_ALIGN_LEFT)
+			draw.DrawText("Kühlflüssigkeit: " .. PD.REAKTOR:GetCool() .. "L", "MLIB.10", 10, 10, getColor("Text"), TEXT_ALIGN_LEFT)
 			InfoBar("r", PD.REAKTOR:GetCool(), 50000, 10, 30, 100, 10, Color(255,255,255), {false, false, false, false}, false, false)
 
-            draw.DrawText("Verbrauch: " .. c .. "l", "MLIB.10", 10, 50, CONFIG:GetConfig("textcolor"), TEXT_ALIGN_LEFT)
+            draw.DrawText("Verbrauch: " .. c .. "l", "MLIB.10", 10, 50, getColor("Text"), TEXT_ALIGN_LEFT)
 		end
 
 		imgui.End3D2D()
@@ -148,7 +148,7 @@ function ENT:Draw()
         end
 
 		if dist <= 300 then		
-			draw.DrawText("Temp:", "MLIB.10", 28.5, 12, CONFIG:GetConfig("textcolor"), TEXT_ALIGN_CENTER)
+			draw.DrawText("Temp:", "MLIB.10", 28.5, 12, getColor("Text"), TEXT_ALIGN_CENTER)
             draw.DrawText(PD.REAKTOR:GetHitze() .. "°C", "MLIB.10", 28.5, 27, col, TEXT_ALIGN_CENTER)
 		end
 

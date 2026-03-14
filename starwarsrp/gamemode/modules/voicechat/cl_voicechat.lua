@@ -1,41 +1,45 @@
 PD.VC = PD.VC or {}
+PD.VC.showindicator = false
 
-PD.VC.Config = {
-    ["Flüstern"] = 100,
-    ["Reden"] = 500,
-    ["Rufen"] = 1000,
-    ["Schreien"] = 1500
-}
+function PD.VC:Change()
+    local ent = LocalPlayer()
+    local currentMode = ent:GetNWInt("VoiceMode", 2)
 
-local last_shown = CurTime() - 3
-local delay = 2
+    currentMode = currentMode + 1
+    if currentMode > 4 then currentMode = 1 end
 
-net.Receive("PD.VC.SendVoiceRange", function()
-    local currentMode = LocalPlayer():GetNWString("VoiceMode", "Reden")
+    PD.Popup("Deine Sprachreichweite wurde auf '" .. PD.VC.Config[currentMode].name .. "' geändert.", Color(255, 255, 255))
 
-    if currentMode == "Flüstern" then
-        PD.Notify("Sprachlautstärke: " .. currentMode, Color(0, 255, 0, 255), false)
-    elseif currentMode == "Reden" then
-        PD.Notify("Sprachlautstärke: " .. currentMode, Color(255, 200, 0, 255), false)
-    elseif currentMode == "Rufen" then
-        PD.Notify("Sprachlautstärke: " .. currentMode, Color(255, 0, 0, 255), false)
-    else
-        PD.Notify("Sprachlautstärke: " .. currentMode, Color(255, 255, 255, 255), false)
-    end
+    net.Start("PD.VC.ChangeVoiceMode")
+        net.WriteUInt(currentMode, 3)
+    net.SendToServer()
+end
 
-    last_shown = CurTime()
+function PD.VC:Start_ShowIndicator()
+    PD.VC.showindicator = true
+end
+
+function PD.VC:Stop_ShowIndicator()
+    PD.VC.showindicator = false
+end
+
+
+hook.Add("PostDrawTranslucentRenderables", "PD.DrawSphere", function()
+    if not PD.VC.showindicator then return end
+
+    local ply = LocalPlayer()
+    if not IsValid(ply) then return end
+
+    local pos = ply:GetPos() + Vector(0, 0, 5)
+    local radius = PD.VC.Config[ply:GetNWInt("VoiceMode", 2)].range or 500
+
+    render.SetColorMaterial()
+    render.DrawWireframeSphere(
+        pos,
+        radius,
+        32,
+        32,
+        Color(255, 255, 255, 80),
+        true
+    )
 end)
-
--- hook.Add("PostDrawTranslucentRenderables", "PD.DrawSphere", function()
---     if (last_shown + delay) > CurTime() then
---         render.SetColorMaterial()
-
---         local pos = LocalPlayer():GetPos()
---         local radius = PD.VC.Config[LocalPlayer():GetNWString("VoiceMode", "Reden")] or 500
---         local wideSteps = 100
---         local tallSteps = 100
-
---         -- Draw the wireframe sphere!
---         render.DrawWireframeSphere(pos, 1000, wideSteps, tallSteps, Color(255, 255, 255, 255))
---     end
--- end)

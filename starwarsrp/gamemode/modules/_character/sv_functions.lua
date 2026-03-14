@@ -3,24 +3,24 @@ PD.Char = PD.Char or {}
 function PD.Char:SaveChar(plyid,tbl)
     if #tbl == 0 then tbl = {} end
 
-    if !file.IsDir("progama057/char", "DATA") then
-        file.CreateDir("progama057/char")
+    if !file.IsDir("modules/char", "DATA") then
+        file.CreateDir("modules/char")
     end
     
-    if file.Exists("progama057/char/" .. plyid .. ".json", "DATA") then
-        file.Delete("progama057/char/" .. plyid .. ".json")
+    if file.Exists("modules/char/" .. plyid .. ".json", "DATA") then
+        file.Delete("modules/char/" .. plyid .. ".json")
     end
-    file.Write("progama057/char/" .. plyid .. ".json", util.TableToJSON(tbl,true))
+    file.Write("modules/char/" .. plyid .. ".json", util.TableToJSON(tbl,true))
 end
 
 function PD.Char:LoadChar(plyid, wo)
-    if not file.IsDir("progama057/char", "DATA") then
-        file.CreateDir("progama057/char")
+    if not file.IsDir("modules/char", "DATA") then
+        file.CreateDir("modules/char")
     end
 
-    if file.Exists("progama057/char/" .. plyid .. ".json", "DATA") then
+    if file.Exists("modules/char/" .. plyid .. ".json", "DATA") then
         -- print("Char Daten gefunden (" .. plyid .. " | ".. wo ..")")
-        return util.JSONToTable(file.Read("progama057/char/" .. plyid .. ".json", "DATA"))
+        return util.JSONToTable(file.Read("modules/char/" .. plyid .. ".json", "DATA"))
     else
         print("Char Daten nicht gefunden (" .. plyid .. " | ".. wo ..")")
         return nil
@@ -44,13 +44,13 @@ end
 function PD.Char:LoadAllChars()
     local tbl = {}
 
-    if !file.IsDir("progama057/char", "DATA") then
-        file.CreateDir("progama057/char")
+    if !file.IsDir("modules/char", "DATA") then
+        file.CreateDir("modules/char")
     end
 
-    for k,v in pairs(file.Find("progama057/char/*.json", "DATA")) do
+    for k,v in pairs(file.Find("modules/char/*.json", "DATA")) do
         local resultString = string.gsub(v, "%.json$", "")
-        tbl[resultString] = util.JSONToTable(file.Read("progama057/char/" .. v, "DATA"))
+        tbl[resultString] = util.JSONToTable(file.Read("modules/char/" .. v, "DATA"))
         --print("Char: " .. resultString .. " wurde geladen.")
     end
 
@@ -59,20 +59,26 @@ end
 
 function PD.Char:SetPlayerCharID(ply, setid)
     local tbl = PD.Char:LoadChar(ply:SteamID64(), "SetPlayerCharID")
-    local id = string.sub(ply:Nick(),1, 7)
+    local id = false
+
+    if not tbl then
+        print("Kein Char Tabel gefunden für SetPlayerCharID")
+        return
+    end
+
+    for k,v in pairs(tbl) do
+        if v.id .. " " .. v.name == ply:Nick() then
+            id = v.id
+            break
+        end
+    end
 
     if setid then
-        -- print("SetID: " .. setid)
-        -- print("Player: " .. ply)
         ply.CharID = setid
-        ply:SetNWString("character_id",setid)
+        ply:SetNWString("character_id", setid)
     else
-        -- if tbl then
-            ply.CharID = id
-            ply:SetNWString("character_id",id)
-        -- else
-        --     ply.CharID = 0
-        -- end
+        ply.CharID = id
+        ply:SetNWString("character_id", id)
     end
 end
 
@@ -82,7 +88,7 @@ function PD.Char:GetCharacterID(ply)
     if ply.CharID then
         return ply.CharID
     else
-        return nil
+        return false
     end
 end
 
@@ -148,10 +154,32 @@ function PD.Char:StopTimer(playerSteamID)
     end
 end
 
+function getRightJob(info)
+    local allJobs = PD.JOBS.GetTable()
+
+    for k,v in pairs(allJobs) do
+        for sk, sv in pairs(v.subunits) do
+            if sk == info.jobsubunit then
+                for jk, jv in pairs(sv.jobs) do
+                    if jk == info.jobid then
+                        return jk, jv
+                    end
+                end
+            end
+        end
+    end
+
+    return PD.JOBS.GetFallBackJob()
+end
+
 function PD.Char:PlayerSetChar(ply,charid) 
     local Atbl = PD.Char:LoadChar(ply:SteamID64(), "PlayerSetChar")
     local lastplaytime = os.date("%d.%m.%Y %H:%M:%S",os.time())
-    local jobName, jobTable = PD.JOBS.GetJob(Atbl[charid].job.id)
+    local jobName, jobTable = getRightJob({
+        jobid = Atbl[charid].faction.job,
+        jobsubunit = Atbl[charid].faction.subunit,
+        jobunit = Atbl[charid].faction.unit
+    })
     Atbl[charid].lastplaytime = lastplaytime
 
     if PD.Char:GetTimer(ply:SteamID64()) then
@@ -171,21 +199,30 @@ function PD.Char:PlayerSetChar(ply,charid)
     PD.Char:SyncChar(ply, "PlayerSetChar (Sync)")
     
     if ply:IsPlayer() then
-        -- if ply:Team() == Atbl[charid].job then
-        --     ply:Respawn()
-        -- else
-            print("Job Change (PlayerSetChar: Zeile 213)")
-            ply:changeTeam(Atbl[charid].job.id, true, true)
-        -- end
-        ply:PDSetMoney(Atbl[charid].money)
+    
+        ply:changeTeam({
+            jobid = Atbl[charid].faction.job,
+            jobsubunit = Atbl[charid].faction.subunit,
+            jobunit = Atbl[charid].faction.unit
+        }, true, true)
+
+        ply.CharID = Atbl[charid].id
+        --ply:PDSetMoney(Atbl[charid].money)
         ply:SetNWString("rpname", Atbl[charid].id.." "..Atbl[charid].name)
         PD.Char:SetPlayerCharID(ply,Atbl[charid].id)
-        print("Char ID: " .. Atbl[charid].id)
         ply:SetModel(jobTable.model[1])
         ply:SetNWString("character_id",Atbl[charid].id)
         ply:SetJob(jobName, jobTable)
 
-        print(Atbl[charid].name .. " wurde in den Job " .. Atbl[charid].job.name .. " gesetzt.")
+        net.Start("PD.Char.JobChange")
+            net.WriteEntity(ply)
+            net.WriteString(jobName)
+            net.WriteTable(jobTable)
+        net.Send(ply)
+
+        PD.List:SetFaction(ply, Atbl[charid].faction.unit, Atbl[charid].faction.subunit, Atbl[charid].faction.job)
+
+        -- print(Atbl[charid].name .. " wurde in den Job " .. Atbl[charid].job.name .. " gesetzt.")
     else
         print("Spieler nicht gefunden. (PlayerSetChar: Zeile 220)")
     end 
@@ -199,7 +236,7 @@ function PD.Char:PlayerActiveChar(ply)
     if tbl then
         for k,v in pairs(tbl) do
             if v.id == PD.Char:GetCharacterID(ply) then
-                return true
+                return v
             end
         end
     end
@@ -207,26 +244,14 @@ function PD.Char:PlayerActiveChar(ply)
     return false
 end
 
-function PD.Char:PlayerSetFaction(ply,factionName, SubFactionName, jobName)
-    local tbl = PD.Char:LoadChar(ply:SteamID64(), "SetPlayerFactionTable")
-
-    if not tbl then print("Char nicht gefunden. (PlayerSetFaction: Zeile 201)") return end
-
-    for k,v in pairs(tbl) do
-        if v.id == PD.Char:GetCharacterID(ply) then
-            v.faction = {
-                unit = factionName,
-                subunit = SubFactionName,
-                job = jobName
-            }
-        end
-    end
-end
-
 local PLAYER = FindMetaTable("Player")
-function PLAYER:changeTeam(jobID, force)
-    print("Test: " .. jobID)
-    local jobName, jobTable = PD.JOBS.GetJob(jobID)
+function PLAYER:changeTeam(jobinfo, force)
+    -- print("Test: " .. jobID)
+    local jobName, jobTable = getRightJob({
+        jobid = jobinfo.jobid,
+        jobsubunit = jobinfo.jobsubunit,
+        jobunit = jobinfo.jobunit
+    })
 
     if not jobName then print("Job kann nicht gewechselt werden!!!") return end
 
@@ -247,7 +272,10 @@ function PLAYER:changeTeam(jobID, force)
         self:SetArmor(jobTable.startarmor or 0)
         self:SetMaxHealth(jobTable.maxhealth or 100)
         self:SetMaxArmor(jobTable.maxarmor or 100)
+        self:SetWalkSpeed(200)
+        self:SetRunSpeed(300)
         self:SetJob(jobName, jobTable)
+        
 
         if self:IsAdmin() or PD.Admin.Ranks[self:GetUserGroup()] then 
             for k, v in SortedPairs(PD.Admin.Equip) do
@@ -256,6 +284,12 @@ function PLAYER:changeTeam(jobID, force)
         end
 
         for k, v in SortedPairs(jobTable.equip) do
+            self:Give(v)
+        end
+
+        local name, subunit = PD.JOBS.GetSubUnit(jobTable.unit)
+
+        for k, v in SortedPairs(subunit.equip) do
             self:Give(v)
         end
 
@@ -282,32 +316,34 @@ function PLAYER:GetJob()
     return self.JobID, self.JobTbl
 end
 
-hook.Add("PlayerSpawn", "PD.Char.PlayerSpawnSetJobEquip", function(ply)
-    if PD.Char:PlayerActiveChar(ply) then
-        local tbl = PD.Char:GetPlayerCharTBL(ply)
-        local jobName, jobTable = PD.JOBS.GetJob(tbl.job.id)
+local function PD_SetPlayerPhaseModel(ply)
+    local jobName, jobTable = ply:GetJob()
+    local mdl = jobTable.model and jobTable.model[1] or CONFIG.BackModel
 
-        -- if jobName then
-        --     ply:SetJob(jobName, jobTable)
-        --     ply:StripWeapons()
-        --     if ply:IsAdmin() or PD.Admin.Ranks[ply:GetUserGroup()] then 
-        --         for k, v in pairs(PD.Admin.Equip) do
-        --             ply:Give(v)    
-        --         end
-        --     end
+    ply:SetModel(mdl)
+    ply:SetColor(color_white)
+    ply:SetMaterial("")
+    ply:SetRenderMode(RENDERMODE_NORMAL)
+    ply:SetModelScale(1, 0)
     
-        --     for k, v in pairs(jobTable.equip) do
-        --         ply:Give(v)
-        --     end
-           
-        --     if jobTable.model then
-        --         ply:SetModel(jobTable.model[1])
-        --     end
-    
-        --     ply:SetHealth(jobTable.maxhealth or 100)
-        --     ply:SetArmor(jobTable.startarmor or 0)
-
-        --     return false
-        -- end
+    if ply.SetBodygroup and ply.PD_Bodygroups then
+        for id, val in pairs(ply.PD_Bodygroups) do
+            ply:SetBodygroup(id, val)
+        end
     end
+
+    
+end
+
+hook.Add("PlayerSpawn", "PD.Char.SetModelOnSpawn", function(ply)
+    local jobName, jobTable = PD.JOBS.GetJob()
+
+    if jobTable and jobTable.model then
+        ply:SetModel(tostring(jobTable.model[1]))
+    end
+
+    timer.Simple(0, function()
+        if not IsValid(ply) then return end
+        PD_SetPlayerPhaseModel(ply)
+    end)
 end)

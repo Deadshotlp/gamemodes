@@ -14,7 +14,7 @@ net.Receive("PD.List.Sync", function(len, ply)
         net.WriteTable(PD.List.Tbl)
     net.Send(ply)
 
-    print("Factions loaded for "..ply:Nick())
+    -- print("Factions loaded for "..ply:Nick())
 end)
 
 net.Receive("PD.List.SetPlayerFaction", function(len, ply)
@@ -103,21 +103,20 @@ hook.Add("PD_Faction_Change", "PD.List.PD_Faction_Change", function()
     net.Broadcast()
 end)
 
--- hook.Add("PD.JOBS.Created", "PD.List.UpdateCreatedJobs", function(id, tbl)
---     PD.List:LoadFactions()
+hook.Add("PlayerSay", "CommandsFactionsPD", function(ply, text)
+    if string.sub(text, 1, 1) == "!" then
+        local args = string.Explode(" ", text)
+        local cmd = string.sub(args[1], 2)
 
---     net.Start("PD.List.Sync")
---         net.WriteTable(PD.List.Tbl)
---     net.Broadcast()
--- end)
+        if cmd == "faction" then
+            local unit, subunit, job = PD.List:GetPlayerFaction(ply)
 
--- hook.Add("PD.JOBS.Removed", "PD.List.UpdeteremovedJobs", function(id, tbl)
---     PD.List:LoadFactions()
+            if not unit or not subunit or not job then return end
 
---     net.Start("PD.List.Sync")
---         net.WriteTable(PD.List.Tbl)
---     net.Broadcast()
--- end)
+            PD.Notify("Du bist in der Fraktion: "..unit.." "..subunit.." "..job, Color(255, 0, 0), false, ply)
+        end
+    end
+end)
 
 hook.Add("PlayerDeleteCharacter", "PD.List.PlayerDeleteCharacter", function(ply, charTbl)
     local playerbycharID = FindPlayerbyCharID(charTbl.id)

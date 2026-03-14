@@ -86,11 +86,7 @@ function TOOL:RightClick(trace)
     ent.SecurityLevel = level
 
     -- Verlinke Türen
-    for _, door in ipairs(doors) do
-        if IsValid(door) then
-            ent:AddDoor(door)
-        end
-    end
+    ent:AddDoors(doors, level)
 
     ply:ChatPrint("ID-Card-Linker gespawnt – " .. #doors .. " Tür(en), Level: " .. level)
 

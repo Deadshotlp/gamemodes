@@ -2,15 +2,57 @@ GM.Version = "1.0.0"
 GM.Name = "starwarsrp"
 GM.Author = "Progama057 & Deadshot"
 
+if GM.ModulesLoaded then return end
+GM.ModulesLoaded = true
+
 DeriveGamemode("sandbox")
 DEFINE_BASECLASS("gamemode_sandbox")
 GM.Sandbox = BaseClass
 
--- if GAMEMODE_LOADED then return end
--- GAMEMODE_LOADED = true
-
 AddCSLuaFile("shared.lua")
 include("shared.lua")
+
+PD.Equip = {
+    ["ID"] = "idcard",
+    ["Hands"] = "mhands"
+}
+
+PD.Admin = PD.Admin or {}
+
+PD.Admin.Ranks = {
+    ["superadmin"] = 99,
+    ["admin"] = 50,
+    ["projektleitung"] = 10,
+    ["teamleitung"] = 8,
+    ["moderator"] = 4,
+    ["supporter"] = 2,
+    ["user"] = 0
+}
+
+PD.Admin.Equip = {
+    ["PhysGun"] = "weapon_physgun",
+    ["ToolGun"] = "gmod_tool"
+}
+
+PD.Admin.PayDayPercent = {
+    ["superadmin"] = 5,
+    ["admin"] = 2,
+    ["projektleitung"] = 2,
+    ["teamleitung"] = 2,
+    ["moderator"] = 2,
+    ["supporter"] = 2,
+    ["user"] = 1
+}
+
+PD.Admin.Slots = {
+    ["superadmin"] = 5,
+    ["admin"] = 4,
+    ["projektleitung"] = 4,
+    ["teamleitung"] = 4,
+    ["moderator"] = 3,
+    ["supporter"] = 3,
+    ["user"] = 2
+}
 
 local fol = GM.FolderName .. "/gamemode/modules/"
 local fileCount = 0
@@ -21,6 +63,13 @@ local function LoadFolder(path)
     local files, folders = file.Find(path .. "*", "LUA")
 
     -- print("Loading folder:", path)
+    for _, folder in SortedPairs(folders) do
+        if string.StartWith(folder, "!old") then continue end
+
+        if string.StartWith(folder, "_") then
+            LoadFolder(path .. folder .. "/")
+        end
+    end
 
     for _, File in SortedPairs(files) do
         if string.GetExtensionFromFilename(File) ~= "lua" then continue end
@@ -40,13 +89,16 @@ local function LoadFolder(path)
                 include(path .. File)
             end
         end
+        -- print("Loaded file:", path .. File)
     end
 
     for _, folder in SortedPairs(folders) do
-        LoadFolder(path .. folder .. "/")
+        if not string.StartWith(folder, "_") then
+            LoadFolder(path .. folder .. "/")
+        end
     end
 
-    print(string.format("Finished loading folder: %s | Time taken: %.6f sec", path, SysTime() - folderStartTime))
+    -- print(string.format("Finished loading folder: %s | Time taken: %.6f sec", path, SysTime() - folderStartTime))
 end
 
 print("Loading modules...")
@@ -154,3 +206,20 @@ end
 -- local info = LoadFolderInfo(fol)
 -- PrintTable(info)
 
+-- print("Vor dem Patch:")
+-- print("CPath:", package.cpath)
+-- print("Path: ", package.path)
+
+-- -- Setze Suchpfade
+-- package.cpath = "lua/bin/?.dll"
+-- package.path  = "lua/includes/modules/?.lua"
+
+-- print("Nach dem Patch:")
+-- print("CPath:", package.cpath)
+-- print("Path: ", package.path)
+
+-- -- Lanes laden
+-- local lanes = require("lanes")
+-- print("Lanes:", lanes)
+
+-- print(file.Exists("includes/modules/lanes.lua", "LUA"))

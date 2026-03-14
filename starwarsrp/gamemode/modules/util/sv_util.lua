@@ -57,3 +57,4 @@ function PD.LinearInterpolation(x, tbl)
     -- Falls x außerhalb des Bereichs liegt, gebe nil zurück
     return 0
 end
+

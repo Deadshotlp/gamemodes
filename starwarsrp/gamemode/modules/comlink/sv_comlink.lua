@@ -57,6 +57,8 @@ concommand.Add("printcomlink", function(ply)
 end)
 
 hook.Add("PlayerCanHearPlayersVoice", "PD.Comlink.Voice", function(listener, talker)
+    if talker == listener then return true end
+
     local talkerData = playerTalkerTable[talker:Nick()]
     local listenerData = playerTalkerTable[listener:Nick()]
 
@@ -100,5 +102,22 @@ hook.Add("PlayerCanHearPlayersVoice", "PD.Comlink.Voice", function(listener, tal
         return true, false
     end
 
-    return false
+    local talker_pos = talker:GetPos()
+    local listener_pos
+
+    if listener:Alive() then
+        listener_pos = listener:GetPos()
+    elseif listener:GetNW2Entity("PD.DM.Ragdoll"):IsValid() then
+        listener_pos = listener:GetNW2Entity("PD.DM.Ragdoll"):GetPos()
+    end
+    
+    local voiceMode = talker:GetNWInt("VoiceMode",2)
+    local modeSettings = PD.VC.Config[voiceMode]
+    local distance = listener_pos:Distance(talker_pos)
+
+    if distance <= modeSettings.range and talker:Alive() then
+        return true, true
+    else
+        return false, false
+    end
 end)

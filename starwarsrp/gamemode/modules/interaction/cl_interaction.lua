@@ -11,6 +11,7 @@ local kreis = Material("icons/kreis.png")
 
 local function CheckForSelected(tbl)
     for k,v in pairs(tbl) do
+
         if v.selected then
             return k
         end
@@ -83,15 +84,16 @@ local function DrawSelectedEffect(tbl, index)
 end
 
 local function DrawSubMenu(tbl, x, y, scale)
-    local start_y = y + ((scale / 2) * #tbl + 1)
+    local start_y = y --+ ((scale / 2) * #tbl + 1)
     local curent_y
     local curent_x = x
     local count = 0
     local mous_x, mous_y = input.GetCursorPos()
-    local length = 0
 
     for k, v in pairs(tbl) do
-        curent_x = x
+        if table.IsEmpty(v) then continue end
+        
+        --curent_x = x
         curent_y = start_y - (scale * count)
         count = count + 1
 
@@ -104,8 +106,6 @@ local function DrawSubMenu(tbl, x, y, scale)
             surface.SetMaterial(Material("icons/" .. v.icon .. ".png"))
             surface.DrawTexturedRect(curent_x, curent_y, scale, scale)
             curent_x = curent_x + scale + 5
-
-            length = scale
         end
 
         surface.SetTextPos( curent_x, curent_y )
@@ -113,10 +113,8 @@ local function DrawSubMenu(tbl, x, y, scale)
 
         local widht, height = surface.GetTextSize(v.name)
 
-        length = length + widht
-
-        if v.selected and v.sub_menus ~= {} then
-            DrawSubMenu(v.sub_menus, curent_x + length, curent_y, scale)
+        if v.selected and not table.IsEmpty(v.sub_menus) then
+            DrawSubMenu(v.sub_menus, curent_x + 300, curent_y, scale)
         end
 
         if mous_x >= x and mous_x <= curent_x + widht and mous_y >= curent_y and mous_y <= curent_y + height then
@@ -125,31 +123,34 @@ local function DrawSubMenu(tbl, x, y, scale)
             if result ~= nil and result ~= k then
                 tbl[result].selected = false
             end
+
             v.selected = true
         end
     end
 end
 
-local function DrawOptions(x, y, bone, index)
-    if bone.groups then
-        local tbl = {}
-        tbl = string.Split(bone.groups, ",")
+local function DrawOptions(x, y, index)
+    for k, v in pairs(PD.IA.LastEntity.actions) do
+        if PD.IA.CurrentBone.sub_menus[k] == nil then
+            PD.IA.CurrentBone.sub_menus[k] = {}
+        else 
+            continue
+        end
 
-        for k, v in pairs(tbl) do
-            if v == "general" and not PD.IA.CurrentBone.sub_menus["general"] then
-                AddChild(PD.IA.CurrentBone.sub_menus, "general", "General Actions")
-            elseif v == "medic" and not PD.IA.CurrentBone.sub_menus["medic"] then
-                AddChild(PD.IA.CurrentBone.sub_menus, "medic", "Medical Actions", "symbol4")
-                AddSubMenu(PD.IA.CurrentBone.sub_menus["medic"], PD.DM.GetInteractions(index))
+        local tbl = {}
+
+
+        for _, action in pairs(v) do
+            if table.HasValue(action.ad, index) then
+                table.insert(tbl, action)
             end
         end
-    end
 
-    for k, v in pairs(bone.additional) do
-        AddChild(PD.IA.CurrentBone.sub_menus, v.id, v.name, v.icon, v.func)
+        if not table.IsEmpty( tbl ) then
+            AddChild(PD.IA.CurrentBone.sub_menus, k, k)
+            AddSubMenu(PD.IA.CurrentBone.sub_menus[k], tbl)
+        end
     end
-
-    --PrintTable(PD.IA.CurrentBone.sub_menus)
 
     local scale = 25
     local draw_x = x + 75
@@ -158,34 +159,41 @@ local function DrawOptions(x, y, bone, index)
     DrawSubMenu(PD.IA.CurrentBone.sub_menus, draw_x, draw_y, scale)
 end
 
-hook.Add("PostDrawHUD", "PD.IA.ShowBoons", function()
-    if input.IsButtonDown(KEY_RSHIFT) then
-        local ply = LocalPlayer()
-        local vac1 = ply:GetPos() - Vector(250, 250, 250)
-        local vac2 = ply:GetPos() + Vector(250, 250, 250)
+local function RequestEntityInformation(ent, type)
+    if ent:GetClass() == "worldspawn" then return end
+    if PD.IA.LastEntity and PD.IA.LastEntity.ent == ent then return end
+        
+    PD.IA.LastEntity = {
+            ent = ent,
+            bones = {},
+            actions = {}
+    }
+
+    hook.Run( "PD.Interaction.Requested", ent:GetClass())
+end
+
+function PD.IA.OtherInteraction()
+    surface.SetFont("MLIB.25")
+
+    local ply = LocalPlayer()
         local trace = ply:GetEyeTrace()
         local ent = trace.Entity
 
         if not ent:IsValid() and not PD.IA.CurrentBone.looked_at then return end
-        
-        if PD.IA.LastEntity == nil or not PD.IA.LastEntity.ent == ent then
-            PD.IA.LastEntity = {}
-            net.Start("PD.IA.RequestEntityInformation")
-            net.WriteEntity(ply)
-            net.WriteEntity(ent)
-            net.SendToServer()
-        end
 
-        if PD.IA.LastEntity and PD.IA.LastEntity.bones then
-            if ply:GetPos():Distance(PD.IA.LastEntity.ent:GetPos()) >= 100 then
-                return
-            end
+        if ply:GetPos():Distance(ent:GetPos()) >= 100 and ply:GetPos():Distance(PD.IA.LastEntity.ent:GetPos()) >= 100 then return end
+    
+        RequestEntityInformation(ent, "other")
+
+        if PD.IA.LastEntity and PD.IA.LastEntity.bones and PD.IA.LastEntity.ent then
 
             for k, v in pairs(PD.IA.LastEntity.bones) do
-                if PD.IA.LastEntity.ent:LookupBone(v["name"]) == nil then continue end
+                if v == "self" then continue end
+
+                if PD.IA.LastEntity.ent:LookupBone(v) == nil then continue end
 
                 local mouseX, mouseY = input.GetCursorPos()
-                local pos = PD.IA.LastEntity.ent:GetBonePosition(PD.IA.LastEntity.ent:LookupBone(v["name"])):ToScreen()
+                local pos = PD.IA.LastEntity.ent:GetBonePosition(PD.IA.LastEntity.ent:LookupBone(v)):ToScreen()
                 local size_x, size_y = 25, 25
 
                 -- Berechne den Mittelpunkt des Bereichs
@@ -205,7 +213,7 @@ hook.Add("PostDrawHUD", "PD.IA.ShowBoons", function()
                         PD.IA.CurrentBone.sub_menus = {}
                     end
                 
-                    DrawOptions(centerX, centerY , v.interactions, k) -- Optionen am Mittelpunkt zeichnen
+                    DrawOptions(centerX, centerY, v) -- Optionen am Mittelpunkt zeichnen
 
                     size_x, size_y = 50, 50
                     surface.SetDrawColor(255, 0, 0, 255) -- Rot, wenn im Kreis
@@ -226,7 +234,10 @@ hook.Add("PostDrawHUD", "PD.IA.ShowBoons", function()
         else
             ResetBoneInfo()
         end
-    elseif PD.IA.CurrentBone and PD.IA.CurrentBone.looked_at then
+end
+
+function PD.IA.CheckForInteraction()
+    if PD.IA.CurrentBone and PD.IA.CurrentBone.looked_at then
         -- Find the actual selected menu item data
         local selected_item = GetSelectedMenuItem(PD.IA.CurrentBone.sub_menus)
 
@@ -239,9 +250,99 @@ hook.Add("PostDrawHUD", "PD.IA.ShowBoons", function()
     elseif PD.IA.LastEntity ~= nil then
         PD.IA.LastEntity = nil
     end
-end)
+end
 
-net.Receive("PD.IA.SendEntityInformation", function()
-    local tbl = net.ReadTable()
-    PD.IA.LastEntity = tbl
+function PD.IA.SelfInteraction()
+    local ply = LocalPlayer()
+
+    -- Eigene Entity-Infos anfragen
+    RequestEntityInformation(ply, "self")
+
+    surface.SetFont("MLIB.25")
+
+    -- Nur einen Kreis in der Bildschirmmitte zeichnen und darüber NUR Torso-Aktionen erlauben
+    if PD.IA.LastEntity and PD.IA.LastEntity.bones then
+        for k, v in pairs(PD.IA.LastEntity.bones) do
+            if v == "self" then
+                local mouseX, mouseY = input.GetCursorPos()
+                local size_x, size_y = 25, 25
+                local centerX = ScrW() / 2
+                local centerY = ScrH() / 2
+                local radius = 25
+                local radiusSquared = radius * radius -- Quadrierter Radius für effizienteren Vergleich
+                local distanceSquared = (mouseX - centerX)^2 + (mouseY - centerY)^2
+                local rotation = 0
+
+                if distanceSquared <= radiusSquared or (not PD.IA.CurrentBone.looked_at or PD.IA.CurrentBone.index == k) then
+                    if PD.IA.CurrentBone.index ~= k then
+                        PD.IA.CurrentBone.sub_menus = {}
+                    end
+                
+                    DrawOptions(centerX, centerY , "self") -- Optionen am Mittelpunkt zeichnen
+
+                    size_x, size_y = 50, 50
+                    surface.SetDrawColor(255, 0, 0, 255) -- Rot, wenn im Kreis
+                    rotation = (CurTime() * 50) % 360
+                
+                    PD.IA.CurrentBone.index = k
+                    PD.IA.CurrentBone.looked_at = true
+                else
+                    if PD.IA.CurrentBone.index == k then
+                        ResetBoneInfo()
+                    end
+                    surface.SetDrawColor(0, 255, 255, 255) -- Weiß, wenn außerhalb
+                end
+                
+                surface.SetMaterial(kreis)
+                surface.DrawTexturedRectRotated(centerX, centerY, size_x, size_y, rotation)
+            end
+        end
+        
+    else
+        ResetBoneInfo()
+    end
+end
+
+function PD.IA.AddEntityActions(tbl, name)
+    if not PD.IA.LastEntity.actions[name] then
+        PD.IA.LastEntity.actions[name] = {}
+    end
+
+    for index, aktion in pairs(tbl or {}) do
+        for x, bone in pairs(aktion.ad or {}) do
+            if not table.HasValue(PD.IA.LastEntity.bones or {}, bone) then
+                table.insert(PD.IA.LastEntity.bones or {}, bone)
+            end
+        end
+        table.insert(PD.IA.LastEntity.actions[name], aktion)
+    end
+end
+
+local c_pressed = false
+local rshift_pressed = false
+
+hook.Add("PostDrawHUD", "PD.IA.CheckForButton", function()
+
+    if (c_pressed and not input.IsButtonDown(PD.Binds:FindBindByID("self_interaction"))) or (rshift_pressed and not input.IsButtonDown(PD.Binds:FindBindByID("other_interaction"))) then
+        if c_pressed then
+            c_pressed = false
+            gui.EnableScreenClicker(false)
+        else
+            rshift_pressed = false
+        end
+        PD.IA.CheckForInteraction()
+    end
+    
+    if input.IsButtonDown(PD.Binds:FindBindByID("self_interaction")) then
+        c_pressed = true
+        gui.EnableScreenClicker(true)
+        PD.IA.SelfInteraction()
+    end
+
+    if input.IsButtonDown(PD.Binds:FindBindByID("other_interaction")) then
+        rshift_pressed = true
+        PD.IA.OtherInteraction()
+    end
+
+
 end)

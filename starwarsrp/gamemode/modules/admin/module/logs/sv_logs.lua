@@ -6,10 +6,12 @@ util.AddNetworkString("PD.LOGS.Sync")
 PD.LOGS.Tbl = PD.LOGS.Tbl or {}
 
 net.Receive("PD.LOGS.Addcl", function()
+    local typ = net.ReadString()
     local text = net.ReadString()
     local color = net.ReadColor()
 
     table.insert(PD.LOGS.Tbl, {
+        typ = typ,
         text = text,
         color = color,
         date = os.date("%H:%M:%S - %d.%m.%Y")
@@ -28,12 +30,12 @@ end)
 
 
 timer.Simple(1, function()
-    PD.JSON.Create("logs")
+    PD.JSON.Create("modules/logs")
 end)
 
 hook.Add("ShutDown", "SaveLogs", function()
-    if PD.JSON.Read("logs/" .. os.date("%d.%m.%Y") .. ".json") then
-        local old = PD.JSON.Read("logs/" .. os.date("%d.%m.%Y") .. ".json")
+    if PD.JSON.Read("modules/logs/" .. os.date("%d.%m.%Y") .. ".json") then
+        local old = PD.JSON.Read("modules/logs/" .. os.date("%d.%m.%Y") .. ".json")
     end
 
     if old then
@@ -42,6 +44,6 @@ hook.Add("ShutDown", "SaveLogs", function()
         end
     end
 
-    PD.JSON.Write("logs/" .. os.date("%d.%m.%Y") .. ".json", PD.LOGS.Tbl)
+    PD.JSON.Write("modules/logs/" .. os.date("%d.%m.%Y") .. ".json", PD.LOGS.Tbl)
 end)
 

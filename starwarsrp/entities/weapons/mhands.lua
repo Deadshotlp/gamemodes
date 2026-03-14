@@ -190,64 +190,24 @@ local anima = {
     -- }
 }
 
-local function ResetPlayerModel(ply)
-    local model = ply:GetModel()
-
-    if IsValid(ply) and ply:IsPlayer() then
-        local boneCount = ply:GetBoneCount()
-
-        if boneCount then
-            for bone = 0, boneCount - 1 do
-                ply:ManipulateBonePosition(bone, vector_origin)
-                ply:ManipulateBoneAngles(bone, angle_zero)
-            end
-        end
-    end
-end
-
-local function AnimationEvent(ply, val, id)
-    local tbl = anima[id]
-
-    if not tbl then return end
-
-    animaangle = Lerp(FrameTime() * 5, animaangle or 0, val)
-
-    for bone, angle in pairs(tbl) do
-        local boneID = ply:LookupBone(bone)
-
-        if boneID then
-            local currentAngle = ply:GetManipulateBoneAngles(boneID)
-            local newAngle = Lerp(FrameTime() * 5, currentAngle, angle * animaangle)
-
-            ply:ManipulateBoneAngles(boneID, newAngle)
-        end
-    end
-end
-
+local isAnimating = false
 if SERVER then
     util.AddNetworkString("SetPlayerAnimation")
     util.AddNetworkString("ResetPlayerAnimation")
 
     net.Receive("SetPlayerAnimation", function(len, ply)
         local id = net.ReadString()
+
         if anima[id] then
-            ply.isanimation = id
+            ply:SetNWString("mhands_anim", id)
+        else
+            ply:SetNWString("mhands_anim", "")
         end
     end)
 
     net.Receive("ResetPlayerAnimation", function(len, ply)
-        ResetPlayerModel(ply)
-        ply.isanimation = nil
+        ply:SetNWString("mhands_anim", "")
     end)
-   
-
-    hook.Add("Think", "PlayerAnimationSync", function()
-        for _, ply in ipairs(player.GetAll()) do
-            if ply.isanimation and anima[ply.isanimation] then
-                AnimationEvent(ply, 1, ply.isanimation)
-            end
-        end
-    end)    
 elseif CLIENT then
     function SendAnimationToServer(anim)
         net.Start("SetPlayerAnimation")
@@ -260,61 +220,94 @@ elseif CLIENT then
         net.SendToServer()
     end
 
+    local function CopyAngle(a)
+        return Angle(a.p, a.y, a.r)
+    end
+
+    local function AddAngles(a, b)
+        return Angle(a.p + b.p, a.y + b.y, a.r + b.r)
+    end
+
+    local function RestoreMHandsBones(ply)
+        if not ply.mhandsBaseAngles then return end
+
+        for boneID, baseAng in pairs(ply.mhandsBaseAngles) do
+            ply:ManipulateBoneAngles(boneID, baseAng)
+        end
+
+        ply.mhandsBaseAngles = nil
+    end
+
+    hook.Add("PostPlayerDraw", "mhands_anim_draw", function(ply)
+        local id = ply:GetNWString("mhands_anim", "")
+        if id == "" then return end
+
+        local tbl = anima[id]
+        if not tbl then return end
+
+        if ply.mhandsLastAnim ~= id then
+            -- Restore previous mhands offsets before changing to a new hand animation.
+            RestoreMHandsBones(ply)
+            ply.mhandsBaseAngles = {}
+
+            for bone, _ in pairs(tbl) do
+                local boneID = ply:LookupBone(bone)
+                if boneID then
+                    local cur = ply:GetManipulateBoneAngles(boneID) or angle_zero
+                    ply.mhandsBaseAngles[boneID] = CopyAngle(cur)
+                end
+            end
+
+            ply.mhandsLerp = 0
+            ply.mhandsLastAnim = id
+        end
+
+        ply.mhandsLerp = ply.mhandsLerp or 0
+        ply.mhandsLerp = Lerp(FrameTime() * 8, ply.mhandsLerp, 1)
+
+        for bone, ang in pairs(tbl) do
+            local boneID = ply:LookupBone(bone)
+            if boneID then
+                local baseAng = (ply.mhandsBaseAngles and ply.mhandsBaseAngles[boneID]) or angle_zero
+                local targetAng = AddAngles(baseAng, ang * ply.mhandsLerp)
+                local cur = ply:GetManipulateBoneAngles(boneID) or angle_zero
+                local newAng = LerpAngle(FrameTime() * 8, cur, targetAng)
+                ply:ManipulateBoneAngles(boneID, newAng)
+            end
+        end
+    end)
+
+    hook.Add("Think", "mhands_reset_anim", function()
+        for _, ply in ipairs(player.GetAll()) do
+            local id = ply:GetNWString("mhands_anim", "")
+
+            if id == "" and ply.mhandsWasAnimating then
+                RestoreMHandsBones(ply)
+                ply.mhandsWasAnimating = false
+                ply.mhandsLerp = 0
+                ply.mhandsLastAnim = nil
+            elseif id ~= "" then
+                ply.mhandsWasAnimating = true
+            end
+        end
+    end)
+
+
+
     hook.Add("PlayerButtonDown", "ResetAnimationKeys", function(ply, key)
         if not ply:HasWeapon("mhands") then return end
-        if not ply.isanimation then return end
+        if not isAnimating then return end
     
         if key == KEY_R or key == KEY_W or key == KEY_A or key == KEY_S or key == KEY_D or key == KEY_SPACE or key == KEY_LSHIFT or key == KEY_LCONTROL then
             ResetAnimationOnServer()
+            -- ResetPlayerModel(ply)
+            isAnimating = false
+
+            print("Animation abgebrochen")
         end
     end) 
 
-    function HandsMenuMario(ply)
-        if IsValid(base) then return end
-    
-        base = vgui.Create("DFrame")
-        base:SetSize(ScrW(), ScrH())
-        base:SetTitle("")
-        base:SetDraggable(false)
-        base:ShowCloseButton(false)
-        base:MakePopup()
-        base:SetBackgroundBlur(true)
-        base.Paint = function() end
-    
-        local radius = 150
-        local centerX, centerY = ScrW() / 2, ScrH() / 2
-        local buttonSize = 80
-    
-        local count = table.Count(anima)
-        local angleStep = (2 * math.pi) / count
-        local i = 0
-    
-        for k, _ in SortedPairs(anima) do
-            local angle = i * angleStep - math.pi / 2
-            local x = centerX + math.cos(angle) * radius - buttonSize / 2
-            local y = centerY + math.sin(angle) * radius - buttonSize / 2
-    
-            local btn = vgui.Create("DButton", base)
-            btn:SetText(k)
-            btn:SetSize(buttonSize, buttonSize)
-            btn:SetPos(x, y)
-            btn.DoClick = function()
-                SendAnimationToServer(k)
-                base:Remove()
-            end
-    
-            i = i + 1
-        end
-    
-        -- Rechtsklick schließt das Menü
-        base.OnMousePressed = function(_, code)
-            if code == MOUSE_RIGHT then
-                base:Remove()
-            end
-        end
-    end
-
-    function HandsMenuRadial()
+    function HandsMenuRadial(ply)
         if IsValid(base) then return end
 
         base = vgui.Create("DFrame")
@@ -326,9 +319,9 @@ elseif CLIENT then
         base:SetBackgroundBlur(true)
         base.Paint = function() end
 
-        local radius = 250
+        local radius = PD.W(350)
         local centerX, centerY = ScrW() / 2, ScrH() / 2
-        local buttonSize = 100
+        local buttonSize = PD.W(125)
         local count = table.Count(anima)
         local angleStep = 360 / count
         local i = 0
@@ -338,19 +331,49 @@ elseif CLIENT then
             local x = centerX + math.cos(angle) * radius - buttonSize / 2
             local y = centerY + math.sin(angle) * radius - buttonSize / 2
 
-            local btn = vgui.Create("DButton", base)
-            btn:SetText(name)
-            btn:SetSize(buttonSize, buttonSize)
-            btn:SetPos(x, y)
-            btn:SetFont("MLIB.15")
-            btn:SetTextColor(Color(255, 255, 255))
-            btn.Paint = function(s, w, h)
-                draw.RoundedBox(20, 0, 0, w, h, Color(50, 50, 50, 200))
-                -- draw.SimpleText(name, "DermaLarge", w / 2, h / 2, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+            -- local btn = vgui.Create("DButton", base)
+            -- btn:SetText(name)
+            -- btn:SetSize(buttonSize, buttonSize)
+            -- btn:SetPos(x, y)
+            -- btn:SetFont("MLIB.15")
+            -- btn:SetTextColor(Color(255, 255, 255))
+            -- btn.Paint = function(s, w, h)
+            --     draw.RoundedBox(20, 0, 0, w, h, Color(50, 50, 50, 200))
+            --     -- draw.SimpleText(name, "DermaLarge", w / 2, h / 2, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+            -- end
+            -- btn.DoClick = function()
+            --     SendAnimationToServer(name)
+            --     base:Remove()
+
+            --     isAnimating = true
+            -- end
+
+            local model_panel = PD.Panel(base, {}, function(self, w, h)
+                --surface.SetDrawColor(50, 50, 50, 200)
+                --surface.DrawOutlinedRect(0, 0, w, h, 1)
+                draw.RoundedBox( 15, 0, 0, w, h, PD.Theme.Colors.BackgroundTransparent )
+            end)
+            model_panel:Dock(NODOCK)
+            model_panel:SetSize(buttonSize, buttonSize)
+            model_panel:SetPos(x, y)
+
+            local model = PD.Model(model_panel, LocalPlayer():GetModel(), 0, 0, buttonSize, buttonSize, {canRotate = false, canZoom = false})
+            model:SetFOV( 50 )
+
+            function model:OnMousePressed( k )
+                if k == MOUSE_LEFT then
+                    SendAnimationToServer(name)
+                    base:Remove()
+
+                    isAnimating = true
+                end
             end
-            btn.DoClick = function()
-                SendAnimationToServer(name)
-                base:Remove()
+
+            for bone, ang in pairs(_) do
+                local boneID = model:GetEntity():LookupBone(bone)
+                if boneID then
+                    model:GetEntity():ManipulateBoneAngles(boneID, ang)
+                end
             end
 
             i = i + 1
@@ -362,44 +385,18 @@ elseif CLIENT then
             end
         end
     end
-
 end
 
 function SWEP:SecondaryAttack()
-    if not self.Owner.isanimation and CLIENT then 
+    if not CLIENT then return end
+
+    if not isAnimating then 
         HandsMenuRadial(self.Owner)
+    else
+        ResetAnimationOnServer()
+        isAnimating = false
     end
 end
-
-if CLIENT then
-    hook.Add("PlayerButtonDown","ResetAnimationMario",function(ply,key)
-        if (key == KEY_R) then
-            if ply.isanimation and ply:HasWeapon("mhands") then 
-                ResetPlayerModel(ply)
-                ply.isanimation = false
-            else
-                return
-            end
-        elseif (key == MOUSE_LEFT) then
-            if ply.isanimation and ply:HasWeapon("mhands") then 
-                ResetPlayerModel(ply)
-                ply.isanimation = false
-            else
-                return
-            end
-        end
-    end)
-end
-
-hook.Add("Think", "PlayerAnimationStarthands", function()
-    for _, ply in pairs(player.GetAll()) do
-        if ply.isanimation then
-            AnimationEvent(ply, 1, ply.isanimation)
-        else
-            AnimationEvent(ply, 0, ply.isanimation)
-        end
-    end
-end)
 
 local w, h = ScrW, ScrH
 local clrWhite = Color(255, 255, 255)
@@ -418,24 +415,24 @@ function SWEP:DrawHUD()
     surface.SetAlphaMultiplier(self.alphaMultHint)
 
     draw.RoundedBox(100, w() / 2 - 2.5, h() / 2 - 2.5, 5, 5, clrWhite)
-    draw.SimpleText("Objekt mit Links-click bewegen", "MLIB.25", w() / 2, h() - PG.H(120), clrWhite, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    draw.SimpleText("Objekt mit Links-click bewegen", "MLIB.25", w() / 2, h() - PD.H(200), clrWhite, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 
     surface.SetAlphaMultiplier(1)
 
     local pulsateSpeed = (math.cos(CurTime() * 0.5) + 0.5)
 
-    local hintsPos = h() - 150
+    local hintsPos = h() - 200
     -- if MODULE.camera.isActive and mvp.config.Get('freelook') then
     --     local x, y = draw.SimpleText(mvp.language.Get('ph#RLook'), 'perfecthands.hint', w() * .5, hintsPos, Color(255,255,255, 255 * pulsateSpeed), TEXT_ALIGN_CENTER)
     --     hintsPos = hintsPos + y
     -- end
 
 
-    if self.Owner.isanimation then
+    if self.Owner:GetNWString("mhands_anim", "") ~= "" then
         local x, y = draw.SimpleText("R - Zum beenden", "MLIB.25", w() * .5, hintsPos, Color(255,255,255, 255 * pulsateSpeed), TEXT_ALIGN_CENTER)
         hintsPos = hintsPos + y
     else
-        draw.SimpleText("Recht-click zum Öffnen", "MLIB.25", w() * .5, hintsPos, Color(255,255,255, 255 * pulsateSpeed), TEXT_ALIGN_CENTER)
+        draw.SimpleText("Rechts-click zum Öffnen", "MLIB.25", w() * .5, hintsPos, Color(255,255,255, 255 * pulsateSpeed), TEXT_ALIGN_CENTER)
     end
 
     if not self.dragInfo then

@@ -83,15 +83,15 @@ local w, h = ScrW, ScrH
 function SWEP:DrawHUD()
     if IsValid(self.Owner:GetVehicle()) then return end
 
-    draw.SimpleText("ID Karte mit Links-click rausholen", "MLIB.20", w() / 2, h() - PG.H(120), PD.UI.Colors["Text"], TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    draw.SimpleText("ID Karte mit Links-click rausholen", "MLIB.20", w() / 2, h() - PD.H(130), PD.UI.Colors["Text"], TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 
     if !showCard then return end
 
     PD.DrawImgur(w() - PD.W(310), h() / 2 - PD.H(75), PD.W(300), PD.H(150), "N9FDPCL")
 
     local jobName, jobTable = self.Owner:GetJob()
-    draw.SimpleText(self.Owner:Nick(), "MLIB.17", w() - PD.W(190), h() / 2 - PG.H(5), PD.UI.Colors["Text"], TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-    draw.SimpleText(jobTable.unit .. " | " .. jobName, "MLIB.17", w() - PD.W(190), h() / 2 + PG.H(50), PD.UI.Colors["Text"], TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    draw.SimpleText(self.Owner:Nick(), "MLIB.17", w() - PD.W(190), h() / 2 - PD.H(5), PD.UI.Colors["Text"], TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    draw.SimpleText(jobTable.unit .. " | " .. jobName, "MLIB.17", w() - PD.W(190), h() / 2 + PD.H(50), PD.UI.Colors["Text"], TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 end
 
 function SWEP:PreDrawViewModel()
