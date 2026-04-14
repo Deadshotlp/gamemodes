@@ -17,7 +17,7 @@ net.Receive("PD.Funk:ReceiveMsgCL", function()
     local msg = net.ReadString()
     local ts = net.ReadUInt(32)
 
-    surface.PlaySound("buttons/button15.wav")
+    surface.PlaySound("mario/comlinksound.mp3")
 
     if ttype == "dm" then
         local key = tid
@@ -231,17 +231,17 @@ function PD.Funk:Menu(choices)
     local recScroll = PD.Scroll(mainFrame)
 
     for key, _ in pairs(localChats.recent or {}) do
-        local parts = string.Explode(":", key)
-        local ttype = parts[1]
-        local tid = table.concat(parts, ":", 2)
-        local btn = PD.Button(
-            (ttype == "dm" and "[" .. "Direkt" .. "]" or "[" .. LANG.CHAR_UI_UNIT .. "]") .. tid,
-            recScroll, function()
-                openConversation(ttype, tid)
-            end)
-        btn:Dock(TOP)
-        btn:SetTall(PD.H(36))
-        btn:DockMargin(PD.W(5), PD.H(5), PD.W(5), 0)
+        local ttype, tid = string.match(key, "^(%w+):(.+)$")
+        if ttype and tid then
+            local btn = PD.Button(
+                (ttype == "dm" and "[Direkt] " or "[" .. LANG.CHAR_UI_UNIT .. "] ") .. tid,
+                recScroll, function()
+                    openConversation(ttype, tid)
+                end)
+            btn:Dock(TOP)
+            btn:SetTall(PD.H(36))
+            btn:DockMargin(PD.W(5), PD.H(5), PD.W(5), 0)
+        end
     end
 end
 

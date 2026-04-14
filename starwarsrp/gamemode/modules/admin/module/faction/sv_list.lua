@@ -8,325 +8,390 @@ util.AddNetworkString("PD.List.SendData")
 util.AddNetworkString("PD.List.RequestData")
 util.AddNetworkString("PD.List.AdminChange")
 
+local function GetJobNode(unit, subunit, job)
+    return PD.List.Tbl[unit]
+        and PD.List.Tbl[unit].subunits
+        and PD.List.Tbl[unit].subunits[subunit]
+        and PD.List.Tbl[unit].subunits[subunit].jobs
+        and PD.List.Tbl[unit].subunits[subunit].jobs[job]
+end
+
+local function GetDefaultJobForSubunit(unit, subunit)
+    local unitNode = PD.JOBS and PD.JOBS.Jobs and PD.JOBS.Jobs[unit]
+    local subNode = unitNode and unitNode.subunits and unitNode.subunits[subunit]
+    if not subNode then return nil end
+
+    for jobIndex, jobData in pairs(subNode.jobs or {}) do
+        if jobData.default then
+            return jobIndex
+        end
+    end
+
+    return next(subNode.jobs or {})
+end
+
+local function FindTargetFromRankNet(len)
+    if len <= 40 then
+        local actor = net.ReadEntity()
+        local target = net.ReadEntity()
+
+        if actor ~= nil then
+            return target
+        end
+
+        return nil
+    end
+
+    local charID = net.ReadString()
+    return FindPlayerbyCharID(charID)
+end
+
 function PD.List:GetPlayerData(ply)
-    local plyTable = PD.Char:PlayerActiveChar(ply)
-    if not plyTable then print(PD.Char:GetCharacterID(ply)) print("Table nicht da") return end
+    if not IsValid(ply) then return end
+    return PD.List:GetPlayerFaction(ply)
+end
 
-    local factionTable = plyTable.faction
+function PD.List:GetAllData()
+    local allData = {}
 
-    return factionTable.unit, factionTable.subunit, factionTable.job
+    for _, v in pairs(player.GetAll()) do
+        if not IsValid(v) then continue end
+
+        local unit, subunit, job = PD.List:GetPlayerData(v)
+        allData[v:SteamID64()] = {
+            unit = unit,
+            subunit = subunit,
+            job = job
+        }
+    end
+
+    return allData
 end
 
 function PD.List:SendDataToAllClient()
-    local allData = {}
-
-    for k, v in pairs(player.GetAll()) do
-        local tunit, tsub, tjob = PD.List:GetPlayerData(v)
-
-        allData[v:SteamID64()] = {
-            unit = tunit,
-            subunit = tsub,
-            job = tjob
-        }
-        -- print(v:Nick() .. " | " .. tunit .. " | " .. tsub .. " | " .. tjob)
-    end
-
     net.Start("PD.List.SendData")
-        net.WriteTable(allData)
+    net.WriteTable(PD.List:GetAllData())
     net.Broadcast()
 end
 
 function PD.List:SetPlayerData(ply, unit, sub, job)
-    local tbl = PD.Char:LoadChar(ply:SteamID64(), "ShutDown")
-    local id = FindPlayerCharbyName(string.sub(ply:Nick(), 9), tbl)
-
-    if tbl and tbl[id] then
-        tbl[id].faction.unit = unit
-        tbl[id].faction.subunit = sub
-        tbl[id].faction.job = job
-
-        PD.Char:SaveChar(ply:SteamID64(),tbl)
-
-        PD.List:SendDataToAllClient()
-
-        local jobTable = {}
-        local _, sub = PD.JOBS.GetSubUnit(sub, false)
-        jobTable = sub.jobs[job] or {}
-
-        hook.Run("PD_Faction_Change", ply, unit, sub, job, jobTable)
-    end
+    if not IsValid(ply) then return end
+    PD.List:ChangeFaction(ply, unit, sub, job)
 end
 
-timer.Simple(1, function()
-    PD.List:SendDataToAllClient()
-end)
-
 function PD.List:SetDefault(ply)
-    local factionName = PD.JOBS.GetUnit()
-    local subfactionName = PD.JOBS.GetSubUnit()
-    local jobName = PD.JOBS.GetJob()
-
-    PD.List:SetPlayerData(ply, factionName, subfactionName, jobName)
+    if not IsValid(ply) then return end
+    PD.List:SetPlayerDefaultFaction(ply)
 end
 
 function PD.List:SetFaction(ply, faction, sub, job)
-    PD.List:SetPlayerData(ply, faction, sub, job)
+    if not IsValid(ply) then return end
+    PD.List:ChangeFaction(ply, faction, sub, job)
 end
-
-PD.List.JobRanks = {
-    ["Major"] = 16,
-    ["Captain"] = 15,
-    ["Lieutenant"] = 14,
-    ["Sergeant Major"] = 13,
-    ["Master Sergeant"] = 12,
-    ["Detachment Commander"] = 11,
-    ["Chief Operative"] = 10,
-    ["Operative First Class"] = 9,
-    ["Operative Second Class"] = 8,
-    ["Sergeant"] = 7,
-    ["Corporal"] = 6,
-    ["Lance Corporal"] = 5,
-    ["Specialist"] = 4,
-    ["Private"] = 3,
-    ["Trooper"] = 2,
-    ["Cadet"] = 1
-}
-
-PD.List.JobRanksNavy = {
-    ["Grand Admiral"] = 14,
-    ["Captain"] = 13,
-    ["Commander"] = 12,
-    ["Lieutenant Commander"] = 11,
-    ["Lieutenant"] = 10,
-    ["Lieutenant Jr. Grade"] = 9,
-    ["Ensign"] = 8,
-    ["Master Chief Petty Officer"] = 7,
-    ["Chief Petty Officer"] = 6,
-    ["Petty Officer"] = 5,
-    ["Leading Crewman"] = 4,
-    ["Crewman First Class"] = 3,
-    ["Crewman"] = 2,
-    ["Cadet"] = 1
-}
 
 function PD.List:CheckPermission(ply)
-    local uni, sub, job = PD.List:GetPlayerData(ply)
-    local num = 0
+    if not IsValid(ply) then return 0 end
+    if ply:IsAdmin() then return 9999 end
 
-    if unit == "Republic Navy" then
-        for k, v in SortedPairs(PD.List.JobRanksNavy) do
-            if k == job then
-                num = v
-            end
-        end
-    else
-        for k, v in SortedPairs(PD.List.JobRanks) do
-            if k == job then
-                num = v
-            end
-        end
-    end
+    local unit, sub, job = PD.List:GetPlayerFaction(ply)
+    local jobNode = GetJobNode(unit, sub, job)
+    if not jobNode then return 0 end
 
-    return num
+    return tonumber(jobNode.rank or 0)
 end
 
-function PD.List:RankUP(officer, ply)
-    local permissionOfficer = PD.List:CheckPermission(officer)
-    local permissionPlayer = PD.List:CheckPermission(ply)
+function PD.List:RankUP(officer, target)
+    if not IsValid(officer) or not IsValid(target) then return end
 
-    if permissionOfficer > permissionPlayer then
-        if permissionOfficer - permissionPlayer == 1 then
-            print("Du kannst diesen Spieler nicht befördern, da du nur eine Stufe über ihm bist.")
-            return
-        end
+    local unit, sub, job = PD.List:GetPlayerFaction(target)
+    if not unit or not sub or not job then return end
+    if not PD.List:CheckPermissionLevel(officer, unit, sub, job) then return end
 
-        local unit, sub, job = PD.List:GetPlayerData(ply)
-        local newJob = nil
-        local newRank = 0
+    PD.List:RankUp(target, unit, sub, job)
 
-        if unit == "Republic Navy" then
-            for k, v in SortedPairs(PD.List.JobRanksNavy) do
-                if v == permissionPlayer + 1 then
-                    newJob = k
-                    newRank = v
-                end
-            end
-        else
-            for k, v in SortedPairs(PD.List.JobRanks) do
-                if v == permissionPlayer + 1 then
-                    newJob = k
-                    newRank = v
-                end
-            end
-        end
-
-        if newJob and newRank > 0 then
-            PD.List:SetPlayerData(ply, unit, sub, newJob)
-            print("Du hast "..ply:Nick().." zu "..newJob.." befördert.")
-
-            PD.LOGS.Add("[Beförderung]", officer:Nick() .. " hat " .. ply:Nick() .. " zu " .. newJob .. " befördert.", Color(0, 255, 0))
-        else
-            print("Fehler bei der Beförderung.")
-
-            PD.LOGS.Add("[Beförderung]", "Fehler bei der Beförderung von " .. ply:Nick() .. " Versuch von " .. officer:Nick(), Color(255, 0, 0))
-        end
-    else
-        print("Du hast nicht die nötigen Rechte um diesen Spieler zu befördern.")
-        
-        PD.LOGS.Add("[Beförderung]", officer:Nick() .. " hat versucht " .. ply:Nick() .. " zu befördern, hat aber nicht die nötigen Rechte.", Color(255, 0, 0))
+    if PD.LOGS and PD.LOGS.Add then
+        local _, _, newJob = PD.List:GetPlayerFaction(target)
+        PD.LOGS.Add("[Beförderung]", officer:Nick() .. " hat " .. target:Nick() .. " zu " .. tostring(newJob) .. " befördert.", Color(0, 255, 0))
     end
 end
 
-function PD.List:RankDown(officer, ply)
-    local permissionOfficer = PD.List:CheckPermission(officer)
-    local permissionPlayer = PD.List:CheckPermission(ply)
+function PD.List:RankDown(officer, target)
+    if not IsValid(officer) or not IsValid(target) then return end
 
-    if permissionOfficer > permissionPlayer then
-        if permissionPlayer == 1 then
-            print("Du kannst diesen Spieler nicht weiter degradieren.")
-            return
-        end
+    local unit, sub, job = PD.List:GetPlayerFaction(target)
+    if not unit or not sub or not job then return end
+    if not PD.List:CheckPermissionLevel(officer, unit, sub, job) then return end
 
-        local unit, sub, job = PD.List:GetPlayerData(ply)
-        local newJob = nil
-        local newRank = 0
+    PD.List:RankDown(target, unit, sub, job)
 
-        if unit == "Republic Navy" then
-            for k, v in SortedPairs(PD.List.JobRanksNavy) do
-                if v == permissionPlayer - 1 then
-                    newJob = k
-                    newRank = v
-                end
-            end
-        else
-            for k, v in SortedPairs(PD.List.JobRanks) do
-                if v == permissionPlayer - 1 then
-                    newJob = k
-                    newRank = v
-                end
-            end
-        end
-
-        if newJob and newRank > 0 then
-            PD.List:SetPlayerData(ply, unit, sub, newJob)
-            print("Du hast "..ply:Nick().." zu "..newJob.." degradiert.")
-
-            PD.LOGS.Add("[Degradierung]", officer:Nick() .. " hat " .. ply:Nick() .. " zu " .. newJob .. " degradiert.", Color(255, 165, 0))
-        else
-            print("Fehler bei der Degradierung.")
-
-            PD.LOGS.Add("[Degradierung]", "Fehler bei der Degradierung von " .. ply:Nick() .. " Versuch von " .. officer:Nick(), Color(255, 0, 0))
-        end
-    else
-        print("Du hast nicht die nötigen Rechte um diesen Spieler zu degradieren.")
-        
-        PD.LOGS.Add("[Degradierung]", officer:Nick() .. " hat versucht " .. ply:Nick() .. " zu degradieren, hat aber nicht die nötigen Rechte.", Color(255, 0, 0))
+    if PD.LOGS and PD.LOGS.Add then
+        local _, _, newJob = PD.List:GetPlayerFaction(target)
+        PD.LOGS.Add("[Degradierung]", officer:Nick() .. " hat " .. target:Nick() .. " zu " .. tostring(newJob) .. " degradiert.", Color(255, 165, 0))
     end
 end
 
-function PD.List:KickPlayer(officer, ply)
-    local permissionOfficer = PD.List:CheckPermission(officer)
-    local permissionPlayer = PD.List:CheckPermission(ply)
+function PD.List:KickPlayer(officer, target)
+    if not IsValid(officer) or not IsValid(target) then return end
 
-    if permissionOfficer > permissionPlayer then
-        PD.List:SetDefault(ply)
-        ply:Respawn()
-        print("Du hast "..ply:Nick().." aus der Einheit entfernt.")
+    local unit, sub, job = PD.List:GetPlayerFaction(target)
+    if not unit or not sub or not job then return end
+    if not PD.List:CheckPermissionLevel(officer, unit, sub, job) then return end
 
-        PD.LOGS.Add("[Entfernung]", officer:Nick() .. " hat " .. ply:Nick() .. " aus der Einheit entfernt.", Color(255, 0, 0))
-    else
-        print("Du hast nicht die nötigen Rechte um diesen Spieler zu entfernen.")
+    PD.List:RemoveFactionByCharID(target:GetCharacterID(), true, target)
 
-        PD.LOGS.Add("[Entfernung]", officer:Nick() .. " hat versucht " .. ply:Nick() .. " aus der Einheit zu entfernen, hat aber nicht die nötigen Rechte.", Color(255, 0, 0))
+    if PD.LOGS and PD.LOGS.Add then
+        PD.LOGS.Add("[Entfernung]", officer:Nick() .. " hat " .. target:Nick() .. " aus der Einheit entfernt.", Color(255, 0, 0))
     end
 end
 
-function PD.List:InvitePlayer(officer, ply)
-    local permissionOfficer = PD.List:CheckPermission(officer)
+function PD.List:InvitePlayer(officer, target)
+    if not IsValid(officer) or not IsValid(target) then return end
 
-    if permissionOfficer >= 9 then
-        local unit, sub, job = PD.List:GetPlayerData(officer)
-        local unit2, sub2, job2 = PD.List:GetPlayerData(ply)
+    local unit, sub = PD.List:GetPlayerFaction(officer)
+    if not unit or not sub then return end
 
-        if unit2 == unit then
-            print("Der Spieler ist bereits in der Einheit.")
-            return
-        end
+    local officerRank = PD.List:CheckPermission(officer)
+    if officerRank < 1 and not officer:IsAdmin() then return end
 
-        PD.List:SetPlayerData(ply, unit, sub, "Private")
-        ply:Respawn()
-        print("Du hast "..ply:Nick().." in die Einheit aufgenommen.")
+    local inviteJob = GetDefaultJobForSubunit(unit, sub)
+    if not inviteJob then return end
 
-        PD.LOGS.Add("[Aufnahme]", officer:Nick() .. " hat " .. ply:Nick() .. " in die Einheit aufgenommen.", Color(0, 255, 0))
-    else
-        print("Du hast nicht die nötigen Rechte um diesen Spieler in die Einheit aufzunehmen." .. permissionOfficer)
+    PD.List:SetPlayerFaction(target, unit, sub, inviteJob)
 
-        PD.LOGS.Add("[Aufnahme]", officer:Nick() .. " hat versucht " .. ply:Nick() .. " in die Einheit aufzunehmen, hat aber nicht die nötigen Rechte.", Color(255, 0, 0))
+    if PD.LOGS and PD.LOGS.Add then
+        PD.LOGS.Add("[Aufnahme]", officer:Nick() .. " hat " .. target:Nick() .. " in die Einheit aufgenommen.", Color(0, 255, 0))
     end
 end
 
-net.Receive("PD.List.Invite", function(len, ply)
-    local ply2 = net.ReadEntity()
-    PD.List:InvitePlayer(ply, ply2)
+net.Receive("PD.List.Invite", function(_, ply)
+    local officer = net.ReadEntity()
+    local target = net.ReadEntity()
+
+    if officer ~= ply then officer = ply end
+    PD.List:InvitePlayer(officer, target)
 end)
 
-net.Receive("PD.List.Kick", function(len, ply)
-    local ply2 = net.ReadEntity()
-    PD.List:KickPlayer(ply, ply2)
+net.Receive("PD.List.Kick", function(_, ply)
+    local officer = net.ReadEntity()
+    local target = net.ReadEntity()
+
+    if officer ~= ply then officer = ply end
+    PD.List:KickPlayer(officer, target)
 end)
 
 net.Receive("PD.List.RankUp", function(len, ply)
-    local ply2 = net.ReadEntity()
-    PD.List:RankUP(ply, ply2)
+    local target = FindTargetFromRankNet(len)
+    PD.List:RankUP(ply, target)
 end)
 
 net.Receive("PD.List.RankDown", function(len, ply)
-    local ply2 = net.ReadEntity()
-    PD.List:RankDown(ply, ply2)
+    local target = FindTargetFromRankNet(len)
+    PD.List:RankDown(ply, target)
 end)
 
-net.Receive("PD.List.RequestData", function(len, ply)
+net.Receive("PD.List.RequestData", function(_, ply)
+    if not IsValid(ply) then return end
+
+    net.Start("PD.List.SendData")
+    net.WriteTable(PD.List:GetAllData())
+    net.Send(ply)
+end)
+
+net.Receive("PD.List.AdminChange", function(_, ply)
+    print("[PD.List.AdminChange] Net receive gestartet")
+
+    if not IsValid(ply) then
+        print("[PD.List.AdminChange] Abbruch: ply ist nicht valide")
+        return
+    end
+
+    print("[PD.List.AdminChange] Sender:", ply:Nick(), ply:SteamID64(), "Admin:", ply:IsAdmin())
+
+    if not ply:IsAdmin() then
+        print("[PD.List.AdminChange] Abbruch: Spieler ist kein Admin")
+        return
+    end
+
+    local steamid = net.ReadString()
+    local charID = net.ReadString()
+    local unit = net.ReadString()
+    local subunit = net.ReadString()
+    local job = net.ReadString()
+
+    print("[PD.List.AdminChange] Gelesene Daten:")
+    print("  steamid =", tostring(steamid))
+    print("  charID  =", tostring(charID))
+    print("  unit    =", tostring(unit))
+    print("  subunit =", tostring(subunit))
+    print("  job     =", tostring(job))
+
+    if not steamid or steamid == "" then
+        print("[PD.List.AdminChange] Abbruch: steamid leer oder nil")
+        return
+    end
+
+    if not charID or charID == "" then
+        print("[PD.List.AdminChange] Abbruch: charID leer oder nil")
+        return
+    end
+
+    print("[PD.List.AdminChange] Prüfe PD.Char.UpdateStoredCharJobData:", PD.Char and PD.Char.UpdateStoredCharJobData and "vorhanden" or "NICHT vorhanden")
+
+    local ok = PD.Char and PD.Char.UpdateStoredCharJobData and PD.Char:UpdateStoredCharJobData(steamid, charID, unit, subunit, job)
+    print("[PD.List.AdminChange] UpdateStoredCharJobData Ergebnis:", tostring(ok))
+
+    if not ok then
+        print("[PD.List.AdminChange] Abbruch: UpdateStoredCharJobData fehlgeschlagen")
+        return
+    end
+
+    local target = FindPlayerbyID(steamid)
+    print("[PD.List.AdminChange] FindPlayerbyID Ergebnis:", IsValid(target) and target:Nick() or "kein valider Spieler")
+
+    if IsValid(target) then
+        print("[PD.List.AdminChange] Target CharacterID:", tostring(target:GetCharacterID()))
+    end
+
+    if IsValid(target) and target:GetCharacterID() == charID then
+        print("[PD.List.AdminChange] Zielspieler ist online und aktiver Char passt, SetPlayerFaction wird aufgerufen")
+        PD.List:SetPlayerFaction(target, unit, subunit, job)
+        print("[PD.List.AdminChange] SetPlayerFaction ausgeführt")
+    else
+        print("[PD.List.AdminChange] Offline- oder nicht aktiver Char-Pfad wird genutzt")
+
+        local oldFactionUnit, oldFactionSub, oldFactionJob = PD.List:GetPlayerFactionByCharID(charID)
+        print("[PD.List.AdminChange] Alte Fraktion:")
+        print("  oldFactionUnit =", tostring(oldFactionUnit))
+        print("  oldFactionSub  =", tostring(oldFactionSub))
+        print("  oldFactionJob  =", tostring(oldFactionJob))
+
+        if oldFactionUnit and oldFactionSub and oldFactionJob then
+            local jobNode = PD.List.Tbl[oldFactionUnit]
+                and PD.List.Tbl[oldFactionUnit].subunits
+                and PD.List.Tbl[oldFactionUnit].subunits[oldFactionSub]
+                and PD.List.Tbl[oldFactionUnit].subunits[oldFactionSub].jobs
+                and PD.List.Tbl[oldFactionUnit].subunits[oldFactionSub].jobs[oldFactionJob]
+
+            print("[PD.List.AdminChange] Alter JobNode gefunden:", jobNode and "ja" or "nein")
+
+            if jobNode and jobNode.players then
+                print("[PD.List.AdminChange] Entferne alten Faction-Eintrag für CharID:", tostring(charID))
+                jobNode.players[charID] = nil
+            else
+                print("[PD.List.AdminChange] Konnte alten JobNode oder players nicht auflösen")
+            end
+        else
+            print("[PD.List.AdminChange] Keine alte Fraktion für CharID gefunden")
+        end
+
+        local resolvedUnit = nil
+        local resolvedSub = nil
+        local resolvedJob = nil
+
+        print("[PD.List.AdminChange] Starte Auflösung der Ziel-Fraktion aus PD.JOBS.Jobs")
+
+        for unitIndex, unitData in pairs(PD.JOBS.Jobs or {}) do
+            local unitMatch = unitIndex == unit or unitData.name == unit
+            print("[PD.List.AdminChange] Prüfe Unit:", tostring(unitIndex), "Name:", tostring(unitData.name), "Match:", tostring(unitMatch))
+
+            if not unitMatch then
+                continue
+            end
+
+            for subIndex, subData in pairs(unitData.subunits or {}) do
+                local subMatch = subIndex == subunit or subData.name == subunit
+                print("[PD.List.AdminChange]   Prüfe SubUnit:", tostring(subIndex), "Name:", tostring(subData.name), "Match:", tostring(subMatch))
+
+                if not subMatch then
+                    continue
+                end
+
+                for jobIndex, jobData in pairs(subData.jobs or {}) do
+                    local jobMatch = jobIndex == job or jobData.name == job
+                    print("[PD.List.AdminChange]     Prüfe Job:", tostring(jobIndex), "Name:", tostring(jobData.name), "Match:", tostring(jobMatch))
+
+                    if jobMatch then
+                        resolvedUnit = unitIndex
+                        resolvedSub = subIndex
+                        resolvedJob = jobIndex
+                        print("[PD.List.AdminChange]     Ziel-Fraktion erfolgreich aufgelöst")
+                        break
+                    end
+                end
+
+                if resolvedUnit then break end
+            end
+
+            if resolvedUnit then break end
+        end
+
+        print("[PD.List.AdminChange] Aufgelöste Werte:")
+        print("  resolvedUnit =", tostring(resolvedUnit))
+        print("  resolvedSub  =", tostring(resolvedSub))
+        print("  resolvedJob  =", tostring(resolvedJob))
+
+        if resolvedUnit and resolvedSub and resolvedJob then
+            local targetJobNode = PD.List.Tbl[resolvedUnit]
+                and PD.List.Tbl[resolvedUnit].subunits
+                and PD.List.Tbl[resolvedUnit].subunits[resolvedSub]
+                and PD.List.Tbl[resolvedUnit].subunits[resolvedSub].jobs
+                and PD.List.Tbl[resolvedUnit].subunits[resolvedSub].jobs[resolvedJob]
+
+            print("[PD.List.AdminChange] Ziel-JobNode gefunden:", targetJobNode and "ja" or "nein")
+
+            if targetJobNode and targetJobNode.players then
+                print("[PD.List.AdminChange] Trage Char in neue Fraktion ein:", tostring(charID))
+
+                targetJobNode.players[charID] = {
+                    name = charID,
+                    steamid = steamid,
+                    unit = resolvedUnit,
+                    subunit = resolvedSub,
+                    job = resolvedJob,
+                    join = os.date("%d.%m.%Y %H:%M:%S", os.time()),
+                    lastplay = os.date("%d.%m.%Y %H:%M:%S", os.time()),
+                    playtime = 0
+                }
+
+                print("[PD.List.AdminChange] Neuer Eintrag gesetzt, speichere und synchronisiere")
+                PD.List.Save()
+                PD.List:SyncAll()
+                print("[PD.List.AdminChange] Save und SyncAll abgeschlossen")
+            else
+                print("[PD.List.AdminChange] Fehler: Ziel-JobNode oder players fehlt")
+            end
+        else
+            print("[PD.List.AdminChange] Fehler: Ziel-Fraktion konnte nicht aufgelöst werden")
+        end
+    end
+
+    print("[PD.List.AdminChange] Sende Daten an alle Clients")
+    PD.List:SendDataToAllClient()
+
+    if PD.LOGS and PD.LOGS.Add then
+        PD.LOGS.Add("[Fraktionsänderung]", ply:Nick() .. " hat die Fraktion von " .. steamid .. " geändert.", Color(0, 255, 0))
+        print("[PD.List.AdminChange] PD.LOGS.Add ausgeführt")
+    else
+        print("[PD.List.AdminChange] PD.LOGS.Add nicht verfügbar")
+    end
+
+    print("[PD.List.AdminChange] Verarbeitung abgeschlossen")
+end)
+
+hook.Add("PD_Faction_Change", "PD.List.SendDataOnFactionChange.Admin", function()
     PD.List:SendDataToAllClient()
 end)
 
-net.Receive("PD.List.AdminChange", function(len, ply)
-    if ply:IsAdmin() then
-        local steamid = net.ReadString()
-        local charID = net.ReadString()
-        local unit = net.ReadString()
-        local subunit = net.ReadString()
-        local job = net.ReadString()
+hook.Add("PlayerInitialSpawn", "PD.List.SendAdminFactionData.OnSpawn", function(ply)
+    timer.Simple(0.4, function()
+        if not IsValid(ply) then return end
 
-        local tbl = PD.Char:LoadChar(steamid, "PD.List.AdminChange")
+        net.Start("PD.List.SendData")
+        net.WriteTable(PD.List:GetAllData())
+        net.Send(ply)
+    end)
+end)
 
-        for k, v in pairs(tbl) do
-            if v.id == charID then
-                tbl[k].faction.unit = unit
-                tbl[k].faction.subunit = subunit
-                tbl[k].faction.job = job
-
-                PD.Char:SaveChar(steamid, tbl)
-
-                local player = FindPlayerbyID(steamid)
-                if player and IsValid(player) then
-                    PD.List:SendDataToAllClient()
-                end
-
-                local jobTable = {}
-                local _, sub = PD.JOBS.GetSubUnit(subunit, false)
-                jobTable = sub.jobs[job] or {}
-
-                hook.Run("PD_Faction_Change", player, unit, subunit, job, jobTable)
-
-                print("Du hast die Fraktion von "..steamid.." geändert.")
-
-                PD.LOGS.Add("[Fraktionsänderung]", ply:Nick() .. " hat die Fraktion von " .. steamid .. " geändert.", Color(0, 255, 0))
-                break
-            end
-        end
-    else
-        print(ply:Nick() .. " hat versucht die Fraktion eines Spielers zu ändern, hat aber keine Admin Rechte.")
-
-        PD.LOGS.Add("[Fraktionsänderung]", ply:Nick() .. " hat versucht die Fraktion eines Spielers zu ändern, hat aber keine Admin Rechte.", Color(255, 0, 0))
-    end
+timer.Simple(1, function()
+    PD.List:SendDataToAllClient()
 end)

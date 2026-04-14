@@ -1,92 +1,14 @@
--- Jobs System by Deadshot
-util.AddNetworkString("PD.JOBS.OpenUnitEditor")
-util.AddNetworkString("PD.JOBS.UpdateTabel")
-util.AddNetworkString("PD.JOBS.SyncJobs")
 PD.JOBS = PD.JOBS or {}
+PD.JOBS.Jobs = PD.JOBS.Jobs or {}
 
-PD.JOBS.Jobs = {
-    ["Ausbildung"] = {
-        default = true,
-        equip = {},
-        color = Color(255, 255, 255),
-        subunits = {
-            ["Rekruten"] = {
-                default = true,
-                equip = {},
-                color = Color(255, 255, 255),
-                maxmambers = 10,
-                unit = "Ausbildung",
-                ismedic = false,
-                isleo = false,
-                isengineer = false,
-                jobs = {
-                    ["Rekrut"] = {
-                        default = true,
-                        equip = {"salute_swep", "cross_arms_swep"},
-                        model = {"models/starwars/grady/gl/ct/ct_trooper.mdl"},
-                        unit = "Rekruten",
-                        salary = 100,
-                        speed = 100,
-                        id = "rekruten_rekrut",
-                        color = Color(255, 255, 255)
-                    }
-                }
-            }
-        }
-    }
-}
-
-local dir = "modules/jobs"
-local file = "/jobs.json"
-
-function PD.JOBS.LoadDir()
-    if not PD.JSON.Exists(dir) then
-        PD.JSON.Create(dir)
-    end
-
-    PD.JOBS.LoadJobs()
-end
-
-function PD.JOBS.LoadJobs()
-    if not PD.JSON.Exists(dir .. file) then
-        PD.JSON.Write(dir .. file, PD.JOBS.Jobs)
-    end
-
-    PD.JOBS.Jobs = PD.JSON.Read(dir .. file)
-end
-
-function PD.JOBS.SaveJobs()
-    if PD.JSON.Exists(dir .. file) then
-        PD.JSON.Delete(dir .. file)
-    end
-
-    PD.JSON.Write(dir .. file, PD.JOBS.Jobs)
-end
-
-hook.Add("PostPDLoaded", "Deadshot_LoadUnits", function()
-    PD.JOBS.LoadDir()
-end)
-PD.JOBS.LoadDir()
-
-hook.Add("PlayerInitialSpawn", "PD.SendJobData", function(ply)
-    PD.JOBS.LoadDir()
-
-    PD.JOBS.UpdateTabel()
+timer.Simple(1, function()
+    net.Start("PD.JOBS.SyncJobs")
+    net.SendToServer()
 end)
 
-net.Receive("PD.JOBS.SyncJobs", function(len, ply)
-    PD.JOBS.LoadDir()
-
-    timer.Simple(0.1, function()
-        PD.JOBS.UpdateTabel()
-    end)
+net.Receive("PD.JOBS.UpdateTabel", function()
+    PD.JOBS.Jobs = net.ReadTable()
 end)
-
-function PD.JOBS.UpdateTabel()
-    net.Start("PD.JOBS.UpdateTabel")
-    net.WriteTable(PD.JOBS.Jobs)
-    net.Broadcast()
-end
 
 local fallback = {
     ["Fallback Unit!"] = {
@@ -94,7 +16,7 @@ local fallback = {
         color = Color(255, 0, 0),
         subunits = {
             ["Fallback Subunit!"] = {
-                maxmambers = 10,
+                maxmembers = 10,
                 default = false,
                 equip = {},
                 color = Color(255, 0, 0),
@@ -119,10 +41,6 @@ local fallback = {
     }
 }
 
-function PD.JOBS.GetFallBackJob()
-    return "Fallback Job!", fallback["Fallback Unit!"].subunits["Fallback Subunit!"].jobs["Fallback Job!"]
-end
-
 function PD.JOBS.GetUnit(name, all)
     if all then
         return PD.JOBS.Jobs
@@ -130,7 +48,7 @@ function PD.JOBS.GetUnit(name, all)
 
     if name then
         for _, i in SortedPairs(PD.JOBS.Jobs) do
-            if _ == name then
+            if i.name == name then
                 return _, i
             end
         end
@@ -150,7 +68,7 @@ function PD.JOBS.GetSubUnit(name, all)
 
     for _, i in SortedPairs(PD.JOBS.Jobs) do
         for _, j in SortedPairs(i.subunits) do
-            subunits[_] = j
+            subunits[j.name] = j
         end
     end
 
@@ -160,7 +78,7 @@ function PD.JOBS.GetSubUnit(name, all)
 
     if name then
         for _, i in SortedPairs(subunits) do
-            if _ == name then
+            if i.name == name then
                 return _, i
             end
         end
@@ -181,7 +99,7 @@ function PD.JOBS.GetJob(name, all)
 
     for _, i in SortedPairs(subunits) do
         for _, j in SortedPairs(i.jobs) do
-            jobs[_] = j
+            jobs[j.name] = j
         end
     end
 
@@ -191,7 +109,7 @@ function PD.JOBS.GetJob(name, all)
 
     if name then
         for _, i in SortedPairs(jobs) do
-            if _ == name then
+            if i.name == name then
                 return _, i
             end
         end
@@ -206,13 +124,68 @@ function PD.JOBS.GetJob(name, all)
     return "Fallback Job!", fallback["Fallback Unit!"].subunits["Fallback Subunit!"].jobs["Fallback Job!"]
 end
 
-function PD.JOBS.GetTable()
-    return PD.JOBS.Jobs
+function PD.JOBS.GetIndex(UnitIndex, SubIndex, JobIndex)
+    local Unit = PD.JOBS.Jobs[UnitIndex]
+    if not Unit then return "Fallback Unit!", fallback["Fallback Unit!"] end
+
+    local SubUnit = Unit.subunits[SubIndex]
+    if not SubUnit then return "Fallback Subunit!", fallback["Fallback Unit!"].subunits["Fallback Subunit!"] end
+
+    local Job = SubUnit.jobs[JobIndex]
+    if not Job then return "Fallback Job!", fallback["Fallback Unit!"].subunits["Fallback Subunit!"].jobs["Fallback Job!"] end
+
+    return JobIndex, Job
 end
 
-concommand.Add("pd_jobs_prints", function()
+--[[
+
+Function zum bekommen aller Fraktionen für combobox
+
+Struktur:
+
+{
+    [1] = {
+        name = "Fraktion | Untereinheit | Rang",
+        data = {
+            faction = "Fraktion",
+            subfaction = "Untereinheit",
+            job = "Rang"
+        }
+    }
+}
+]]
+
+function PD.JOBS.GetAllFactions()
+    local tbl = {}
+    local i = 1
+
+    for k, v in SortedPairs(PD.JOBS.GetUnit(false, true)) do
+        for k2, v2 in SortedPairs(v.subunits) do
+            for k3, v3 in SortedPairs(v2.jobs) do
+                tbl[i] = {
+                    name = v.name .. " | " .. v2.name .. " | " .. v3.name,
+                    data = {
+                        faction = k,
+                        subfaction = k2,
+                        job = k3
+                    }
+                }
+                i = i + 1
+            end
+        end
+    end
+
+    return tbl
+end
+
+concommand.Add("pd_jobs_print_AllFactions", function()
+    print("===============================Start=======================================")
+    PrintTable(PD.JOBS.GetAllFactions())
+    print("================================Ende=======================================")
+end)
+
+concommand.Add("pd_jobs_prints_cl", function()
     print("===============================Start=======================================")
     PrintTable(PD.JOBS.Jobs)
     print("================================Ende=======================================")
 end)
-

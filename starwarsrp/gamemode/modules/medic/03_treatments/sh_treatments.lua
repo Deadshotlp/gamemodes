@@ -25,7 +25,7 @@ PD.DM.Treatments.tbl = {
     [2] = {
         name = "Operativer Eingriff",
         condition = function(actor, patient_tbl, body_part_index, ply)
-            if not PD.DM.IsMedic(actor) then return false end
+            -- if not PD.DM.IsMedic(actor) then return false end
 
             return PD.DM.FindTreatmentValid(actor, patient_tbl, body_part_index, ply, "operativer_eingriff")
         end,
@@ -37,7 +37,7 @@ PD.DM.Treatments.tbl = {
     [3] = {
         name = "Bacta Tank (Arbeitstitel)",
         condition = function(actor, patient_tbl, body_part_index, ply)
-            if not PD.DM.IsMedic(actor) then return false end
+            -- if not PD.DM.IsMedic(actor) then return false end
 
             return PD.DM.FindTreatmentValid(actor, patient_tbl, body_part_index, ply, "bacta_tank")
         end,
@@ -59,7 +59,7 @@ PD.DM.Treatments.tbl = {
     [5] = {
         name = "Oberflächige Splitter Entfernen",
         condition = function(actor, patient_tbl, body_part_index, ply)
-            if not PD.DM.IsMedic(actor) then return false end
+            -- if not PD.DM.IsMedic(actor) then return false end
 
             return PD.DM.FindTreatmentValid(actor, patient_tbl, body_part_index, ply, "oberflaechige_splitter_entfernen")
         end,
@@ -81,7 +81,7 @@ PD.DM.Treatments.tbl = {
     [7] = {
         name = "Gasbinder verabreichen",
         condition = function(actor, patient_tbl, body_part_index, ply)
-            if not PD.DM.IsMedic(actor) then return false end
+            -- if not PD.DM.IsMedic(actor) then return false end
 
             return PD.DM.FindTreatmentValid(actor, patient_tbl, body_part_index, ply, "gasbinder")
         end,
@@ -93,7 +93,7 @@ PD.DM.Treatments.tbl = {
     [8] = {
         name = "Enkephalin verabreichen",
         condition = function(actor, patient_tbl, body_part_index, ply)
-            if not PD.DM.IsMedic(actor) then return false end
+            -- if not PD.DM.IsMedic(actor) then return false end
 
             return PD.DM.FindTreatmentValid(actor, patient_tbl, body_part_index, ply, "enkephalin")
         end,
@@ -105,7 +105,7 @@ PD.DM.Treatments.tbl = {
     [9] = {
         name = "Dermasel auftragen",
         condition = function(actor, patient_tbl, body_part_index, ply)
-            if not PD.DM.IsMedic(actor) then return false end
+            -- if not PD.DM.IsMedic(actor) then return false end
 
             return PD.DM.FindTreatmentValid(actor, patient_tbl, body_part_index, ply, "dermasel")
         end,
@@ -117,7 +117,7 @@ PD.DM.Treatments.tbl = {
     [10] = {
         name = "Bonemer verabreichen",
         condition = function(actor, patient_tbl, body_part_index, ply)
-            if not PD.DM.IsMedic(actor) then return false end
+            -- if not PD.DM.IsMedic(actor) then return false end
 
             return PD.DM.FindTreatmentValid(actor, patient_tbl, body_part_index, ply, "bonemer")
         end,
@@ -129,7 +129,7 @@ PD.DM.Treatments.tbl = {
     [11] = {
         name = "Prothese anbauen",
         condition = function(actor, patient_tbl, body_part_index, ply)
-            if not PD.DM.IsMedic(actor) then return false end
+            -- if not PD.DM.IsMedic(actor) then return false end
 
             return PD.DM.FindTreatmentValid(actor, patient_tbl, body_part_index, ply, "prothese_anbauen")
         end,

@@ -438,6 +438,13 @@ local function create_footer(pnl)
     end
 end
 
+local SpeakInMenu = false
+
+local function ToggleSpeakInMenu()
+    SpeakInMenu = not SpeakInMenu
+    permissions.EnableVoiceChat(SpeakInMenu)
+end
+
 function PD.DM.UI.OpenTreatmentInterface()
     if IsValid(PD.DM.UI.Frame) then
         if IsValid(PD.DM.UI.TreatmentPanel) and IsValid(PD.DM.UI.BodyPanel) and (body_part_index_changed or old_triage ~= medical_tbl.triage_card) then
@@ -457,10 +464,45 @@ function PD.DM.UI.OpenTreatmentInterface()
         return
     end
 
-    PD.DM.UI.Frame = PD.Frame(LANG.DM_UI_TITLE, ScrW() / 1.25,ScrH() / 1.25, true) --PD.Frame(LANG.DM_UI_TITLE, PD.W(ScrW() / 1.75), PD.H(ScrH() / 1.75), true)
+    PD.DM.UI.Frame = PD.Frame(LANG.DM_UI_TITLE, ScrW() / 1.25,ScrH() / 1.25, true)
     PD.DM.UI.Frame.OnClose = function()
         PD.DM.Main.EndInteraction(patient)
+        SpeakInMenu = false
+        permissions.EnableVoiceChat( false )
     end
+
+    PD.DM.UI.SpeakButton = vgui.Create("DButton", PD.DM.UI.Frame)
+    PD.DM.UI.SpeakButton:SetSize(PD.W(30), PD.H(30))
+    PD.DM.UI.SpeakButton:SetPos(PD.W(10), PD.H(8))
+    PD.DM.UI.SpeakButton:SetText("")
+    PD.DM.UI.SpeakButton._hover = 0
+    PD.DM.UI.SpeakButton.Paint = function(self, w, h)
+        local icon
+        if SpeakInMenu then
+            icon = "medical/mic_off.png"
+        else
+            icon = "medical/mic_on.png"
+        end
+
+        local hover = self:IsHovered()
+        self._hover = Lerp(FrameTime() * 10, self._hover, hover and 1 or 0)
+
+        local bgAlpha = 50 + self._hover * 150
+        local col = PD.LerpColor(PD.Theme.Colors.AccentGray, PD.Theme.Colors.AccentRed, self._hover)
+        draw.RoundedBox(0, 0, 0, w, h, Color(col.r, col.g, col.b, bgAlpha))
+
+        surface.SetDrawColor(255, 255, 255, 255)
+        surface.SetMaterial(Material(icon))
+        surface.DrawTexturedRect(0, 0, w, h)
+    end
+
+    PD.DM.UI.SpeakButton.DoClick = function()
+        ToggleSpeakInMenu()
+    end
+
+    PD.DM.UI.SpeakButton.OnCursorEntered = function()
+            surface.PlaySound("UI/buttonrollover.wav")
+        end
 
     PD.DM.UI.ContentPanel = PD.Panel(PD.DM.UI.Frame, nil, function(self, w, h)
         draw.DrawText(LANG.DM_UI_ACTIONS, "MLIB.25", w / 6, 0, Color(255, 255, 255, 255), TEXT_ALIGN_CENTER)

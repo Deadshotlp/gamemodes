@@ -26,7 +26,6 @@ PD.Admin.Ranks = {
     ["teamleitung"] = 8,
     ["moderator"] = 4,
     ["supporter"] = 2,
-    ["user"] = 0
 }
 
 PD.Admin.Equip = {

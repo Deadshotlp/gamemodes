@@ -179,6 +179,7 @@ hook.Add("CalcView", "ImmersiveCameraEffects", function(ply, pos, angles, fov)
         view.drawviewer = false
     end
 
+
     return view
 end)
 

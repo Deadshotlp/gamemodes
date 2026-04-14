@@ -69,7 +69,7 @@ end
 for k, v in pairs(PD.JOBS.GetSubUnit(false, true)) do
     --PrintTable(v)
     table.insert(PD.Comlink.Table, {
-        name = k,
+        name = v.name,
         color = v.color,
         mute = true,
         check = function(ply, unit)
@@ -80,7 +80,7 @@ end
 
 for i = 1, 10 do 
     table.insert(PD.Comlink.Table, {
-        name = "Eiheit " .. i,
+        name = "Einheit " .. i,
         color = Color(255, 255, 255),
         mute = false,
         check = function(ply)

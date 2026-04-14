@@ -139,13 +139,15 @@ function PD.Comlink:Menu()
         -- Slots anzeigen (5 Slots)
         local slotW = (w - PD.W(30)) / 3
         for i = 1, 3 do
+            local index = ply["Extra" .. i]
+            local channelName = index and PD.Comlink.Table[index] and PD.Comlink.Table[index].name or false
             local slotX = PD.W(15) + (i - 1) * slotW
             local slotY = PD.H(28)
-            local channel = ply["Extra" .. i] or false
-            local channelText = channel or "---"
+            local channel = channelName or false
+            local channelText = tostring(channel) or "---"
             
-            if #channelText > 8 then
-                channelText = string.sub(channelText, 1, 6) .. ".."
+            if #channelText > 30 then
+                channelText = string.sub(channelText, 1, 28) .. ".."
             end
             
             -- Slot Hintergrund
@@ -162,6 +164,7 @@ function PD.Comlink:Menu()
             
             -- Kanal Name
             local textCol = channel and PD.Theme.Colors.Text or PD.Theme.Colors.TextDim
+            local channelText = channel and channelText or "---"
             draw.DrawText(channelText, "MLIB.12", slotX + (slotW - PD.W(3)) / 2, slotY + PD.H(18), textCol, TEXT_ALIGN_CENTER)
         end
     end
@@ -256,18 +259,19 @@ function PD.Comlink:Menu()
             extraBtn.OnCursorExited = function() btnHover = false end
             
             extraBtn.DoClick = function()
+                surface.PlaySound("UI/buttonclick.wav")
                 if ply["Extra" .. i] == k then
                     ply["Extra" .. i] = false
 
                     net.Start("PD.Comlink.EndVoice")
-                        net.WriteString(k)
+                        net.WriteInt(k, 8)
                         net.WriteInt(i + 1, 4)
                     net.SendToServer()
                 else
                     ply["Extra" .. i] = k
 
                     net.Start("PD.Comlink.StartVoice")
-                        net.WriteString(k)
+                        net.WriteInt(k, 8)
                         net.WriteInt(i + 1, 4)
                     net.SendToServer()
                 end
@@ -276,6 +280,10 @@ function PD.Comlink:Menu()
                 timer.Simple(0.1, function()
                     PD.Comlink:Menu()
                 end)
+            end
+
+            extraBtn.OnCursorEntered = function()
+                surface.PlaySound("UI/buttonrollover.wav")
             end
         end
     end
@@ -324,11 +332,12 @@ AddSmoothElement(ScrW() - PD.W(240), PD.H(20), PD.W(220), PD.H(130), function(sm
     local titleText = LANG.COMLINK_UI_TITLE or "KOMMUNIKATION"
 
     if not table.IsEmpty(comlinkChannelAktive) then
-        titleText = comlinkChannelAktive.channel .. " - AKTIV"
+        local index = comlinkChannelAktive.channel
+        titleText = index and PD.Comlink.Table[index] and PD.Comlink.Table[index].name .. " - AKTIV" or "Nicht Verbunden"
     end
 
-    if #titleText > 18 then
-        titleText = string.sub(titleText, 1, 16) .. ".."
+    if #titleText > 30 then
+        titleText = string.sub(titleText, 1, 28) .. ".."
     end
     PD.DrawLabel(titleText, "MLIB.12", smoothX + PD.W(10), smoothY + PD.H(6))
 
@@ -352,10 +361,12 @@ AddSmoothElement(ScrW() - PD.W(240), PD.H(20), PD.W(220), PD.H(130), function(sm
 
     for i, slot in ipairs(slots) do
         local y = slotY + (i - 1) * (slotHeight + PD.H(1))
-        local channelText = slot.channel or "---"
+        local index = ply["Extra" .. i]
+        local channelName = index and PD.Comlink.Table[index] and PD.Comlink.Table[index].name or "Nicht Verbunden"
+        local channelText = tostring(channelName) or "---"
         
-        if slot.channel and #channelText > 18 then
-            channelText = string.sub(channelText, 1, 16) .. ".."
+        if slot.channel and #channelText > 30 then
+            channelText = string.sub(channelText, 1, 28) .. ".."
         end
         
         -- Slot Label
@@ -383,24 +394,25 @@ end)
 local function ActivateComlinkSlot(slotNum)
     local ply = LocalPlayer()
     local channel = ply["Extra" .. slotNum]
-    
+
     if not channel then return end
-    
     -- Wenn bereits ein Kanal aktiv ist, diesen zuerst beenden
     if ply.ActiveChannel then
         net.Start("PD.Comlink.EndVoice")
-            net.WriteString(ply.ActiveChannel)
+            net.WriteInt(ply.ActiveChannel, 8)
             net.WriteInt(1, 4)
         net.SendToServer()
     end
     
     -- Neuen Kanal aktivieren
     ply.ActiveChannel = channel
-    
     net.Start("PD.Comlink.StartVoice")
-        net.WriteString(channel)
-        net.WriteInt(slotNum + 1, 4)
+        net.WriteInt(channel, 8)
+        --net.WriteInt(slotNum + 1, 4)
+        net.WriteInt(1, 4)
     net.SendToServer()
+
+    surface.PlaySound("mario/funk_start.mp3")
 
     return channel
 end
@@ -411,12 +423,14 @@ local function DeactivateComlinkSlot()
     
     if ply.ActiveChannel then
         net.Start("PD.Comlink.EndVoice")
-            net.WriteString(ply.ActiveChannel)
+            net.WriteInt(ply.ActiveChannel, 8)
             net.WriteInt(1, 4)
         net.SendToServer()
         
         ply.ActiveChannel = false
     end
+
+    surface.PlaySound("mario/funk_ende.mp3")
 end
 
 -- Hook für Keybinds
@@ -430,11 +444,12 @@ hook.Add("PlayerButtonDown", "PD.Comlink.PlayerButtonDown", function(ply, button
         return
     end
 
-    -- Prüfe alle 5 Slots
-    for i = 1, 5 do
+    -- Prüfe alle 3 Slots
+    for i = 1, 3 do
         local bindID = "comlink_extra" .. i
         if PD.Binds.List[bindID] and PD.Binds.List[bindID].Key == button and ply["Extra" .. i] then
             local channel = ActivateComlinkSlot(i)
+
             comlinkChannelAktive = {channel = channel, button = button}
             return
         end

@@ -11,18 +11,18 @@ PD.Officer.Table = {
     to = "Nicht im Dienst"
 }
 PD.Officer.JobMap = {
-    co = {"Infanterie", "Death trooper", "Piloten Corps"}, -- Einheiten die durchsucht werden
-    eo = {"Infanterie", "Death trooper", "Piloten Corps"},
-    mo = {"Medical Trooper"},
-    no = {"Flottencrew"},
-    so = {"Security Forces"},
-    to = {"Combat Engineers"}
+    co = {"Infanterie", "Death Trooper", "Piloten Corps"}, -- Alle Einheiten, die als CO in Frage kommen
+    eo = {"Infanterie", "Death Trooper", "Piloten Corps"},  -- Alle Einheiten, die als EO in Frage kommen
+    mo = {"Medical Trooper"}, -- Medics
+    no = {"Flottencrew"}, -- Navy
+    so = {"Security Forces"}, -- Security
+    to = {"Combat Engineers"} -- Techniker
 }
 
 -- Add Kommand zum Manuellen Spieler zuweisen
 hook.Add("PlayerSay", "PD.Officer.ManualAssign", function(ply, text)
-    if string.sub(text, 1, 11) == "!officer " then
-        local args = string.Split(string.sub(text, 12), " ")
+    if string.sub(text, 1, 9) == "!officer " then
+        local args = string.Split(string.sub(text, 10), " ")
         local roleKey = args[1]
         local targetName = ply:Nick() -- Standardmäßig auf den Spieler selbst setzen
 
@@ -43,55 +43,91 @@ end)
 util.AddNetworkString("PD.Officer:Sync")
 util.AddNetworkString("PD.Officer:Request")
 
-local function findHighestRankInUnit(unit)
-    local highestRank = 0
-    local highestPlayer = nil
-
-    local allSubUnits = {}
-    for k, v in SortedPairs(PD.JOBS.GetSubUnit(false, true)) do
-        if v.unit == unit then
-            table.insert(allSubUnits, k)
-        end
-    end
-
-    for _, ply in ipairs(player.GetAll()) do
-        local jobID, jobTable = ply:GetJob()
-        if jobTable and jobTable.unit == unit or table.HasValue(allSubUnits, jobTable.unit) then
-            local rank = PD.List.JobRanks[jobID] or 0
-            if rank > highestRank then
-                highestRank = rank
-                highestPlayer = ply
+-- Ermittelt den übergeordneten Unit-Namen für eine Subunit
+local function getParentUnitName(subunitName)
+    for _, unitData in pairs(PD.JOBS.Jobs) do
+        if unitData.subunits then
+            for _, subunitData in pairs(unitData.subunits) do
+                if subunitData.name == subunitName then
+                    return unitData.name
+                end
             end
         end
     end
-
-    return highestPlayer
+    return nil
 end
 
-local function matches(roleKey)
-    local roleData = PD.Officer.JobMap[roleKey]
-    for _, ply in ipairs(player.GetAll()) do
-        local jobID, jobTable = ply:GetJob()
-        if jobTable.unit and table.HasValue(roleData, jobTable.unit) then
-            local highestRankPlayer = findHighestRankInUnit(jobTable.unit)
-            if highestRankPlayer and highestRankPlayer == ply then
-                PD.Officer.Table[roleKey] = ply:Nick()
+-- Prüft ob ein Spieler-Job zu den gesuchten Unit/Subunit-Namen passt
+local function matchesRole(jobTable, searchNames)
+    if not jobTable or not jobTable.unit then return false end
 
-                return
-            end
+    local subunitName = jobTable.unit
+    local parentUnitName = getParentUnitName(subunitName)
+
+    for _, searchName in ipairs(searchNames) do
+        if subunitName == searchName or parentUnitName == searchName then
+            return true
         end
     end
+
+    return false
+end
+
+-- Sammelt alle Spieler für eine Rolle, sortiert nach Position (niedrigste Position = höchster Rang)
+local function getPlayersForRole(roleKey)
+    local roleData = PD.Officer.JobMap[roleKey]
+    if not roleData then return {} end
+
+    local players = {}
+
+    for _, ply in ipairs(player.GetAll()) do
+        local jobID, jobTable = ply:GetJob()
+        if jobTable and matchesRole(jobTable, roleData) then
+            local position = jobTable.position or 999
+            table.insert(players, {ply = ply, position = position})
+        end
+    end
+
+    table.sort(players, function(a, b) return a.position < b.position end)
+    return players
 end
 
 local function recompute()
-    PD.Officer.Table.co = "Nicht im Dienst"
-    PD.Officer.Table.eo = "Nicht im Dienst"
-    PD.Officer.Table.mo = "Nicht im Dienst"
-    PD.Officer.Table.no = "Nicht im Dienst"
-    PD.Officer.Table.so = "Nicht im Dienst"
-    PD.Officer.Table.to = "Nicht im Dienst"
-    for officer, _ in SortedPairs(PD.Officer.Table) do
-        matches(officer)
+    for k, _ in pairs(PD.Officer.Table) do
+        PD.Officer.Table[k] = "Nicht im Dienst"
+    end
+
+    local assignedPlayers = {}
+
+    -- CO bekommt den höchsten Spieler, EO den zweithöchsten
+    local coPlayers = getPlayersForRole("co")
+    for _, data in ipairs(coPlayers) do
+        if not assignedPlayers[data.ply] then
+            PD.Officer.Table.co = data.ply:Nick()
+            assignedPlayers[data.ply] = true
+            break
+        end
+    end
+
+    local eoPlayers = getPlayersForRole("eo")
+    for _, data in ipairs(eoPlayers) do
+        if not assignedPlayers[data.ply] then
+            PD.Officer.Table.eo = data.ply:Nick()
+            assignedPlayers[data.ply] = true
+            break
+        end
+    end
+
+    -- Restliche Rollen: jeweils höchster verfügbarer Spieler
+    for _, roleKey in ipairs({"mo", "no", "so", "to"}) do
+        local rolePlayers = getPlayersForRole(roleKey)
+        for _, data in ipairs(rolePlayers) do
+            if not assignedPlayers[data.ply] then
+                PD.Officer.Table[roleKey] = data.ply:Nick()
+                assignedPlayers[data.ply] = true
+                break
+            end
+        end
     end
 end
 

@@ -48,8 +48,15 @@ AddSmoothElement(PD.W(20), ScrH() - PD.H(125), PD.W(350), PD.H(105), function(sm
     -- Charakterdaten holen
     local rpName = ply:GetNWString("rpname", ply:Nick())
     local jobID, jobTbl = ply:GetJob()
-    local jobName = jobTbl and jobID or "Unbekannt"
+    local jobName = jobTbl and jobTbl.name or "Unbekannt"
     local unitName = jobTbl and jobTbl.unit or ""
+
+    -- Id Entfernen, wenn showid true ist
+    if jobTbl and jobTbl.showid then
+        -- es werden die ersten 7 zeichen entfernt 00-0000
+        local name = string.sub(rpName, 8)
+        rpName = name
+    end
 
     -- Text-Breiten berechnen
     surface.SetFont("MLIB.28")
@@ -85,6 +92,15 @@ AddSmoothElement(PD.W(20), ScrH() - PD.H(125), PD.W(350), PD.H(105), function(sm
 
     -- Trennlinie unter dem Namen
     PD.DrawDivider(smoothX + PD.W(15), smoothY + PD.H(38), panelW - PD.W(30))
+
+    if jobTbl.showid then
+        local nameWords = string.Split(rpName, " ")
+        rpName = ""
+
+        for i = 2, #nameWords do
+            rpName = rpName .. " " .. nameWords[i]
+        end
+    end
 
     -- Charaktername
     draw.DrawText(rpName, "MLIB.28", smoothX + PD.W(15), smoothY + PD.H(8), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
@@ -217,6 +233,10 @@ AddSmoothElement(ScrW() - PD.W(20), ScrH() - PD.H(95), PD.W(0), PD.H(75), functi
         local clip = wep:Clip1()
         local ammo = ply:GetAmmoCount(wep:GetPrimaryAmmoType())
 
+        if not wep:GetMaxClip1() or wep:GetMaxClip1() <= 0 then
+            return
+        end
+
         if clip == -1 then
             clip = 0
         end
@@ -265,8 +285,26 @@ AddSmoothElement(ScrW() - PD.W(20), ScrH() - PD.H(95), PD.W(0), PD.H(75), functi
         -- Reserve Munition (kleinere Zahl mit Trennstrich)
         draw.DrawText("/" .. ammo, "MLIB.25", smoothX + PD.W(12) + clipW + PD.W(5), smoothY + PD.H(30), PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
 
+        local firemode = ""
+
+        if wep and wep.GetFireMode then
+            firemode = wep:GetFireMode()
+        end
+
+        local firetext = ""
+
+        if firemode == 1 then
+            firetext = "DAUERFEUER"
+        elseif firemode == 2 then
+            firetext = "BURSTFEUER"
+        elseif firemode == 3 then
+            firetext = "EINZELFEUER"
+        elseif firemode == 4 then
+            firetext = "GESICHERT"
+        end
+
         -- "AMMO" Label
-        PD.DrawLabel("AMMO", "MLIB.12", smoothX + PD.W(12), smoothY + panelH - PD.H(18))
+        PD.DrawLabel(firetext, "MLIB.12", smoothX + PD.W(12), smoothY + panelH - PD.H(18))
     end
 end)
 

@@ -259,7 +259,7 @@ hook.Add("PostPDLoaded", "PD.DM.CreateEntryFromLoad", function()
     PD.JSON.Create(dir)
 
     PD.DM.Injury.tbl = LoadFill(dir .. "/injuries.json", PD.DM.Injury.tbl)
-    PrintTable(PD.DM.Injury.tbl)
+    --PrintTable(PD.DM.Injury.tbl)
     PD.DM.Treatments.tbl = LoadFill(dir .. "/treatments.json", PD.DM.Treatments.tbl)
     PD.DM.Medication.tbl = LoadFill(dir .. "/medication.json", PD.DM.Medication.tbl)
 end)
@@ -291,6 +291,10 @@ function PD.DM.Revive(ply, tbl)
 
         for k, v in pairs(ragdoll.equip) do
             ply:Give(v)
+        end
+
+        for k, v in pairs(ragdoll.ammo) do
+            ply:SetAmmo(v, k)
         end
 
         ragdoll:Remove()

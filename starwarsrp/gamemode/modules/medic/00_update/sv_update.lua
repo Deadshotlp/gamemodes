@@ -17,6 +17,8 @@ local function createRagdoll(ply)
         ragdoll.equip[k] = v:GetClass()
     end
 
+    ragdoll.ammo = ply:GetAmmo()
+
     for k, v in pairs(ply:GetBodyGroups()) do
         ragdoll:SetBodygroup(k, ply:GetBodygroup(k))
     end
@@ -79,7 +81,7 @@ function PD.DM:Update()
             PD.IsBetween(ply_tbl.bp[2], 20, 150) and ply_tbl.spo2 > 50 and ply_tbl.stunning_level ~= 1) then
                 createRagdoll(ply)
                 ply:KillSilent()
-                PrintTable(ply_tbl)
+                --PrintTable(ply_tbl)
                 PD.Death.Kill(ply, ply:GetNW2String("PD.DM.LastHitBy") or "Unknown")
             end
         else

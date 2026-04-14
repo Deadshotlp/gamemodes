@@ -8,7 +8,7 @@ util.AddNetworkString("PD.Comlink.SendListenerInfo")
 local playerTalkerTable = {}
 
 net.Receive("PD.Comlink.StartVoice", function(len, ply)
-    local channel = net.ReadString()
+    local channel = net.ReadInt(8)
     local id = net.ReadInt(4)
 
     if not PD.Comlink.Table[channel].check(ply) then return end
@@ -33,7 +33,7 @@ net.Receive("PD.Comlink.StartVoice", function(len, ply)
 end)
 
 net.Receive("PD.Comlink.EndVoice", function(len, ply)
-    local channel = net.ReadString()
+    local channel = net.ReadInt(8)
     local id = net.ReadInt(4)
 
     if not playerTalkerTable[ply:Nick()] then return end
@@ -62,9 +62,28 @@ hook.Add("PlayerCanHearPlayersVoice", "PD.Comlink.Voice", function(listener, tal
     local talkerData = playerTalkerTable[talker:Nick()]
     local listenerData = playerTalkerTable[listener:Nick()]
 
-    -- Wenn einer von beiden nicht im Comlink ist, dann normale Voice durch Nähe
+    --Wenn einer von beiden nicht im Comlink ist, dann normale Voice durch Nähe
     if not talkerData or not listenerData then
-        return listener:GetPos():DistToSqr(talker:GetPos()) <= 250000, true
+        -- Local Talk
+
+        local talker_pos = talker:GetPos()
+        local listener_pos
+
+        if listener:Alive() then
+            listener_pos = listener:GetPos()
+        elseif listener:GetNW2Entity("PD.DM.Ragdoll"):IsValid() then
+            listener_pos = listener:GetNW2Entity("PD.DM.Ragdoll"):GetPos()
+        end
+        
+        local voiceMode = talker:GetNWInt("VoiceMode",2)
+        local modeSettings = PD.VC.Config[voiceMode]
+        local distance = listener_pos:Distance(talker_pos)
+
+        if distance <= modeSettings.range and talker:Alive() then
+            return true, true
+        else
+            return false, false
+        end
     end
 
     local talkerChannel = talkerData.active
@@ -100,24 +119,5 @@ hook.Add("PlayerCanHearPlayersVoice", "PD.Comlink.Voice", function(listener, tal
         or listenerChannel.passive3 == talkerChannel then
 
         return true, false
-    end
-
-    local talker_pos = talker:GetPos()
-    local listener_pos
-
-    if listener:Alive() then
-        listener_pos = listener:GetPos()
-    elseif listener:GetNW2Entity("PD.DM.Ragdoll"):IsValid() then
-        listener_pos = listener:GetNW2Entity("PD.DM.Ragdoll"):GetPos()
-    end
-    
-    local voiceMode = talker:GetNWInt("VoiceMode",2)
-    local modeSettings = PD.VC.Config[voiceMode]
-    local distance = listener_pos:Distance(talker_pos)
-
-    if distance <= modeSettings.range and talker:Alive() then
-        return true, true
-    else
-        return false, false
     end
 end)

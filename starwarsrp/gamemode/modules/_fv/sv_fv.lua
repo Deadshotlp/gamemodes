@@ -18,6 +18,7 @@ end
 
 net.Receive("PD.FV.RequestPlayerInfo", function(len, ply)
     local str = string.Split(net.ReadString(), ",")
+    PrintTable(str)
     local unit, subunit, job = str[1], str[2], str[3]
     if unit == "" then
         sendTouser(ply, {})
@@ -28,43 +29,59 @@ net.Receive("PD.FV.RequestPlayerInfo", function(len, ply)
 
     local charsTabel = {}
 
+    local units = PD.JOBS.GetUnit(false, true)
+
     for k,v in pairs(tbl) do
         for i,j in pairs(v) do
-            if unit == j.faction.unit then
-                if subunit == "" then
-                    local char = {
-                        name = j.name,
-                        id = j.id,
-                        faction = j.faction,
-                        lastplaytime = j.lastplaytime
-                    }
-
-                    table.insert(charsTabel, char)
-                else
-                    if subunit == j.faction.subunit then
-                        if job == "" then
-                            local char = {
-                                name = j.name,
-                                id = j.id,
-                                faction = j.faction,
-                                lastplaytime = j.lastplaytime
-                            }
-
-                            table.insert(charsTabel, char)
-                        else
-                            if job == j.faction.job then
-                                local char = {
-                                    name = j.name,
-                                    id = j.id,
-                                    faction = j.faction,
-                                    lastplaytime = j.lastplaytime
-                                }
-
-                                table.insert(charsTabel, char)
+            for _1, a in SortedPairs(units) do
+                if _1 == j.faction.unit then
+                    j.faction.unit = a.name
+                    for _2, b in SortedPairs(units[_1].subunits) do
+                        if _2 == j.faction.subunit then
+                            j.faction.subunit = b.name
+                            for _3, c in SortedPairs(units[_1].subunits[_2].jobs) do
+                                if _3 == j.faction.job then
+                                    j.faction.job = c.name
+                                    continue
+                                end
                             end
+
+                            continue
                         end
                     end
+
+                    continue
                 end
+            end
+
+            for _1, a in SortedPairs(units) do
+                if _1 == unit then
+                    unit = a.name
+                    for _2, b in SortedPairs(units[_1].subunits) do
+                        if _2 == subunit then
+                            subunit = b.name
+                            for _3, c in SortedPairs(units[_1].subunits[_2].jobs) do
+                                if _3 == job then
+                                    job = c.name
+                                    continue
+                                end
+                            end
+
+                            continue
+                        end
+                    end
+
+                    continue
+                end
+            end
+
+
+            if j.faction.unit == unit and (subunit == "" or j.faction.subunit == subunit) and (job == "" or j.faction.job == job) then
+                local newTBL = {}
+                newTBL.faction = j.faction.unit .. "," .. j.faction.subunit .. "," .. j.faction.job
+                newTBL.name = j.id .. " " .. j.name
+                newTBL.lastplaytime = j.lastplaytime
+                table.insert(charsTabel, newTBL)
             end
         end
     end

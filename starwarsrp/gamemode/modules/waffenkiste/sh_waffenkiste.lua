@@ -1,9 +1,9 @@
 PD.WB = PD.WB or {}
 
-PD.WB.StripWeapons = true
-PD.WB.StripWeapnsDead = true
-PD.WB.GiveDeadWeapons = true
-PD.WB.Weigths = true
+PD.WB.StripWeapons = false
+PD.WB.StripWeapnsDead = false
+PD.WB.GiveDeadWeapons = false
+PD.WB.Weigths = false
 PD.WB.MaxWeigth = 20 -- Maximalgewicht in Kg
 
 PD.WB.DontStrip = {
@@ -87,4 +87,6 @@ function PD.WB.GetWeaponWeights(weapon)
             end
         end
     end
+
+    return 2 -- Default Gewicht
 end

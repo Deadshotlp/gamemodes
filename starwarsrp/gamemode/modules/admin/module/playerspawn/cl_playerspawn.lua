@@ -91,7 +91,7 @@ function PlayerSpawnMenu(base)
             end
             
             -- Unit Name
-            draw.DrawText(k, "MLIB.16", PD.W(20), h / 2 - PD.H(8), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+            draw.DrawText(v.name, "MLIB.16", PD.W(20), h / 2 - PD.H(8), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
             
             -- Checkbox Indikator
             local checkSize = PD.H(20)

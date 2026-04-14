@@ -3,6 +3,17 @@ PD.Chat = PD.Chat or {}
 PD.Chat.Command = PD.Chat.Command or {}
 
 PD.Chat.Command.List = PD.Chat.Command.List or {
+    ["system"] = {
+        description = "Global System Information",
+        visibility = GLOBAL,
+        color = Color(255, 255, 255),
+        callback = function(ply, args)
+            local text = table.concat(args, " ")
+            local name = ply:Nick()
+
+            PD.Chat.BroadcastMessage(string.format("[%s] %s: %s", "***", name, text), "system")
+        end
+    },
     ["looc"] = {
         description = "Local Out of Character Chat",
         visibility = LOCAL,
@@ -11,7 +22,7 @@ PD.Chat.Command.List = PD.Chat.Command.List or {
             local text = table.concat(args, " ")
             local name = ply:Nick()
 
-            PD.Chat.SendToPlayerMessage(ply, string.format("%s %s: %s", "[LOOC]", name, text), "looc")
+            PD.Chat.SendToPlayerMessage(ply, string.format("[%s] %s: %s", "LOOC", name, text), "looc")
         end
     },
     ["ooc"] = {
@@ -22,7 +33,7 @@ PD.Chat.Command.List = PD.Chat.Command.List or {
             local text = table.concat(args, " ")
             local name = ply:Nick()
 
-            PD.Chat.SendToPlayerMessage(ply, string.format("%s %s: %s", "[OOC]", name, text), "ooc")
+            PD.Chat.SendToPlayerMessage(ply, string.format("[%s] %s: %s", "OOC", name, text), "ooc")
         end
     },
     ["/"] = {
@@ -33,7 +44,7 @@ PD.Chat.Command.List = PD.Chat.Command.List or {
             local text = table.concat(args, " ")
             local name = ply:Nick()
 
-            PD.Chat.BroadcastMessage(string.format("%s %s: %s", "[OOC]", name, text), "/")
+            PD.Chat.BroadcastMessage(string.format("[%s] %s: %s", "OOC", name, text), "/")
         end
     },
     ["me"] = {
@@ -44,7 +55,7 @@ PD.Chat.Command.List = PD.Chat.Command.List or {
             local text = table.concat(args, " ")
             local name = ply:Nick()
 
-            PD.Chat.SendToPlayerMessage(ply, string.format("%s %s: %s", "[ME]", name, text), "me")
+            PD.Chat.SendToPlayerMessage(ply, string.format("[%s] %s: %s", "ME", name, text), "me")
         end
     },
     ["akt"] = {
@@ -55,7 +66,7 @@ PD.Chat.Command.List = PD.Chat.Command.List or {
             local text = table.concat(args, " ")
             local name = ply:Nick()
 
-            PD.Chat.SendToPlayerMessage(ply, string.format("%s %s: %s", "[AKT]", name, text), "akt")
+            PD.Chat.SendToPlayerMessage(ply, string.format("[%s] %s: %s", "AKT", name, text), "akt")
         end
     },
     ["makt"] = {
@@ -66,7 +77,7 @@ PD.Chat.Command.List = PD.Chat.Command.List or {
             local text = table.concat(args, " ")
             local name = ply:Nick()
 
-            PD.Chat.SendToPlayerMessage(ply, string.format("%s %s: %s", "[MAKT]", name, text), "makt")
+            PD.Chat.SendToPlayerMessage(ply, string.format("[%s] %s: %s", "MAKT", name, text), "makt")
         end
     },
     ["eakt"] = {
@@ -77,7 +88,7 @@ PD.Chat.Command.List = PD.Chat.Command.List or {
             local text = table.concat(args, " ")
             local name = ply:Nick()
 
-            PD.Chat.SendToPlayerMessage(ply, string.format("%s %s: %s", "[EAKT]", name, text), "eakt")
+            PD.Chat.SendToPlayerMessage(ply, string.format("[%s] %s: %s", "EAKT", name, text), "eakt")
         end
     },
     ["fakt"] = {
@@ -88,7 +99,7 @@ PD.Chat.Command.List = PD.Chat.Command.List or {
             local text = table.concat(args, " ")
             local name = ply:Nick()
 
-            PD.Chat.SendToPlayerMessage(ply, string.format("%s %s: %s", "[FAKT]", name, text), "fakt")
+            PD.Chat.SendToPlayerMessage(ply, string.format("[%s] %s: %s", "FAKT", name, text), "fakt")
         end
     },
     ["it"] = {
@@ -99,21 +110,46 @@ PD.Chat.Command.List = PD.Chat.Command.List or {
             local text = table.concat(args, " ")
             local name = ply:Nick()
 
-            PD.Chat.SendToPlayerMessage(ply, string.format("%s %s: %s", "***", name, text), "it")
+            PD.Chat.SendToPlayerMessage(ply, string.format("[%s] %s", "***", text), "it")
         end
     },
     ["git"] = {
-        description = "Global Interaktion",
+        description = "Global Interaction",
         visibility = GLOBAL,
         color = Color(255, 255, 255),
         callback = function(ply, args)
             local text = table.concat(args, " ")
             local name = ply:Nick()
 
-            PD.Chat.BroadcastMessage(string.format("%s %s: %s", "***", name, text), "git")
+            PD.Chat.BroadcastMessage(string.format("[%s] %s", "***", text), "git")
+        end
+    },
+    ["roll"] = {
+        description = "Global Roll",
+        visibility = GLOBAL,
+        color = Color(0, 255, 0),
+        callback = function(ply, args)
+            local text = table.concat(args, " ")
+            local name = ply:Nick()
+
+            PD.Chat.BroadcastMessage(string.format("[%s] %s: %s", "ROLL", name, text), "roll")
         end
     }
 
+}
+
+PD.Chat.AdminChat = {
+    description = "Admin Chat",
+    visibility = GLOBAL,
+    color = Color(255, 0, 0),
+    callback = function(ply, args)
+        local text = table.concat(args, " ")
+        local name = ply:Nick()
+
+        
+
+        PD.Chat.BroadcastMessage(string.format("[%s] %s: %s", "ADMIN", name, text), "admin")
+    end
 }
 
 PD.Chat.Command.Prefix = {

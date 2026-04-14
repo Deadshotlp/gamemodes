@@ -48,7 +48,7 @@ function PD.Entity.Umkleide:Load()
 
     timer.Simple(0.2, function()
         mainFrame:GetContentPanel():Clear()
-        PD.Entity.Umkleide:ShowAttachments(mainFrame)
+        PD.Entity.Umkleide:ShowAttachments(mainFrame, LocalPlayer())
     end)
 end
 
@@ -71,19 +71,21 @@ function PD.Entity.Umkleide:OpenFrame()
 
     mainFrame = PD.Frame("Umkleide", PD.W(1600), PD.H(900), true)
 
-    PD.Entity.Umkleide:ShowAttachments(mainFrame)
+    local ply = LocalPlayer()
+
+    PD.Entity.Umkleide:ShowAttachments(mainFrame, ply)
 end
 
-function PD.Entity.Umkleide:ShowAttachments(mainFrame)
-    local bodygroups = LocalPlayer():GetBodyGroups()
-    --local activeArmor = LocalPlayer():PDGetArmor()
+function PD.Entity.Umkleide:ShowAttachments(mainFrame, ply)
+    local bodygroups = ply:GetBodyGroups()
+    --local activeArmor = ply:PDGetArmor()
 
     local sub_panel = PD.Panel(mainFrame:GetContentPanel(), {title = "Model"})
     sub_panel:SetSize(mainFrame:GetWide() / 2, mainFrame:GetTall())
     sub_panel:Dock(LEFT)
     sub_panel:DockMargin(PD.W(0), PD.H(0), PD.W(0), PD.H(0))
 
-    local pm = PD.Model(sub_panel, LocalPlayer():GetModel(), PD.W(0), PD.H(0), mainFrame:GetWide() / 2, mainFrame:GetTall(), {})
+    local pm = PD.Model(sub_panel, ply:GetModel(), PD.W(0), PD.H(0), mainFrame:GetWide() / 2, mainFrame:GetTall(), {})
     pm.rot = PD.Entity.Umkleide.Config.rot
     pm.fov = PD.Entity.Umkleide.Config.fov
     pm.xmod = PD.Entity.Umkleide.Config.xmod
@@ -102,17 +104,27 @@ function PD.Entity.Umkleide:ShowAttachments(mainFrame)
     sub_panel:Dock(FILL)
     sub_panel:DockMargin(PD.W(5), PD.H(0), PD.W(0), PD.H(0))
 
-    local modelSelect = PD.Dropdown(sub_panel, LocalPlayer():GetModel() or "Model nicht Abrufbar", function(text, value)
-        pm:SetModel(text)
+    local modelSelect = PD.Dropdown(sub_panel, player_manager.TranslateToPlayerModelName(ply:GetModel()) or "Model nicht Abrufbar", function(text, value)
+        pm:SetModel(value)
         net.Start("ChangeModel")
-        net.WriteString(text)
+        net.WriteString(value)
         net.SendToServer()
     end, {})
 
-    local name, tbl = LocalPlayer():GetJob()
+    local name, tbl = ply:GetJob()
     for k, v in pairs(tbl.model) do
         if string.lower(modelSelect:GetValue()) == string.lower(v) then continue end
-        modelSelect:AddOption(v)
+        modelSelect:AddOption(player_manager.TranslateToPlayerModelName(v), v)
+    end
+
+    for k, v in SortedPairs(PD.JOBS.GetUnit(false, true)) do
+        if v.name == tbl.unit then
+            for _, v in pairs(v.model) do
+                if string.lower(modelSelect:GetValue()) == string.lower(v) then continue end
+                modelSelect:AddOption(player_manager.TranslateToPlayerModelName(v), v)
+            end
+            continue
+        end
     end
 
     local ScrollList = PD.Scroll(sub_panel)
@@ -123,7 +135,9 @@ function PD.Entity.Umkleide:ShowAttachments(mainFrame)
     -- end
 
     for k, v in pairs(bodygroups) do
-        pm.Entity:SetBodygroup(k, LocalPlayer():GetBodygroup(k))
+        pm.Entity:SetBodygroup(k, ply:GetBodygroup(k))
+
+        if not bodygroups[k].submodels[1] then continue end
 
         if (bodygroups[k].id >= 0) and (bodygroups[k].num >= 0) then
             local bodygroupName = PD.Label(bodygroups[k].name .. " | ID: " .. bodygroups[k].id .. " k:" .. k, ScrollList)

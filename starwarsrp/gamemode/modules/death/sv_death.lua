@@ -51,6 +51,8 @@ net.Receive("PD.AdminRespawn", function(len, ply)
 end)
 
 hook.Add("PlayerSpawn", "PD.PlayerSpawn", function(ply)
+    print("PlayerSpawn called for " .. ply:Nick())
+
     local jobname, jobTable = ply:GetJob()
 
     for k, v in SortedPairs(jobTable.equip) do

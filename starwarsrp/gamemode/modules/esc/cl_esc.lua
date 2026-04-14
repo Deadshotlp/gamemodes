@@ -54,12 +54,12 @@ local buttons = {
     --     end
     -- }, 
     {
-        name = "Fraktions Verwaltung",
+        name = "Fraktions Übersicht",
         icon = "⚙",
         func = function()
             PD.FV:Menu()
         end
-    }, 
+    },
     {
         name = "Admin Einstellungen",
         icon = "👤",
@@ -70,24 +70,7 @@ local buttons = {
             end
             PD.Admin:Menu()
         end
-    }, {
-        name = "Bone Reset",
-        icon = "⌨",
-        func = function()
-            local ply = LocalPlayer()
-            local boneCount = ply:GetBoneCount()
-                if boneCount then
-                    for bone = 0, boneCount - 1 do
-                        print(ply:GetManipulateBonePosition(bone))
-                        print(ply:GetManipulateBoneAngles(bone))
-                        ply:ManipulateBoneAngles(bone, angle_zero)
-                        ply:ManipulateBonePosition(bone, vector_origin)
-                    end
-
-                    ply:SetupBones()
-                end
-        end
-    }, 
+    },
 }
 
 hook.Add("PreRender", "PD.ESC.Toggle", function()

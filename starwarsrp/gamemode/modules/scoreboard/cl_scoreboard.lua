@@ -18,28 +18,6 @@ hook.Add("ScoreboardHide", "Lukas_TAB_ScoreboardHide", function()
     end
 end)
 
-local function LoadUnits()
-    local tbl = {}
-
-    for k, v in SortedPairs(PD.JOBS.GetUnit(false, true)) do
-        if not tbl[k] then
-            tbl[k] = v
-        end
-    end
-
-    tbl["Betritt die Galaxy"] = {
-        color = Color(255, 255, 255),
-        unit = "Betritt die Galaxy"
-    }
-
-    tbl["FEHLERHAFTE DATEN"] = {
-        color = Color(255, 0, 0),
-        unit = "FEHLERHAFTE DATEN"
-    }
-
-    return tbl
-end
-
 local function CheckPlayerUnit(ply, unit)
     if not IsValid(ply) or not ply:IsPlayer() then return false end
     if ply:Nick() == "00-0000 " .. "Unknown" then return unit == "Betritt die Galaxy" end
@@ -59,7 +37,7 @@ local function CheckPlayerUnit(ply, unit)
     end
 
     for k, v in SortedPairs(PD.JOBS.GetSubUnit(false, true)) do
-        if v.unit == unit and jobTable.unit == k then
+        if v.unit == unit and jobTable.unit == v.name then
             return true
         end
     end
@@ -68,7 +46,9 @@ local function CheckPlayerUnit(ply, unit)
 end
 
 local function HasUnitPlayers(unit)
+    if unit == nil then return false end
     for _, ply in ipairs(player.GetAll()) do
+
         if CheckPlayerUnit(ply, unit) then
             return true
         end
@@ -115,6 +95,50 @@ end
 
 function PD.Scoreboard:Draw()
     if IsValid(mainFrameScore) then return end
+
+    local function LoadUnits()
+        local tbl = {}
+
+        for k, v in SortedPairs(PD.JOBS.GetUnit(false, true)) do
+            if not tbl[k] then
+                tbl[k] = v
+            end
+        end
+
+        tbl["Betritt die Galaxy"] = {
+            color = Color(255, 255, 255),
+            unit = "Betritt die Galaxy"
+        }
+
+        -- tbl["FEHLERHAFTE DATEN"] = {
+        --     color = Color(255, 0, 0),
+        --     unit = "FEHLERHAFTE DATEN"
+        -- }
+
+        return tbl
+    end
+
+    local function LoadSubUnits()
+        local tbl = {}
+
+        for k, v in SortedPairs(PD.JOBS.GetSubUnit(false, true)) do
+            if not tbl[k] then
+                tbl[k] = v
+            end
+        end
+
+        tbl["Betritt die Galaxy"] = {
+            color = Color(255, 255, 255),
+            unit = "Betritt die Galaxy"
+        }
+
+        -- tbl["FEHLERHAFTE DATEN"] = {
+        --     color = Color(255, 0, 0),
+        --     unit = "FEHLERHAFTE DATEN"
+        -- }
+
+        return tbl
+    end
 
     mainFrameScore = vgui.Create("DFrame")
     mainFrameScore:SetSize(ScrW(), ScrH())
@@ -317,7 +341,7 @@ function PD.Scoreboard:Draw()
     end
 
     for k, v in SortedPairs(LoadUnits()) do
-        if not HasUnitPlayers(k) then continue end
+        if not HasUnitPlayers(v.name) then continue end
 
         -- Unit Header
         local unitHeader = vgui.Create("DPanel", scrl)
@@ -339,14 +363,14 @@ function PD.Scoreboard:Draw()
             
             -- Untere Linie
             surface.DrawRect(PD.W(4), h - 1, w - PD.W(4), 1)
-            
+
             -- Unit Name
-            draw.DrawText(k, "MLIB.22", PD.W(20), h / 2 - PD.H(11), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+            draw.DrawText(v.name, "MLIB.22", PD.W(20), h / 2 - PD.H(11), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
             
             -- Spieleranzahl in dieser Unit
             local count = 0
             for _, ply in pairs(player.GetAll()) do
-                if CheckPlayerUnit(ply, k) then count = count + 1 end
+                if CheckPlayerUnit(ply, v.name) then count = count + 1 end
             end
             draw.DrawText(count .. " Spieler", "MLIB.12", w - PD.W(15), h / 2 - PD.H(6), PD.Theme.Colors.TextDim, TEXT_ALIGN_RIGHT)
             
@@ -359,180 +383,225 @@ function PD.Scoreboard:Draw()
             surface.DrawLine(w - 1, h - cornerSize, w - 1, h)
         end
 
-        for _, ply in pairs(player.GetAll()) do
-            if not IsValid(ply) or not ply:IsPlayer() then continue end
-
-            local jobID, jobTable = "FEHLER", {
-                color = Color(255, 0, 0),
-                unit = "FEHLERHAFTE DATEN"
-            }
-            local name = "Unknown"
-            local pingColor = PD.Theme.Colors.StatusActive
-
-            if ply:Nick() == "00-0000 " .. "Unknown" then
-                jobID, jobTable = "Betritt die Galaxy", {
-                    color = Color(255, 255, 255),
-                    unit = "Betritt die Galaxy",
-                }
-                name = ply:Name()
-            else
-                local success, result1, result2 = pcall(function()
-                    return ply:GetJob()
-                end)
-                if success and result1 and result2 then
-                    jobID, jobTable = result1, result2
-                    --name = PD.HUD.GetKnownPlayers(ply:SteamID64()) or ply:Name()
-                    name = ply:Nick()
-                end
+        for k2, v2 in SortedPairs(LoadSubUnits()) do
+            if v2.unit ~= v.name then
+                continue 
             end
 
-            if not CheckPlayerUnit(ply, k) then continue end
+            if not HasUnitPlayers(v2.name) then continue end
 
-            local plyPanel = vgui.Create("DButton", scrl)
-            plyPanel:SetText("")
-            plyPanel:Dock(TOP)
-            plyPanel:SetTall(PD.H(45))
-            plyPanel:DockMargin(0, PD.H(2), 0, 0)
-            
-            local isHovered = false
-            plyPanel.Paint = function(s, w, h)
+            local subUnitHeader = vgui.Create("DPanel", scrl)
+            subUnitHeader:Dock(TOP)
+            subUnitHeader:SetTall(PD.H(35))
+            subUnitHeader:DockMargin(PD.W(20), PD.H(5), 0, 0)
+            subUnitHeader.Paint = function(s, w, h)
                 -- Hintergrund
-                local bgColor = isHovered and PD.Theme.Colors.BackgroundHover or PD.Theme.Colors.BackgroundLight
-                draw.RoundedBox(0, 0, 0, w, h, bgColor)
-                
-                -- Untere Akzentlinie (Job Farbe)
-                surface.SetDrawColor(jobTable.color or PD.Theme.Colors.AccentGray)
-                surface.DrawRect(0, h - PD.H(2), w, PD.H(2))
-                
-                -- Linke Markierung wenn gehovert
-                if isHovered then
-                    surface.SetDrawColor(PD.Theme.Colors.AccentRed)
-                    surface.DrawRect(0, 0, PD.W(3), h - PD.H(2))
+                draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.BackgroundDark)
+
+                -- Linke Akzentlinie (SubUnit Farbe)
+                local subUnitColor = v2.color or PD.Theme.Colors.AccentGray
+                surface.SetDrawColor(subUnitColor)
+                surface.DrawRect(0, 0, PD.W(3), h)
+
+                -- SubUnit Name
+                draw.DrawText(v2.name, "MLIB.16", PD.W(15), h / 2 - PD.H(8), PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+
+                -- Spieleranzahl in dieser SubUnit
+                local count = 0
+                for _, ply in pairs(player.GetAll()) do
+                    if CheckPlayerUnit(ply, v2.name) then count = count + 1 end
                 end
-                
-                -- Ping-Farbe bestimmen
-                local ping = ply:Ping()
-                if ping > 100 then
-                    pingColor = PD.Theme.Colors.StatusCritical
-                elseif ping > 50 then
-                    pingColor = PD.Theme.Colors.StatusWarning
-                else
-                    pingColor = PD.Theme.Colors.StatusActive
-                end
-                
-                -- Name (links)
-                draw.DrawText(name, "MLIB.16", PD.W(15), h / 2 - PD.H(8), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
-                
-                -- Job (mittig)
-                draw.DrawText(jobID, "MLIB.14", w / 2, h / 2 - PD.H(7), PD.Theme.Colors.TextDim, TEXT_ALIGN_CENTER)
-                
-                -- Ping (rechts)
-                draw.DrawText(ping .. " ms", "MLIB.14", w - PD.W(15), h / 2 - PD.H(7), pingColor, TEXT_ALIGN_RIGHT)
+                draw.DrawText(count .. " Spieler", "MLIB.12", w - PD.W(15), h / 2 - PD.H(6), PD.Theme.Colors.TextDim, TEXT_ALIGN_RIGHT)
             end
-            
-            plyPanel.OnCursorEntered = function() isHovered = true end
-            plyPanel.OnCursorExited = function() isHovered = false end
-            
-            plyPanel.DoClick = function()
-                if not LocalPlayer():IsAdmin() then return end
-                
-                -- Mini-Frame für Spieler-Optionen
-                if IsValid(miniFrame) then
-                    miniFrame:Remove()
+
+            for _, ply in pairs(player.GetAll()) do
+                if not IsValid(ply) or not ply:IsPlayer() then continue end
+
+                local jobID, jobTable = "FEHLER", {
+                    color = Color(255, 0, 0),
+                    unit = "FEHLERHAFTE DATEN"
+                }
+                local name = "Unknown"
+                local pingColor = PD.Theme.Colors.StatusActive
+
+                if ply:Nick() == "00-0000 " .. "Unknown" then
+                    jobID, jobTable = "Betritt die Galaxy", {
+                        color = Color(255, 255, 255),
+                        unit = "Betritt die Galaxy",
+                    }
+                    name = ply:Name()
+                else
+                    local success, result1, result2 = pcall(function()
+                        return ply:GetJob()
+                    end)
+                    if success and result1 and result2 then
+                        jobID, jobTable = result1, result2
+                        --name = PD.HUD.GetKnownPlayers(ply:SteamID64()) or ply:Name()
+                        name = ply:Nick()
+                    end
                 end
 
-                miniFrame = vgui.Create("DFrame")
-                miniFrame:SetSize(PD.W(350), PD.H(400))
-                miniFrame:Center()
-                miniFrame:SetTitle("")
-                miniFrame:SetDraggable(true)
-                miniFrame:ShowCloseButton(false)
-                miniFrame:MakePopup()
+                if not CheckPlayerUnit(ply, v2.name) then continue end
+
+                local plyPanel = vgui.Create("DButton", scrl)
+                plyPanel:SetText("")
+                plyPanel:Dock(TOP)
+                plyPanel:SetTall(PD.H(45))
+                plyPanel:DockMargin(PD.W(20), PD.H(2), 0, 0)
                 
-                miniFrame.Paint = function(s, w, h)
+                local isHovered = false
+                plyPanel.Paint = function(s, w, h)
                     -- Hintergrund
-                    draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.Background)
+                    local bgColor = isHovered and PD.Theme.Colors.BackgroundHover or PD.Theme.Colors.BackgroundLight
+                    draw.RoundedBox(0, 0, 0, w, h, bgColor)
                     
-                    -- Obere Akzentlinie
-                    surface.SetDrawColor(PD.Theme.Colors.AccentRed)
-                    surface.DrawRect(0, 0, w, PD.H(4))
+                    -- Untere Akzentlinie (Job Farbe)
+                    surface.SetDrawColor(jobTable.color or PD.Theme.Colors.AccentGray)
+                    surface.DrawRect(0, h - PD.H(2), w, PD.H(2))
                     
-                    -- Rahmen
-                    surface.SetDrawColor(PD.Theme.Colors.AccentGray)
-                    surface.DrawOutlinedRect(0, 0, w, h, 1)
-                    
-                    -- Imperial Ecken-Dekor
-                    local cornerSize = PD.W(15)
-                    surface.SetDrawColor(PD.Theme.Colors.AccentRed)
-                    surface.DrawRect(0, 0, cornerSize, PD.H(2))
-                    surface.DrawRect(0, 0, PD.W(2), cornerSize)
-                    surface.DrawRect(w - cornerSize, 0, cornerSize, PD.H(2))
-                    surface.DrawRect(w - PD.W(2), 0, PD.W(2), cornerSize)
-                    
-                    -- Spielername
-                    draw.DrawText(ply:Nick(), "MLIB.20", w / 2, PD.H(15), PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
-                    
-                    -- Trennlinie
-                    surface.SetDrawColor(PD.Theme.Colors.AccentGray)
-                    surface.DrawRect(PD.W(20), PD.H(45), w - PD.W(40), 1)
-                end
-                
-                -- Close Button
-                local closeBtn = vgui.Create("DButton", miniFrame)
-                closeBtn:SetText("")
-                closeBtn:SetSize(PD.W(25), PD.H(25))
-                closeBtn:SetPos(miniFrame:GetWide() - PD.W(35), PD.H(10))
-                closeBtn.Paint = function(s, w, h)
-                    surface.SetDrawColor(PD.Theme.Colors.AccentRed)
-                    surface.DrawLine(PD.W(5), PD.H(5), w - PD.W(5), h - PD.H(5))
-                    surface.DrawLine(w - PD.W(5), PD.H(5), PD.W(5), h - PD.H(5))
-                end
-                closeBtn.DoClick = function()
-                    miniFrame:Remove()
-                end
-                
-                -- Scroll für Buttons
-                local btnScrl = vgui.Create("DScrollPanel", miniFrame)
-                btnScrl:SetPos(PD.W(15), PD.H(60))
-                btnScrl:SetSize(miniFrame:GetWide() - PD.W(30), miniFrame:GetTall() - PD.H(80))
-                
-                -- Scrollbar stylen
-                local btnSbar = btnScrl:GetVBar()
-                btnSbar:SetWide(PD.W(4))
-                btnSbar.Paint = function(s, w, h) end
-                btnSbar.btnUp.Paint = function() end
-                btnSbar.btnDown.Paint = function() end
-                btnSbar.btnGrip.Paint = function(s, w, h)
-                    draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.AccentGray)
-                end
-
-                for _, btnData in pairs(PD.Scoreboard.Buttons) do
-                    local btn = vgui.Create("DButton", btnScrl)
-                    btn:SetText("")
-                    btn:Dock(TOP)
-                    btn:SetTall(PD.H(40))
-                    btn:DockMargin(0, 0, 0, PD.H(5))
-                    
-                    local btnHover = false
-                    btn.Paint = function(s, w, h)
-                        local bgCol = btnHover and PD.Theme.Colors.BackgroundHover or PD.Theme.Colors.BackgroundLight
-                        draw.RoundedBox(0, 0, 0, w, h, bgCol)
-                        
-                        -- Linke Akzentlinie
-                        surface.SetDrawColor(btnHover and PD.Theme.Colors.AccentRed or PD.Theme.Colors.AccentGray)
-                        surface.DrawRect(0, 0, PD.W(3), h)
-                        
-                        -- Text
-                        draw.DrawText(btnData.name, "MLIB.16", PD.W(15), h / 2 - PD.H(8), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+                    -- Linke Markierung wenn gehovert
+                    if isHovered then
+                        surface.SetDrawColor(PD.Theme.Colors.AccentRed)
+                        surface.DrawRect(0, 0, PD.W(3), h - PD.H(2))
                     end
                     
-                    btn.OnCursorEntered = function() btnHover = true end
-                    btn.OnCursorExited = function() btnHover = false end
+                    -- Ping-Farbe bestimmen
+                    local ping = ply:Ping()
+                    if ping > 100 then
+                        pingColor = PD.Theme.Colors.StatusCritical
+                    elseif ping > 50 then
+                        pingColor = PD.Theme.Colors.StatusWarning
+                    else
+                        pingColor = PD.Theme.Colors.StatusActive
+                    end
+
+                    if jobTable.showid then
+                        local nameWords = string.Split(name, " ")
+                        name = ""
+
+                        for i = 2, #nameWords do
+                            name = name .. " " .. nameWords[i]
+                        end
+                    end
                     
-                    btn.DoClick = function()
-                        btnData.func(LocalPlayer(), ply)
+                    -- Name (links)
+                    draw.DrawText(name, "MLIB.16", PD.W(15), h / 2 - PD.H(8), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+                    
+                    -- Job (mittig)
+                    draw.DrawText(jobTable.name, "MLIB.14", w / 2, h / 2 - PD.H(7), PD.Theme.Colors.TextDim, TEXT_ALIGN_CENTER)
+                    
+                    -- Ping (rechts)
+                    draw.DrawText(ping .. " ms", "MLIB.14", w - PD.W(15), h / 2 - PD.H(7), pingColor, TEXT_ALIGN_RIGHT)
+                end
+                
+                plyPanel.OnCursorEntered = function() isHovered = true end
+                plyPanel.OnCursorExited = function() isHovered = false end
+                
+                plyPanel.DoClick = function()
+                    if not LocalPlayer():IsAdmin() then return end
+                    
+                    -- Mini-Frame für Spieler-Optionen
+                    if IsValid(miniFrame) then
                         miniFrame:Remove()
                     end
+
+                    miniFrame = vgui.Create("DFrame")
+                    miniFrame:SetSize(PD.W(350), PD.H(400))
+                    miniFrame:Center()
+                    miniFrame:SetTitle("")
+                    miniFrame:SetDraggable(true)
+                    miniFrame:ShowCloseButton(false)
+                    miniFrame:MakePopup()
+                    
+                    miniFrame.Paint = function(s, w, h)
+                        -- Hintergrund
+                        draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.Background)
+                        
+                        -- Obere Akzentlinie
+                        surface.SetDrawColor(PD.Theme.Colors.AccentRed)
+                        surface.DrawRect(0, 0, w, PD.H(4))
+                        
+                        -- Rahmen
+                        surface.SetDrawColor(PD.Theme.Colors.AccentGray)
+                        surface.DrawOutlinedRect(0, 0, w, h, 1)
+                        
+                        -- Imperial Ecken-Dekor
+                        local cornerSize = PD.W(15)
+                        surface.SetDrawColor(PD.Theme.Colors.AccentRed)
+                        surface.DrawRect(0, 0, cornerSize, PD.H(2))
+                        surface.DrawRect(0, 0, PD.W(2), cornerSize)
+                        surface.DrawRect(w - cornerSize, 0, cornerSize, PD.H(2))
+                        surface.DrawRect(w - PD.W(2), 0, PD.W(2), cornerSize)
+                        
+                        -- Spielername
+                        draw.DrawText(ply:Nick(), "MLIB.20", w / 2, PD.H(15), PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
+                        
+                        -- Trennlinie
+                        surface.SetDrawColor(PD.Theme.Colors.AccentGray)
+                        surface.DrawRect(PD.W(20), PD.H(45), w - PD.W(40), 1)
+                    end
+                    
+                    -- Close Button
+                    local closeBtn = vgui.Create("DButton", miniFrame)
+                    closeBtn:SetText("")
+                    closeBtn:SetSize(PD.W(25), PD.H(25))
+                    closeBtn:SetPos(miniFrame:GetWide() - PD.W(35), PD.H(10))
+                    closeBtn.Paint = function(s, w, h)
+                        surface.SetDrawColor(PD.Theme.Colors.AccentRed)
+                        surface.DrawLine(PD.W(5), PD.H(5), w - PD.W(5), h - PD.H(5))
+                        surface.DrawLine(w - PD.W(5), PD.H(5), PD.W(5), h - PD.H(5))
+                    end
+                    closeBtn.DoClick = function()
+                        miniFrame:Remove()
+                    end
+                    
+                    -- Scroll für Buttons
+                    local btnScrl = vgui.Create("DScrollPanel", miniFrame)
+                    btnScrl:SetPos(PD.W(15), PD.H(60))
+                    btnScrl:SetSize(miniFrame:GetWide() - PD.W(30), miniFrame:GetTall() - PD.H(80))
+                    
+                    -- Scrollbar stylen
+                    local btnSbar = btnScrl:GetVBar()
+                    btnSbar:SetWide(PD.W(4))
+                    btnSbar.Paint = function(s, w, h) end
+                    btnSbar.btnUp.Paint = function() end
+                    btnSbar.btnDown.Paint = function() end
+                    btnSbar.btnGrip.Paint = function(s, w, h)
+                        draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.AccentGray)
+                    end
+
+                    for _, btnData in pairs(PD.Scoreboard.Buttons) do
+                        local btn = vgui.Create("DButton", btnScrl)
+                        btn:SetText("")
+                        btn:Dock(TOP)
+                        btn:SetTall(PD.H(40))
+                        btn:DockMargin(0, 0, 0, PD.H(5))
+                        
+                        local btnHover = false
+                        btn.Paint = function(s, w, h)
+                            local bgCol = btnHover and PD.Theme.Colors.BackgroundHover or PD.Theme.Colors.BackgroundLight
+                            draw.RoundedBox(0, 0, 0, w, h, bgCol)
+                            
+                            -- Linke Akzentlinie
+                            surface.SetDrawColor(btnHover and PD.Theme.Colors.AccentRed or PD.Theme.Colors.AccentGray)
+                            surface.DrawRect(0, 0, PD.W(3), h)
+                            
+                            -- Text
+                            draw.DrawText(btnData.name, "MLIB.16", PD.W(15), h / 2 - PD.H(8), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+                        end
+                        
+                        btn.OnCursorEntered = function() btnHover = true end
+                        btn.OnCursorExited = function() btnHover = false end
+                        
+                        btn.DoClick = function()
+                            btnData.func(LocalPlayer(), ply)
+                            miniFrame:Remove()
+                        end
+                    end
+                end
+
+                plyPanel.DoRightClick = function()
+                    ply:ShowProfile()
                 end
             end
         end
@@ -546,3 +615,142 @@ end)
 if mainFrameScore then
     mainFrameScore:Remove()
 end
+
+local tbl = {"A5", "F12", "D7", "G2", "H15", "J3", "K9", "L1", "M14", "N4", "B6", "C11", "E8", "F13", "G10", "H16",
+             "I3", "J7", "K2", "L18", "M5", "N12", "O6", "P9", "Q11", "R14", "S8", "T4", "U15", "V1", "W13", "X2",
+             "Y17", "Z6", "A10", "B3"}
+
+local function shuffleTable(t)
+    local shuffled = {}
+    for i = #t, 1, -1 do
+        local j = math.random(i)
+        t[i], t[j] = t[j], t[i]
+    end
+    return t
+end
+
+local function randomCode()
+    local code = ""
+    local stbl = shuffleTable(tbl)
+    for i = 1, 10 do
+        code = code .. stbl[i]
+    end
+    return code
+end
+
+function Decode_Menu(vfunkstr)
+    if IsValid(mainFrameDecode) then
+        return
+    end
+    local rCode = randomCode()
+    local selfCode = ""
+
+    if vfunkstr == nil then
+        vfunkstr = "N/A"
+    end
+
+    mainFrameDecode = PD.Frame("Decode", PD.W(1000), PD.H(650), true)
+
+    local mainPanel = PD.Panel(mainFrameDecode)
+    mainPanel:Dock(FILL)
+    mainPanel:SetWide(PD.W(610))
+
+    local panelRight = PD.Panel(mainFrameDecode)
+    panelRight:Dock(RIGHT)
+    panelRight:SetWide(PD.W(360))
+
+    local lbl = PD.Label("Verschlüsselter Funk: \n" .. vfunkstr, panelRight)
+
+    local DeCodelbl = PD.Label("Gesuchter Code: \n" .. rCode, panelRight)
+
+    local times = 90
+    local time = PD.Label(LANG.COMMANDS_UI_DECODE_TIME .. ": " .. times, panelRight)
+    time:SetFont("MLIB.40")
+    time:SetTall(PD.H(50))
+
+    timer.Create("DecodeTimer", 1, times, function()
+        times = times - 1
+        time:SetText(LANG.COMMANDS_UI_DECODE_TIME .. ": " .. times)
+
+        if times == 0 then
+            timer.Remove("DecodeTimer")
+            chat.AddText(red, "[DECODE] ", white, LANG.COMMANDS_UI_DECODE_FAILED)
+            mainFrameDecode:Remove()
+        end
+    end)
+
+    local name = "N/A"
+    local x, y = PD.W(10), PD.H(10)
+    local sort = 1
+    local tbl = shuffleTable(tbl)
+    for i = 1, 36 do
+        name = tbl[i]
+        local panel = PD.Button(name, mainPanel, function(self)
+            if self:GetBackColor() == Color(0,255,0) then
+                self:SetBackColor(Color(50, 50, 50))
+                selfCode = selfCode:gsub(self:GetText(), "")
+            else
+                self:SetBackColor(Color(0,255,0))
+                selfCode = selfCode .. self:GetText()
+
+                -- if times == 30 then
+                --     timer.Create("DecodeTimer", 1, 30, function()
+                --         times = times - 1
+                --         time:SetText("Zeit: " .. times)
+
+                --         if times == 0 then
+                --             timer.Remove("DecodeTimer")
+                --             chat.AddText(red, "[DECODE] ", white, "Der Code wurde nicht erfolgreich entschlüsselt!")
+                --             mainFrameDecode:Remove()
+                --         end
+                --     end)
+                -- end
+            end
+
+            UpdateCode()
+        end)
+        panel:Dock(NODOCK)
+        panel:SetSize(PD.W(90), PD.H(90))
+        panel:SetPos(x, y)
+        panel:SetBackColor(Color(50, 50, 50))
+
+        if sort == 6 then
+            y = y + PD.H(100)
+            x = PD.W(10)
+            sort = 1
+        else
+            x = x + PD.W(100)
+            sort = sort + 1
+        end
+    end
+
+    function UpdateCode()
+        if IsValid(Codelbl) then
+            Codelbl:Remove()
+        end
+
+        Codelbl = PD.Label(LANG.COMMANDS_UI_DECODE_YOUR_CODE .. "\n" .. selfCode, panelRight)
+        Codelbl:Dock(BOTTOM)
+    end
+
+    local btn = PD.Button("Entschlüsseln", panelRight, function()
+        if rCode == selfCode then
+            timer.Remove("DecodeTimer")
+
+            chat.AddText(red, "[DECODE] ", white, LANG.COMMANDS_UI_DECODE_SUCCESS)
+            net.Start("CMD_Decode")
+            net.WriteString(vfunkstr)
+            net.SendToServer()
+            mainFrameDecode:Remove()
+        else
+            chat.AddText(red, "[DECODE] ", white, LANG.COMMANDS_UI_DECODE_FAILED)
+        end
+    end)
+    btn:Dock(BOTTOM)
+    btn:SetTall(PD.H(50))
+end
+
+concommand.Add("decode_menu_test", function(ply, cmd, args)
+    local vfunkstr = "Hallo Günther"
+    Decode_Menu(vfunkstr)
+end)

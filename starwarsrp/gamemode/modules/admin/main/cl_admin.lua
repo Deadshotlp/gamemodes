@@ -212,7 +212,11 @@ local function PlayerAdminInteract(data, panel)
             -- Aktuelle Fraktion Info
             local plyCharsTable = PD.Char:GetAdminData(FindPlayerbyID(data.steamid))
             local player = FindPlayerbyID(data.steamid)
-            local factionUnit, factionSubUnit, factionJob = char.faction.unit or "Keine", char.faction.subunit or "Keine", char.faction.job or "Kein Job"
+            local unitTable = PD.JOBS.Jobs[char.faction.unit] or {}
+            local subUnitTable = PD.JOBS.Jobs[char.faction.unit].subunits[char.faction.subunit] or {}
+            local jobTable = PD.JOBS.Jobs[char.faction.unit].subunits[char.faction.subunit].jobs[char.faction.job] or {}
+            local factionUnit, factionSubUnit, factionJob = unitTable.name or "Keine", subUnitTable.name or "Keine", jobTable.name or "Kein Job"
+
 
             local factionInfo = vgui.Create("DPanel", detailScroll)
             factionInfo:Dock(TOP)
@@ -241,7 +245,7 @@ local function PlayerAdminInteract(data, panel)
                 subunit = factionSubUnit,
                 job = factionJob
             }
-            
+
             local factionLabel = vgui.Create("DLabel", detailScroll)
             factionLabel:Dock(TOP)
             factionLabel:SetText("NEUE FRAKTION ZUWEISEN")
@@ -250,61 +254,72 @@ local function PlayerAdminInteract(data, panel)
             factionLabel:DockMargin(PD.W(5), PD.H(10), 0, PD.H(5))
 
             local factionUnitDropdown = PD.Dropdown(detailScroll, factionUnit, function(val, data)
-                faction.unit = val
+                if not data or not data.unitIndex then return end
 
-                showValidSubUnits(val)
+                faction.unit = data.unitIndex
+                faction.subunit = nil
+                faction.job = nil
+
+                showValidSubUnits(data.unitIndex)
             end)
             factionUnitDropdown:Dock(TOP)
             factionUnitDropdown:SetTall(PD.H(45))
-            
+
             for k, v in pairs(PD.JOBS.GetUnit(false, true)) do
-                factionUnitDropdown:AddOption(k, {
-                    unit = v
+                factionUnitDropdown:AddOption(v.name, {
+                    unit = v,
+                    unitIndex = k
                 })
             end
 
             local factionSubUnitDropdown = PD.Dropdown(detailScroll, factionSubUnit, function(val, data)
-                    faction.subunit = val
+                if not data or not data.subunitIndex then return end
 
-                    showValidJobs(val)
-                end)
-                factionSubUnitDropdown:Dock(TOP)
-                factionSubUnitDropdown:SetTall(PD.H(45))
+                faction.subunit = data.subunitIndex
+                faction.job = nil
+
+                showValidJobs(faction.unit, data.subunitIndex)
+            end)
+            factionSubUnitDropdown:Dock(TOP)
+            factionSubUnitDropdown:SetTall(PD.H(45))
 
             function showValidSubUnits(unit)
                 factionSubUnitDropdown:Clear()
-                faction.job = nil
-                factionSubUnit = nil
+                if factionJobDropdown then
+                    factionJobDropdown:Clear()
+                end
+
+                faction.subunit = nil
                 faction.job = nil
 
-                for k, v in pairs(PD.JOBS.GetSubUnit(false, true)) do
-                    if v.unit == unit then
-                        factionSubUnitDropdown:AddOption(k, {
-                            subunit = v,
-                        })
-                    end
+                for k, v in pairs(PD.JOBS.Jobs[unit].subunits) do
+                    factionSubUnitDropdown:AddOption(v.name, {
+                        subunit = v,
+                        subunitIndex = k,
+                        unitIndex = unit
+                    })
                 end
             end
 
             local factionJobDropdown = PD.Dropdown(detailScroll, factionJob, function(val, data)
-                    if data then
-                        faction.job = val
-                    end
-                end)
-                factionJobDropdown:Dock(TOP)
-                factionJobDropdown:SetTall(PD.H(45))
+                if not data or not data.jobIndex then return end
 
-            function showValidJobs(subunit)
+                faction.job = data.jobIndex
+            end)
+            factionJobDropdown:Dock(TOP)
+            factionJobDropdown:SetTall(PD.H(45))
+
+            function showValidJobs(unit, subunit)
                 factionJobDropdown:Clear()
                 faction.job = nil
-                factionJob = nil
 
-                for k, v in pairs(PD.JOBS.GetJob(false, true)) do
-                    if v.unit == subunit then
-                        factionJobDropdown:AddOption(k, {
-                            job = v,
-                        })
-                    end
+                for k, v in pairs(PD.JOBS.Jobs[unit].subunits[subunit].jobs) do
+                    factionJobDropdown:AddOption(v.name, {
+                        job = v,
+                        jobIndex = k,
+                        subunitIndex = subunit,
+                        unitIndex = unit
+                    })
                 end
             end
 
@@ -501,12 +516,14 @@ function PD.Admin:Menu(wo)
             draw.DrawText(table.Count(PD.Char.AdminData) .. " Einträge", "MLIB.12", w - PD.W(15), h / 2 - PD.H(6), PD.Theme.Colors.TextDim, TEXT_ALIGN_RIGHT)
         end
 
-        PrintTable(PD.Char.AdminData)
-
         local plySearch = PD.TextEntry(base, "Spieler suchen...", "")
         plySearch:Dock(TOP)
 
         local scroll = PD.Scroll(base)
+
+        net.Start("PD.Char.RequestPlayers")
+        net.SendToServer()
+
 
         local function listPLayers()
             local searchString = plySearch:GetValue()
@@ -514,14 +531,23 @@ function PD.Admin:Menu(wo)
             scroll:GetCanvas():Clear()
 
             for k, v in pairs(PD.Char.AdminData) do
-                local ply = FindPlayerbyID(k)
+                local ply = FindPlayerbyID(v)
                 local isOnline = IsValid(ply)
-                local name = isOnline and (ply:Nick() .. " | Online") or (steamworks.GetPlayerName(k) .. " (Steam) | Offline")
+                steamworks.RequestPlayerInfo( v )
+                local name = isOnline and (ply:Nick() .. " | Online") or (steamworks.GetPlayerName(v) .. " (Steam) | Offline")
 
                 if string.len(searchString) == 0 or string.find(string.lower(name), string.lower(searchString)) then
                     local btn = PD.Button(name, scroll, function()
-                        v.steamid = k
-                        PlayerAdminInteract(v, rightPanel)
+                        net.Start("PD.Char.RequestPlayerData")
+                        net.WriteString(v)
+                        net.SendToServer()
+
+                        net.Receive("PD.Char.RequestPlayerData", function()
+                            local charData = net.ReadTable()
+
+                            charData.steamid = v
+                            PlayerAdminInteract(charData, rightPanel)
+                        end)
                     end)
                     btn:Dock(TOP)
                     btn:SetTall(PD.H(45))
@@ -530,11 +556,16 @@ function PD.Admin:Menu(wo)
             end
         end
 
+        net.Receive("PD.Char.RequestPlayers", function()
+            local tbl = net.ReadTable()
+            PD.Char.AdminData = tbl
+
+            listPLayers()
+        end)
+
         plySearch.OnChange = function(self)
             listPLayers()
         end
-
-        listPLayers()
     end)
 
     for k, v in pairs(PD.Admin.Job_Edit_Whitelist) do

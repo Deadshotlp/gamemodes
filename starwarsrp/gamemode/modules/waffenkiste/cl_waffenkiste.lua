@@ -3,7 +3,17 @@ PD.WB = PD.WB or {}
 local function GetWepsByCategory(category)
     local weps = {}
     local JobID, JobTable = LocalPlayer():GetJob()
+    local name, subunit = PD.JOBS.GetSubUnit(JobTable.unit)
     local jobWeps = JobTable.equip or {}
+    local subunitWeps = subunit.equip or {}
+
+    for _, wep in SortedPairs(subunitWeps) do
+        if PD.WB.Weapons[category] and PD.WB.Weapons[category][wep] then
+            table.insert(weps, wep)
+        end
+    end
+
+    --table.Add(jobWeps, subunitWeps)
 
     for num, wep in SortedPairs(jobWeps) do
         if PD.WB.Weapons[category] and PD.WB.Weapons[category][wep] then
@@ -29,10 +39,15 @@ end
 local function GetPlayerWeapons(ply, wep)
     local weps = {}
     local JobName, JobTable = ply:GetJob()
+    local name, subunit = PD.JOBS.GetSubUnit(JobTable.unit)
 
     for _, wep in SortedPairs(JobTable.equip) do
         table.insert(weps, wep)
     end
+    for _, wep in SortedPairs(subunit.equip) do
+        table.insert(weps, wep)
+    end
+    
     return weps
 end
 
@@ -68,15 +83,16 @@ function PD.WB:Menu()
     local scrl = PD.Scroll(leftPnl)
 
     local yOffset = PD.H(50)
-    for cateName, wep in pairs(activeWeapons) do
+    for cateName, wep in SortedPairs(activeWeapons) do
         local wepWeight = PD.WB.GetWeaponWeights(wep)
-        local wepText = wep .. " (" .. wepWeight .. " Kg)"
+        -- wep = wep:GetPrintName() or wep:GetClass()
+        local wepText = wep -- .. " (" .. wepWeight .. " Kg)"
         local btn = PD.Button(wepText, scrl, function()
             net.Start("PD.WB:RemoveWeapon")
                 net.WriteString(wep)
             net.SendToServer()
 
-            activeWeapons[cateName] = nil
+            table.RemoveByValue(activeWeapons[cateName], wep)
 
             self.Frame:Remove()
         end)
@@ -112,6 +128,7 @@ function PD.WB:Menu()
             scrl:Clear()
 
             for _, wep in ipairs(weps) do
+                -- wep = wep:GetPrintName() or wep:GetClass()
                 local activeWep = wep
 
                 if LocalPlayer():HasWeapon(wep) then
@@ -121,29 +138,38 @@ function PD.WB:Menu()
                 local btn = PD.Button(activeWep, scrl, function()
                     scrl:Clear()
 
+                    if not activeWeapons[cateName] then
+                        activeWeapons[cateName] = {}
+                    end
+
                     if GetWepWeights() + PD.WB.GetWeaponWeights(wep) > PD.WB.MaxWeigth then
-                        PD.Notify("Du kannst nicht mehr als " .. PD.WB.MaxWeigth .. " Kg tragen!")
+                        PD.Popup("Du kannst nicht mehr als " .. PD.WB.MaxWeigth .. " Kg tragen!")
                         return
                     end
 
-                    if activeWeapons[cateName] then 
-                        net.Start("PD.WB:RemoveWeapon")
-                            net.WriteString(activeWeapons[cateName])
-                        net.SendToServer()
-                    end
+                    -- if activeWeapons[cateName] then 
+                    --     net.Start("PD.WB:RemoveWeapon")
+                    --         net.WriteString(activeWeapons[cateName])
+                    --     net.SendToServer()
+                    -- end
 
                     if LocalPlayer():HasWeapon(wep) then
                         net.Start("PD.WB:RemoveWeapon")
                             net.WriteString(wep)
                         net.SendToServer()
                         
-                        activeWeapons[cateName] = nil
+                        table.RemoveByValue(activeWeapons[cateName], wep)
 
                         self.Frame:Remove()
                         return
                     end
 
-                    activeWeapons[cateName] = wep
+                    if PD.WB.CategoryAmount[cateName] and table.Count(activeWeapons[cateName]) >= PD.WB.CategoryAmount[cateName] then
+                        PD.Popup("Du kannst nur " .. PD.WB.CategoryAmount[cateName] .. " Waffen aus der Kategorie " .. cateName .. " tragen!")
+                        return
+                    end
+
+                    table.insert(activeWeapons[cateName], wep)
 
                     net.Start("PD.WB:GiveWeapon")
                         net.WriteString(wep)
@@ -180,3 +206,7 @@ concommand.Add("pd_waffenkiste_Prints", function()
         PrintTable(GetWepsByCategory(cateName))
     end
 end)
+
+for k, v in pairs(player.GetAll()) do
+    print(v:SteamID64())
+end

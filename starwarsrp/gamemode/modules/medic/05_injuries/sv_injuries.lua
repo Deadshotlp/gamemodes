@@ -1032,8 +1032,6 @@ PD.DM.Injury.custom_tbl = {
     },
 }
 
-
---PrintTable(PD.DM.Injury.tbl)
 local punkte = {
     {
     x = 100,
@@ -1084,6 +1082,10 @@ hook.Add("EntityTakeDamage", "DM.Injury", function(target, dmg)
         hitGroup = math.random(1, 7)
     end
 
+    if attacker:GetActiveWeapon() == nil then
+        return
+    end
+
     local wep = attacker:GetActiveWeapon()
     if IsValid(wep) and wep.ArcCW then 
         local attachments = wep.Attachments
@@ -1101,7 +1103,7 @@ hook.Add("EntityTakeDamage", "DM.Injury", function(target, dmg)
     end
 
     if dmg:GetDamageCustom() == 0 then
-        local injury_count = math.floor(dmg:GetDamage() / 10) + 1
+        local injury_count = math.floor(dmg:GetDamage() / 20) + 1
 
         for x = 1, injury_count do
             PD.DM:GetPossibleInjuries(target, hitGroup, dmg:GetDamageType(), PD.DM.Injury.tbl)
@@ -1161,7 +1163,7 @@ function PD.DM:GetPossibleInjuries(ply, hitGroup, dmgtype, tbl)
         if probabil_injury[rand_1].bypass_armor then
             armor = nil
         else
-            armor = 40 --armor = PD.DM:CheckForArmor(ply, dmg, hitGroup)
+            armor = 65 --armor = PD.DM:CheckForArmor(ply, dmg, hitGroup)
         end
 
         if isnumber(armor) then
@@ -1239,7 +1241,6 @@ function PD.DM:CalculateInjuries(tbl)
         end
 
         if not target_body_part then
-            -- print(string.format("[PD.DM Warning] Verletzung '%s' referenziert ungültigen Körperteil-Index %d. Übersprungen.", injury.name, body_part_index))
             continue
         end
 

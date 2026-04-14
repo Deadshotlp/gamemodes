@@ -73,7 +73,7 @@ net.Receive("PD.Funk:RequestOpenMenu", function(_, ply)
         for _, m in ipairs(list) do if m.sender == nick then payload.chats.recent["unit:"..uname] = true break end end
     end
     
-    for k,_ in SortedPairs(PD.JOBS.GetUnit(false, true) or {}) do table.insert(payload.choices.units, k) end
+    for k,_ in SortedPairs(PD.JOBS.GetUnit(false, true) or {}) do table.insert(payload.choices.units, _.name) end
     for _, v in ipairs(player.GetAll()) do table.insert(payload.choices.players, v:Nick()) end
     
     net.Start("PD.Funk:OpenFunkMenu")

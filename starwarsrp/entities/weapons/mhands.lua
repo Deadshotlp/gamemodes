@@ -183,6 +183,40 @@ local anima = {
         ['ValveBiped.Bip01_L_UpperArm'] = Angle(-28,-65,50),
         ['ValveBiped.Bip01_R_UpperArm'] = Angle(20,-65,-50),
     },
+    ["Achtung"] = {
+    ["ValveBiped.Bip01_Head1"] = Angle( 0,12,0 ),
+    ["ValveBiped.Bip01_L_UpperArm"] = Angle(-6, -6, 0),
+    ["ValveBiped.Bip01_R_Forearm"] = Angle(-9, 0, 0),
+    ["ValveBiped.Bip01_L_Forearm"] = Angle(9, 0, 0),
+    ["ValveBiped.Bip01_R_Thigh"] = Angle(-3, 0, 0),
+    ["ValveBiped.Bip01_L_Thigh"] = Angle(3, 5, 0),
+    ["ValveBiped.Bip01_R_Foot"] = Angle(20, 0, 0),
+    ["ValveBiped.Bip01_L_Foot"] = Angle(-20, 0, 0),
+    ["ValveBiped.Bip01_R_Hand"] = Angle(0, 0, 20),
+    ["ValveBiped.Bip01_L_Hand"] = Angle(0, 0, -20),
+    },
+    ["kneel"] = {
+    ["Animation.ZOffset"] = -17,
+
+    ["ValveBiped.Bip01_L_Forearm"] = Angle(0, 0, 0),
+    ["ValveBiped.Bip01_R_Forearm"] = Angle(-90, -30, -70),
+    ["ValveBiped.Bip01_L_UpperArm"] = Angle(0, 0, 0),
+    ["ValveBiped.Bip01_R_UpperArm"] = Angle(50, -20, 40),
+    ["ValveBiped.Bip01_Pelvis"] = Angle(0, 0, 0),
+    ["ValveBiped.Bip01_Spine"] = Angle(0, 0, 0),
+    ["ValveBiped.Bip01_Spine4"] = Angle(0, 0, 0),
+    ["ValveBiped.Bip01_R_Calf"] = Angle(0, 90, 0),
+    ["ValveBiped.Bip01_L_Calf"] = Angle(0, 80, 0),
+    ["ValveBiped.Bip01_R_Foot"] = Angle(0, 0, 0),
+    ["ValveBiped.Bip01_L_Foot"] = Angle(0, 48.5, 0),
+    ["ValveBiped.Bip01_R_Thigh"] = Angle(0, -90, 0),
+    ["ValveBiped.Bip01_L_Thigh"] = Angle(0, 0, 0),
+    ["ValveBiped.Bip01_R_Hand"] = Angle(0, 0, 0),
+    ["ValveBiped.Bip01_L_Hand"] = Angle(0, 0, 0),
+    ["ValveBiped.Bip01_L_Finger2"] = Angle(0, 0, 0),
+    ["ValveBiped.Bip01_L_Finger11"] = Angle(0, 0, 0),
+    ["ValveBiped.Bip01_Head1"] = Angle(0, -15, 0)
+    }
     -- ["test"] = {
     --     ['ValveBiped.Bip01_R_UpperArm'] = Angle(35, -140, 0),
     --     ['ValveBiped.Bip01_R_Forearm'] = Angle(-10, 0, 0),
@@ -228,17 +262,50 @@ elseif CLIENT then
         return Angle(a.p + b.p, a.y + b.y, a.r + b.r)
     end
 
-    local function RestoreMHandsBones(ply)
+
+    local function StartSmoothRestore(ply)
         if not ply.mhandsBaseAngles then return end
-
+        ply.mhandsRestoreStart = {}
+        ply.mhandsRestoreLerp = 0
+        ply.mhandsRestoreActive = true
         for boneID, baseAng in pairs(ply.mhandsBaseAngles) do
-            ply:ManipulateBoneAngles(boneID, baseAng)
+            local cur = ply:GetManipulateBoneAngles(boneID) or angle_zero
+            ply.mhandsRestoreStart[boneID] = CopyAngle(cur)
         end
+    end
 
-        ply.mhandsBaseAngles = nil
+    local function SmoothRestoreBones(ply)
+        if not ply.mhandsRestoreActive or not ply.mhandsBaseAngles or not ply.mhandsRestoreStart then return end
+        ply.mhandsRestoreLerp = Lerp(FrameTime() * 6, ply.mhandsRestoreLerp or 0, 1)
+        local finished = true
+        for boneID, baseAng in pairs(ply.mhandsBaseAngles) do
+            local startAng = ply.mhandsRestoreStart[boneID] or angle_zero
+            local newAng = LerpAngle(ply.mhandsRestoreLerp, startAng, baseAng)
+            ply:ManipulateBoneAngles(boneID, newAng)
+            if ply.mhandsRestoreLerp < 0.99 then
+                finished = false
+            end
+
+            ply:ManipulateBonePosition(0, Vector(0, 0, Lerp(ply.mhandsRestoreLerp, ply:GetManipulateBonePosition(0).z, 0)))
+        end
+        if finished then
+            for boneID, baseAng in pairs(ply.mhandsBaseAngles) do
+                ply:ManipulateBoneAngles(boneID, baseAng)
+            end
+            ply.mhandsBaseAngles = nil
+            ply.mhandsRestoreStart = nil
+            ply.mhandsRestoreLerp = nil
+            ply.mhandsRestoreActive = false
+        end
     end
 
     hook.Add("PostPlayerDraw", "mhands_anim_draw", function(ply)
+        -- Smooth restore if needed
+        if ply.mhandsRestoreActive then
+            SmoothRestoreBones(ply)
+            return
+        end
+
         local id = ply:GetNWString("mhands_anim", "")
         if id == "" then return end
 
@@ -247,7 +314,7 @@ elseif CLIENT then
 
         if ply.mhandsLastAnim ~= id then
             -- Restore previous mhands offsets before changing to a new hand animation.
-            RestoreMHandsBones(ply)
+            if ply.mhandsBaseAngles then StartSmoothRestore(ply) end
             ply.mhandsBaseAngles = {}
 
             for bone, _ in pairs(tbl) do
@@ -263,7 +330,7 @@ elseif CLIENT then
         end
 
         ply.mhandsLerp = ply.mhandsLerp or 0
-        ply.mhandsLerp = Lerp(FrameTime() * 8, ply.mhandsLerp, 1)
+        ply.mhandsLerp = Lerp(FrameTime() * 6, ply.mhandsLerp, 1)
 
         for bone, ang in pairs(tbl) do
             local boneID = ply:LookupBone(bone)
@@ -271,8 +338,12 @@ elseif CLIENT then
                 local baseAng = (ply.mhandsBaseAngles and ply.mhandsBaseAngles[boneID]) or angle_zero
                 local targetAng = AddAngles(baseAng, ang * ply.mhandsLerp)
                 local cur = ply:GetManipulateBoneAngles(boneID) or angle_zero
-                local newAng = LerpAngle(FrameTime() * 8, cur, targetAng)
+                local newAng = LerpAngle(FrameTime() * 6, cur, targetAng)
                 ply:ManipulateBoneAngles(boneID, newAng)
+            end
+
+            if (tbl["Animation.ZOffset"]) then
+                ply:ManipulateBonePosition(0, Vector(0, 0, tbl["Animation.ZOffset"] * ply.mhandsLerp))
             end
         end
     end)
@@ -282,7 +353,9 @@ elseif CLIENT then
             local id = ply:GetNWString("mhands_anim", "")
 
             if id == "" and ply.mhandsWasAnimating then
-                RestoreMHandsBones(ply)
+                if ply.mhandsBaseAngles then
+                    StartSmoothRestore(ply)
+                end
                 ply.mhandsWasAnimating = false
                 ply.mhandsLerp = 0
                 ply.mhandsLastAnim = nil
@@ -291,8 +364,6 @@ elseif CLIENT then
             end
         end
     end)
-
-
 
     hook.Add("PlayerButtonDown", "ResetAnimationKeys", function(ply, key)
         if not ply:HasWeapon("mhands") then return end

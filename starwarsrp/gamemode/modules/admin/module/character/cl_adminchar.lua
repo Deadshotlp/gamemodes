@@ -13,12 +13,14 @@ function PD.Char:GetAdminData(player)
     return data
 end
 
-net.Start("PD.Char.AdminSync")
-net.SendToServer()
+-- if LocalPlayer():IsAdmin() then
+--     -- net.Start("PD.Char.AdminSync")
+--     -- net.SendToServer()
+-- end
 
 hook.Add("InitPostEntity", "SyncCharMenuCharsProgama057Admin", function()
-    net.Start("PD.Char.AdminSync")
-    net.SendToServer()
+    -- net.Start("PD.Char.AdminSync")
+    -- net.SendToServer()
 end)
 
 concommand.Add("pd_AdminCharPrintData", function(ply, cmd, args)

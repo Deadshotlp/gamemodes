@@ -34,6 +34,11 @@ function PD.Chat.HandleMessage(ply, text)
                 return
             end
         end
+    elseif prefix == "@" then
+        local adminText = text:sub(2)
+        local name = ply:Nick()
+
+        PD.Chat.AdminChat.callback(ply, {adminText})
     else
         -- Normal chat message handling (broadcast to all players)
         PD.Chat.Command.List["looc"].callback(ply, {text})
@@ -72,3 +77,24 @@ function PD.Chat.SendToPlayerMessage(ply, text, key)
         end
     end
 end
+
+function PD.Chat.SendToAdmin(text, key)
+    for _, ply in pairs(player.GetAll()) do
+        if ply:IsAdmin() then
+            net.Start("PD.Chat.SendMSG")
+                net.WriteString(text)
+                net.WriteString(key)
+            net.Send(ply)
+        end
+    end
+end
+
+hook.Add("PlayerConnect", "PD.ConnectMSG", function(name, ip)
+    local text = name .. " has connected to the server."
+    PD.Chat.BroadcastMessage(text, "system")
+end)
+
+hook.Add("PlayerDisconnected", "PD.DisconnectMSG", function(ply)
+    local text = ply:Nick() .. " has disconnected from the server."
+    PD.Chat.BroadcastMessage(text, "system")
+end)

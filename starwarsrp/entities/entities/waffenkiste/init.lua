@@ -18,7 +18,7 @@ end)
 
 function ENT:Initialize()
 
-	self:SetModel("models/reizer_props/srsp/sci_fi/armory_02/armory_02.mdl")
+	self:SetModel("models/reizer_props/srsp/sci_fi/armory_01/armory_01.mdl")
 	self:PhysicsInit(SOLID_VPHYSICS)
 	self:SetMoveType(MOVETYPE_VPHYSICS)
 	self:SetSolid(SOLID_VPHYSICS)

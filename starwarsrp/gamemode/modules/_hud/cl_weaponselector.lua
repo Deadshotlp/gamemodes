@@ -391,20 +391,30 @@ end
 hook.Add("PlayerBindPress", "PD.WeaponSelector.Scroll", function(ply, bind, pressed)
     if not IsValid(ply) then return end
     if ply ~= LocalPlayer() then return end
-    
-    -- Nicht während Schießen
-    if input.IsMouseDown(MOUSE_LEFT) then return end
-    
-    if bind == "invprev" then
-        -- Mausrad HOCH = vorherige Waffe
-        ScrollWeapon(true)
+
+    if string.find(bind, "slot") then
         return true
-    elseif bind == "invnext" then
-        -- Mausrad RUNTER = nächste Waffe
-        ScrollWeapon(false)
+    end
+
+    if string.find(bind, "invprev") then
+        return true
+    end
+
+    if string.find(bind, "invnext") then
         return true
     end
 end)
+
+hook.Add( "StartCommand", "StartCommandExample", function( ply, cmd )
+    if cmd:GetMouseWheel() == 0 then return end
+    if cmd:GetMouseWheel() > 0 and not input.IsMouseDown(MOUSE_LEFT) then
+        -- Mausrad HOCH = vorherige Waffe
+        ScrollWeapon(true)
+    elseif cmd:GetMouseWheel() < 0 and not input.IsMouseDown(MOUSE_LEFT) then
+        -- Mausrad RUNTER = nächste Waffe
+        ScrollWeapon(false)
+    end
+end )
 
 -- Mausklick zum Ausrüsten
 hook.Add("Think", "PD.WeaponSelector.Click", function()
@@ -476,9 +486,10 @@ hook.Add("PlayerButtonDown", "PD.WeaponSelector.NumberKeys", function(ply, butto
                 end
             end
         end
+        surface.PlaySound("UI/buttonclick.wav")
     end
     
-    if button == KEY_ESCAPE and selectorVisible then
-        HideSelector()
-    end
+    -- if button == KEY_ESCAPE and selectorVisible then
+    --     HideSelector()
+    -- end
 end)

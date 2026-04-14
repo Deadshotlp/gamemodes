@@ -521,6 +521,8 @@ function PD.Button(text, parent, onClick, config)
     btn.SetAccentColor = function(self, col) self._accentColor = col end
     btn.SetFont = function(self, font) self._font = font end
     btn.SetArrow = function(self, show) self._arrow = show end
+    btn.SetBackColor = function(self, col) self._accentColor = col end
+    btn.GetBackColor = function(self) return self._accentColor end
     
     return btn
 end
@@ -962,13 +964,21 @@ function PD.Dropdown(parent, defaultText, onSelect, config)
                 local px, py = m:GetPos()
                 local pw, ph = m:GetSize()
                 if mx < px or mx > px + pw or my < py or my > py + ph then
-                    if input.IsMouseDown(MOUSE_LEFT) then
+                    if m and IsValid(m) and not m:HasFocus()  then--input.IsMouseDown(MOUSE_LEFT) or input.IsMouseDown(MOUSE_RIGHT) then
                         self._open = false
                         m:Remove()
                     end
                 end
             end
         end
+
+        -- menu:OnFocusChanged = function(bool)
+        --     print("Focus changed: " .. tostring(bool))
+        --     if not bool then
+        --         self._open = false
+        --         menu:Remove()
+        --     end
+        -- end
     end
     
     btn.AddOption = function(self, text, data)
@@ -1515,10 +1525,7 @@ function PD.HackMenu(title, w, h, close, paint, test)
     local scrw, scrh = ScrW(), ScrH()
     local w = w or math.min(1100, scrw - 200)
     local h = h or math.min(700, scrh - 200)
-    local Mbase = PD.Frame(title or "", w, h, close or false, function(self, sw, sh)
-        surface.SetDrawColor(0,0,0,255)
-        surface.DrawRect(0,0,sw,sh)
-    end, test)
+    local Mbase = PD.Frame(title or "", w, h, close or false)
     Mbase:SetTitle("")
     Mbase:ShowCloseButton(true)
     Mbase:SetDraggable(true)
@@ -1626,5 +1633,9 @@ function PD.HackMenu(title, w, h, close, paint, test)
 
     return Mbase
 end
+
+concommand.Add("pd_hackmenu", function()
+    PD.HackMenu("Hacking Menu", 800, 400, true, nil, false)
+end)
 
 -- PD.HackMenu("Hacking Menu", 800, 400, true, nil, false)

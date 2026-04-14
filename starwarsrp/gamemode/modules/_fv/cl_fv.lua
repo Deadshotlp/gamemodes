@@ -16,7 +16,7 @@ local function UnitsETC(panel, search, onSelect)
     
     for unitName, unit in SortedPairs(PD.JOBS.Jobs or {}) do
         if match(unitName) then
-            local unitBtn = PD.Button(unitName, panel, function()
+            local unitBtn = PD.Button(unit.name, panel, function()
                 if onSelect then onSelect("unit", unitName) end
             end)
             unitBtn:Dock(TOP)
@@ -27,8 +27,8 @@ local function UnitsETC(panel, search, onSelect)
         if selectedUnit ~= unitName and search == "" then continue end
 
         for subName, sub in SortedPairs(unit.subunits or {}) do
-            if match(unitName .. " " .. subName) then
-                local subBtn = PD.Button("  ├ " .. subName, panel, function()
+            if match(unit.name .. " " .. sub.name) then
+                local subBtn = PD.Button("  ├ " .. sub.name, panel, function()
                     if onSelect then onSelect("subunit", unitName, subName) end
                 end)
                 subBtn:Dock(TOP)
@@ -39,8 +39,8 @@ local function UnitsETC(panel, search, onSelect)
             if selectedSubunit ~= subName and search == "" then continue end
             
             for jobName, job in SortedPairs(sub.jobs or {}) do
-                if match(unitName .. " " .. subName .. " " .. jobName) then
-                    local jobBtn = PD.Button("     └ " .. jobName, panel, function()
+                if match(unit.name .. " " .. sub.name .. " " .. job.name) then
+                    local jobBtn = PD.Button("     └ " .. job.name, panel, function()
                         if onSelect then onSelect("job", unitName, subName, jobName) end
                     end)
                     jobBtn:Dock(TOP)
@@ -67,9 +67,11 @@ local function ShowPlayerInfo(pnl)
         srcl:SetWide(pnl:GetWide() - PD.W(20))
 
         for _, char in pairs(PD.FV.PlayerInfo) do
+            local str = string.Split(char.faction, ",")
+                char.faction = {unit = str[1], subunit = str[2], job = str[3]}
             for k, v in pairs(player.GetAll()) do 
                 print(v:Nick(), char.name)
-                if v:Nick() == char.id .. " " .. char.name then
+                if v:Nick() == char.name then
                     char.status = "Online"
                 end
             end
@@ -85,7 +87,7 @@ local function ShowPlayerInfo(pnl)
             char_pnl:SetWide(srcl:GetWide() - PD.W(20))
             char_pnl:DockMargin(0, 0, 0, PD.H(5))
 
-            local name = PD.Label(char.id .. " | " .. char.name, char_pnl, {})
+            local name = PD.Label(char.name, char_pnl, {})
             name:DockMargin(PD.W(5), PD.H(5), 0, 0)
             local lastPlayed = PD.Label("Zuletzt gespielt: " .. char.lastplaytime, char_pnl, {TextColor = PD.Theme.Colors.AccentGray})
             lastPlayed:DockMargin(PD.W(5), PD.H(5), 0, 0)
@@ -98,6 +100,7 @@ local function ShowPlayerInfo(pnl)
                     draw.RoundedBox(8, PD.H(90), h / 2 - PD.H(4), PD.H(10), PD.H(10), PD.Theme.Colors.AccentRed)
                 end
             end
+
             local unit = PD.Label("Einheit: " .. char.faction.unit, char_pnl)
             unit:Dock(NODOCK)
             unit:SizeToContents()
@@ -202,10 +205,8 @@ function PD.FV:Menu()
         if hasData then
             local data = net.ReadTable()
             PD.FV.PlayerInfo = data
-            print(1)
         else
             PD.FV.PlayerInfo = {}
-            print(2)
         end
         ShowPlayerInfo(right)
     end)

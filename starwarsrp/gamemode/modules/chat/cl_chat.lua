@@ -17,8 +17,8 @@ local function load_chat_config()
         file.CreateDir("modules/" .. PD.Chat.ConfigFile)
     end
 
-    if file.Exists("modules/" .. PD.Chat.ConfigFile .. "/" .. LocalPlayer():Nick() .. ".json", "DATA") then
-        PD.Chat.Config = util.JSONToTable(file.Read("modules/" .. PD.Chat.ConfigFile .. "/" .. LocalPlayer():Nick() .. ".json", "DATA"))
+    if file.Exists("modules/" .. PD.Chat.ConfigFile .. "/" .. "config" .. ".json", "DATA") then
+        PD.Chat.Config = util.JSONToTable(file.Read("modules/" .. PD.Chat.ConfigFile .. "/" .. "config" .. ".json", "DATA"))
     end
 end
 
@@ -27,26 +27,46 @@ local function save_chat_config()
         file.CreateDir("modules/" .. PD.Chat.ConfigFile)
     end
 
-    file.Write("modules/" .. PD.Chat.ConfigFile .. "/" .. LocalPlayer():Nick() .. ".json", util.TableToJSON(PD.Chat.Config, true))
+    file.Write("modules/" .. PD.Chat.ConfigFile .. "/" .. "config" .. ".json", util.TableToJSON(PD.Chat.Config, true))
 end
 
 local function populateChat(scrollPanel)
     scrollPanel:Clear()
 
     for _, msg in pairs(PD.Chat.MSG) do
+        local words = string.Explode(" ", msg.text)
+        local lines = {}
+        local maxWidth = scrollPanel:GetWide()
+        local currentLine = ""
+
         if PD.Chat.Config.showTimestamps then
             local time = os.date("%H:%M:%S", msg.time)
             msg.text = string.format("[%s] %s", time, msg.text)
         end
-        local lines = PD.WrapText(msg.text, scrollPanel:GetWide())
+
+        for _, word in ipairs(words) do
+            local testLine = currentLine == "" and word or (currentLine .. " " .. word)
+            local testW, _ = surface.GetTextSize(testLine)
+            
+            if testW > maxWidth and currentLine ~= "" then
+                table.insert(lines, currentLine)
+                currentLine = word
+            else
+                currentLine = testLine
+            end
+        end
+
+        if currentLine ~= "" then
+            table.insert(lines, currentLine)
+        end
 
         for _, line in pairs(lines) do
             local label = PD.Label(line, scrollPanel, {color = PD.Chat.Command.List[msg.key] and PD.Chat.Command.List[msg.key].color or Color(255, 255, 255)})
             label:Dock(TOP)
             label:SetAutoStretchVertical(true)
+            scrollPanel:ScrollToChild(label)
         end
     end
-    
 end
 
 function PD.Chat:Open()
@@ -87,14 +107,10 @@ function PD.Chat:Open()
         local textEntry = PD.TextEntry(ChatMainFrame:GetContentPanel(), "Write your message...", "", function() end, {dock = BOTTOM})
         textEntry.OnEnter = function(self)
             local text = string.Trim(self:GetValue() or "")
-            if text == "" then
-                self:SetText("")
-                return
-            end
-
-            self:SetText("")
             PD.Chat.HandleMessage(text)
             hook.Run("OnPlayerChat", LocalPlayer(), text, false, not LocalPlayer():Alive())
+
+            ChatMainFrame:Close()
         end
         textEntry:RequestFocus()
 
@@ -165,6 +181,70 @@ end)
 hook.Add("OnPauseMenuShow", "PD.Chat.CloseOnPauseMenuShow", function()
     if IsValid(ChatMainFrame) then
         ChatMainFrame:Remove()
+    end
+end)
+
+AddSmoothElement(PD.Chat.Config.x, PD.Chat.Config.y, PD.Chat.Config.w, PD.Chat.Config.h, function(smoothX, smoothY)
+    if PD.FOV.thirdPerson then return end
+
+    --print("try to render chat box")
+
+    --draw.RoundedBox(0, PD.Chat.Config.x, PD.Chat.Config.y, PD.Chat.Config.w, PD.Chat.Config.h, Color(0, 0, 0, 150))
+
+    if IsValid(ChatMainFrame) then return end
+
+    local last_msg = {} -- letzten 60 sekungen speichern
+
+    for i = 1, #PD.Chat.MSG do
+        local msg = PD.Chat.MSG[i]
+        local timeSince = os.time() - msg.time
+        if timeSince < 60 then
+            table.insert(last_msg, PD.Chat.MSG[i])
+        end
+    end
+
+    local base_y = PD.Chat.Config.y + PD.Chat.Config.h
+    local msg_offset = base_y -- - (PD.H(22) * #last_msg)
+
+    local pos = 0
+
+    for _, msg in SortedPairs(last_msg, function(a, b) return a.time > b.time end) do
+        local timeSince = os.time() - msg.time
+        local alpha = math.Clamp(255 - (timeSince / 60) * 255, 0, 255)
+        local color = PD.Chat.Command.List[msg.key] and PD.Chat.Command.List[msg.key].color or Color(255, 255, 255)
+        if alpha > 0 then
+            local words = string.Explode(" ", msg.text)
+            local lines = {}
+            local maxWidth = PD.Chat.Config.w - PD.W(30)
+            local currentLine = ""
+
+            if PD.Chat.Config.showTimestamps then
+                local time = os.date("%H:%M:%S", msg.time)
+                msg.text = string.format("[%s] %s", time, msg.text)
+            end
+
+            for _, word in ipairs(words) do
+                local testLine = currentLine == "" and word or (currentLine .. " " .. word)
+                local testW, _ = surface.GetTextSize(testLine)
+                
+                if testW > maxWidth and currentLine ~= "" then
+                    table.insert(lines, currentLine)
+                    currentLine = word
+                else
+                    currentLine = testLine
+                end
+            end
+
+            if currentLine ~= "" then
+                table.insert(lines, currentLine)
+            end
+
+            for _, line in SortedPairs(lines, function(a, b) return a.time > b.time end) do
+                draw.SimpleText(line, "MLIB.15", PD.Chat.Config.x + PD.W(10), msg_offset - (pos * PD.H(15)), Color(color.r, color.g, color.b, alpha))
+                pos = pos + 1
+            end
+        end
+        pos = pos + 1
     end
 end)
 

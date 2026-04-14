@@ -21,8 +21,18 @@ end)
 net.Receive("ChangeModel", function(len, ply)
     local model = net.ReadString()
     local jobID, jobTable = ply:GetJob()
+    local models = jobTable.model
 
-    for _,v in pairs(jobTable.model) do
+    for k, v in SortedPairs(PD.JOBS.GetUnit(false, true)) do
+        if v.name == jobTable.unit then
+            for _, v in pairs(v.model) do
+                table.insert(models, v)
+            end
+            continue
+        end
+    end
+
+    for _,v in pairs(models) do
         if string.lower(model) == string.lower(v) then
             ply:SetModel(model)
 
