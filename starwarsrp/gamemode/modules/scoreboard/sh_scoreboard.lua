@@ -2,7 +2,7 @@ PD.Scoreboard = PD.Scoreboard or {}
 
 PD.Scoreboard.Gruppen = {}
 PD.Scoreboard.Gruppen["user"] = {
-    name = "User",
+    name = "Spieler",
     col = Color(255, 255, 255)
 }
 PD.Scoreboard.Gruppen["superadmin"] = {
@@ -15,6 +15,26 @@ PD.Scoreboard.Gruppen["admin"] = {
 }
 PD.Scoreboard.Gruppen["projekt"] = {
     name = "Projektleitung",
+    col = Color(255, 0, 0)
+}
+
+PD.Scoreboard.Gruppen["teamleitung"] = {
+    name = "Teamleitung",
+    col = Color(255, 0, 0)
+}
+
+PD.Scoreboard.Gruppen["moderator"] = {
+    name = "Moderation",
+    col = Color(255, 0, 0)
+}
+
+PD.Scoreboard.Gruppen["supporter"] = {
+    name = "Suppoter",
+    col = Color(255, 0, 0)
+}
+
+PD.Scoreboard.Gruppen["eventler"] = {
+    name = "Eventler",
     col = Color(255, 0, 0)
 }
 

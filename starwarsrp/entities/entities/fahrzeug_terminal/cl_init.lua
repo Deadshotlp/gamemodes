@@ -7,8 +7,10 @@ net.Receive("PD.VD:Sync", function()
     SpawnPos = net.ReadTable()
 end)
 
-net.Start("PD.VD:Sync")
-net.SendToServer()
+timer.Simple(1, function()
+	net.Start("PD.VD:Sync")
+	net.SendToServer()
+end)
 
 local activePagePanels = {}
 local function clearPage()
@@ -24,6 +26,23 @@ local page = 1
 local noi = 8
 local startY = 20
 local spacingY = 35
+local Table = {}
+
+-- net.Receive("PD.VD:Sync", function()
+-- 	Table = net.ReadTable()
+-- end)
+
+PD.VD.Vehicle = {
+    {
+        name = "ARC-170 Starfighter",
+        vehicle = "lvs_starfighter_arc170",
+        check = function(ply)
+            return true -- PD.CheckUnitAccess(ply, "Stoßtruppen")
+        end,
+    },
+
+}
+
 
 function ENT:Draw()
  	self:DrawModel()
@@ -53,7 +72,7 @@ function ENT:Draw()
 
 			
 				if open then
-					if table.Count(SpawnPos) == 0 then continue end
+					if table.Count(SpawnPos) == 0 then chat.AddText("Kein Hangar gefunden!") continue end
 
 					
 					local menu = DermaMenu()

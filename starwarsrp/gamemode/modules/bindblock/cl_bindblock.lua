@@ -13,11 +13,14 @@ hook.Add("OnSpawnMenuOpen", "PD.CheckSpawnMenu", function()
         LocalPlayer():ChatPrint("Du bist kein Admin!")
         return false
     end
+
+    if input.IsKeyDown(KEY_F1) then
+        return false
+    end
     PD.AdminCheck()
 end)
 
 function PD.AdminCheck()
     net.Start("PD.CheckAdmin")
-    net.WriteEntity(LocalPlayer())
     net.SendToServer()
 end

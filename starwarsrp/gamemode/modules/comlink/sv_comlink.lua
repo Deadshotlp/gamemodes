@@ -8,7 +8,7 @@ util.AddNetworkString("PD.Comlink.SendListenerInfo")
 local playerTalkerTable = {}
 
 net.Receive("PD.Comlink.StartVoice", function(len, ply)
-    local channel = net.ReadString()
+    local channel = net.ReadInt(8)
     local id = net.ReadInt(4)
 
     if not PD.Comlink.Table[channel].check(ply) then return end
@@ -33,7 +33,7 @@ net.Receive("PD.Comlink.StartVoice", function(len, ply)
 end)
 
 net.Receive("PD.Comlink.EndVoice", function(len, ply)
-    local channel = net.ReadString()
+    local channel = net.ReadInt(8)
     local id = net.ReadInt(4)
 
     if not playerTalkerTable[ply:Nick()] then return end
@@ -57,39 +57,66 @@ concommand.Add("printcomlink", function(ply)
 end)
 
 hook.Add("PlayerCanHearPlayersVoice", "PD.Comlink.Voice", function(listener, talker)
+    if talker == listener then return true end
 
-    if not playerTalkerTable[talker:Nick()] then return false end
-    if not playerTalkerTable[listener:Nick()] then return false end
+    local talkerData = playerTalkerTable[talker:Nick()]
+    local listenerData = playerTalkerTable[listener:Nick()]
 
-    local talkerChannel = playerTalkerTable[talker:Nick()].active 
-    local listenerChannel = playerTalkerTable[listener:Nick()]
-    local talkerJobID, talkerJobTable = talker:GetJob()
-    local listenerJobID, listenerJobTable = listener:GetJob()
-    local channelTable = PD.Comlink.Table[talkerChannel]
-    local unit = talkerJobTable.unit
+    --Wenn einer von beiden nicht im Comlink ist, dann normale Voice durch Nähe
+    if not talkerData or not listenerData then
+        -- Local Talk
 
-    if not talkerChannel then return false end
-    if not PD.Comlink.Table[talkerChannel].check(talker, unit) then return false end
+        local talker_pos = talker:GetPos()
+        local listener_pos
 
-    if not listenerChannel then return false end
-    if not PD.Comlink.Table[listenerChannel].check(listener, unit) then return false end
+        if listener:Alive() then
+            listener_pos = listener:GetPos()
+        elseif listener:GetNW2Entity("PD.DM.Ragdoll"):IsValid() then
+            listener_pos = listener:GetNW2Entity("PD.DM.Ragdoll"):GetPos()
+        end
+        
+        local voiceMode = talker:GetNWInt("VoiceMode",2)
+        local modeSettings = PD.VC.Config[voiceMode]
+        local distance = listener_pos:Distance(talker_pos)
 
-    -- if listener:GetPos():DistToSqr(talker:GetPos()) > 250000 then return false end
-    
-    if channelTable[talkerChannel] then
-        -- net.Start("PD.Comlink.SendTalkerInfo")
-        --     net.WriteString(talkerChannel)
-        --     net.WriteEntity(talker)
-        -- net.Send(talker)
-
-        return true, false
+        if distance <= modeSettings.range and talker:Alive() then
+            return true, true
+        else
+            return false, false
+        end
     end
 
-    if listenerChannel.active == talkerChannel or listenerChannel.passive1 == talkerChannel or listenerChannel.passive2 == talkerChannel or listenerChannel.passive3 == talkerChannel then
-        -- net.Start("PD.Comlink.SendListenerInfo")
-        --     net.WriteString(talkerChannel)
-        --     net.WriteEntity(talker)
-        -- net.Send(listener)
+    local talkerChannel = talkerData.active
+    local listenerChannel = listenerData
+
+    if not talkerChannel then
+        return listener:GetPos():DistToSqr(talker:GetPos()) <= 250000, true
+    end
+
+    local talkerJobID, talkerJobTable = talker:GetJob()
+    local listenerJobID, listenerJobTable = listener:GetJob()
+    local unit = talkerJobTable.unit
+
+    -- Channel existiert nicht oder Check schlägt fehl
+    local channelConfig = PD.Comlink.Table[talkerChannel]
+    if not channelConfig or not channelConfig.check(talker, unit) then
+        return false
+    end
+
+    if not listenerChannel.active then
+        return listener:GetPos():DistToSqr(talker:GetPos()) <= 250000, true
+    end
+
+    -- Check auch für Listener
+    if not PD.Comlink.Table[listenerChannel.active].check(listener, unit) then
+        return false
+    end
+
+    -- Selber Channel oder passiv verbunden → hören erlaubt
+    if listenerChannel.active == talkerChannel
+        or listenerChannel.passive1 == talkerChannel
+        or listenerChannel.passive2 == talkerChannel
+        or listenerChannel.passive3 == talkerChannel then
 
         return true, false
     end

@@ -6,15 +6,12 @@ util.AddNetworkString("PD.Char.Delete")
 util.AddNetworkString("PD.Char.Play")
 util.AddNetworkString("PD.Char.Synccl")
 util.AddNetworkString("PD.Char.Syncsv")
-util.AddNetworkString("PD.Char.AdminSync")
-util.AddNetworkString("PD.Char.AdminSave")
-util.AddNetworkString("PD.Char.AdminDelete")
 util.AddNetworkString("OpenCharbyDelete")
 util.AddNetworkString("PD.Char.Open")
 util.AddNetworkString("PD.Char.JobChange")
 util.AddNetworkString("PD.Char.SetJobFunction")
+util.AddNetworkString("PD.Char.DefaultFaction")
 
--- Funktion zur Generierung einer Zufallszahl im Format XX-XXXX
 local function GenerateRandomNumber()
     local prefix = string.format("%02d", math.random(10, 99))
     local suffix = string.format("%04d", math.random(1000, 9999))
@@ -24,298 +21,384 @@ end
 local function IDCheck(id)
     local tbl = PD.Char:LoadAllChars()
 
-    for k,v in pairs(tbl) do
-        for i,j in pairs(v) do
-            if j.id == id then
+    for _, chars in pairs(tbl or {}) do
+        for _, char in pairs(chars or {}) do
+            if char.id == id then
                 return false
             end
         end
     end
+
     return true
 end
 
-net.Receive("PD.Char.Create",function()
-    local ply = net.ReadEntity()
-    local name = net.ReadString()
-    local id = GenerateRandomNumber()
-    local create = os.date("%d.%m.%Y %H:%M:%S", os.time())
-    local jobName, jobTable = PD.JOBS.GetJob(false, false)
-        
+local function GetFirstModel(jobTable)
+    if not istable(jobTable) then return nil end
+    if istable(jobTable.model) then return jobTable.model[1] end
+    if istable(jobTable.models) then return jobTable.models[1] end
+    if isstring(jobTable.model) then return jobTable.model end
+end
 
-    if jobName then
-        local data = {
-            name = name,
-            id = id,
-            job = {
-                name = jobName,
-                model = jobTable.model[1],
-                unit = jobTable.unit,
-                id = jobName
-            },
-            faction = {
-                unit = "",
-                subunit = "",
-                job = ""
-            },
-            money = 0,
-            cratedate = create,
-            lastplaytime = create,
-            playtime = 0,
-            rank = ""
+local function GetDefaultJobData()
+    local jobs = PD.JOBS and PD.JOBS.Jobs or {}
+
+    for unitIndex, unitData in pairs(jobs) do
+        if unitData.default then
+            for subIndex, subData in pairs(unitData.subunits or {}) do
+                if subData.default then
+                    for jobIndex, jobData in pairs(subData.jobs or {}) do
+                        if jobData.default then
+                            return unitIndex, subIndex, jobIndex, jobData
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local unitIndex, unitData = next(jobs)
+    if not unitIndex or not unitData then return end
+
+    local subIndex, subData = next(unitData.subunits or {})
+    if not subIndex or not subData then return end
+
+    local jobIndex, jobData = next(subData.jobs or {})
+    if not jobIndex or not jobData then return end
+
+    return unitIndex, subIndex, jobIndex, jobData
+end
+
+function GetAllPlayerJobs()
+    local jobs = {}
+
+    for _, v in pairs(player.GetAll()) do
+        local jobID, jobTable = v:GetJob()
+        jobs[v:SteamID64()] = {
+            jobID = jobID,
+            jobTable = jobTable
         }
-
-        if not IDCheck(id) then
-            id = GenerateRandomNumber()
-        end
-        
-        local Atbl = PD.Char:LoadChar(ply:SteamID64(), "PD.Char.Create")
-
-        if Atbl then
-            table.insert(Atbl,data)
-        else
-            Atbl = {}
-            table.insert(Atbl,data)
-        end
-
-        PD.Char:SaveChar(ply:SteamID64(),Atbl)
-
-        if ply:IsPlayer() then
-            print("Job Change | PD.Char.Create | Zeile 48")
-            ply:changeTeam(jobName, true)
-           
-            ply:SetNWString("rpname",id.." "..name)
-            PD.Char:SetPlayerCharID(ply,id)
-            print("CharID bei erstellung: " .. id)
-            ply:PDSetMoney(0)
-            ply:SetModel(jobTable.model[1])
-            ply:SetNWString("character_id",id)
-            PD.Char:StartTimer(ply:SteamID64())
-            ply:SetJob(jobName, jobTable)
-
-            net.Start("PD.Char.JobChange")
-                net.WriteEntity(ply)
-                net.WriteString(jobName)
-                net.WriteTable(jobTable)
-            net.Broadcast()
-
-            PD.List:SetPlayerDefaultFaction(ply)
-            print(name .. " wurde in den Job " .. jobName .. " gesetzt.")
-        else
-            print("Spieler nicht gefunden. (PD.Char.Create: Zeile 180)")
-        end
-
-        hook.Run("PlayerCreateCharacter", ply, data)
-    else
-        print("Job-ID nicht gefunden. (PD.Char.Create: Zeile 185)")
     end
 
+    return jobs
+end
+
+timer.Simple(0.1, function()
+    for _, v in pairs(player.GetAll()) do
+        if not IsValid(v) then continue end
+
+        local jobID, jobTable = v:GetJob()
+
+        net.Start("PD.Char.SetJobFunction")
+        net.WriteEntity(v)
+        net.WriteString(jobID or "")
+        net.WriteTable(jobTable or {})
+        net.WriteTable(GetAllPlayerJobs())
+        net.Send(v)
+    end
+end)
+
+net.Receive("PD.Char.DefaultFaction", function(_, ply)
+    if not IsValid(ply) then return end
+    if PD.List and PD.List.SetPlayerDefaultFaction then
+        PD.List:SetPlayerDefaultFaction(ply)
+    end
+end)
+
+net.Receive("PD.Char.Create", function(_, ply)
+    if not IsValid(ply) then return end
+
+    net.ReadEntity()
+    local name = string.Trim(net.ReadString() or "")
+    if name == "" then return end
+
+    local id = GenerateRandomNumber()
+    while not IDCheck(id) do
+        id = GenerateRandomNumber()
+    end
+
+    local createDate = os.date("%d.%m.%Y %H:%M:%S", os.time())
+    local unitIndex, subIndex, jobIndex, jobTable = GetDefaultJobData()
+    if not unitIndex or not subIndex or not jobIndex or not jobTable then
+        print("Default Job nicht gefunden. (PD.Char.Create)")
+        return
+    end
+
+    local chars = PD.Char:LoadChar(ply:SteamID64(), "PD.Char.Create") or {}
+
+    local data = {
+        name = name,
+        id = id,
+        job = {
+            name = jobTable.name,
+            model = GetFirstModel(jobTable) or "",
+            unit = subIndex,
+            id = jobIndex
+        },
+        faction = {
+            unit = unitIndex,
+            subunit = subIndex,
+            job = jobIndex
+        },
+        money = 0,
+        cratedate = createDate,
+        lastplaytime = createDate,
+        playtime = 0,
+        rank = ""
+    }
+
+    local oldCharID = PD.Char:GetCharacterID(ply)
+    if oldCharID then
+        local oldCharIndex = PD.Char:GetCharIndexByID(chars, oldCharID)
+        if oldCharIndex and chars[oldCharIndex] then
+            chars[oldCharIndex].playtime = (chars[oldCharIndex].playtime or 0) + PD.Char:StopTimer(ply:SteamID64())
+            chars[oldCharIndex].lastplaytime = createDate
+        else
+            PD.Char:StopTimer(ply:SteamID64())
+        end
+    else
+        PD.Char:StopTimer(ply:SteamID64())
+    end
+
+    table.insert(chars, data)
+
+    ply.CharID = id
+    ply:SetNWString("character_id", id)
+    ply:SetNWString("rpname", id .. " " .. name)
+
+    PD.Char:SaveChar(ply:SteamID64(), chars)
+    PD.Char:StartTimer(ply:SteamID64())
     PD.Char:SyncChar(ply, "PD.Char.Create")
+
+    ply:changeTeam({
+        jobIndex = jobIndex,
+        jobsubunitIndex = subIndex,
+        jobunitIndex = unitIndex
+    }, true)
+
+    ply:SetJob(jobIndex, jobTable)
+    ply:SetModel(GetFirstModel(jobTable) or ply:GetModel())
+
+    if PD.List and PD.List.SetPlayerFaction then
+        PD.List:SetPlayerFaction(ply, unitIndex, subIndex, jobIndex)
+    end
+
+    net.Start("PD.Char.JobChange")
+    net.WriteEntity(ply)
+    net.WriteString(jobIndex)
+    net.WriteTable(jobTable or {})
+    net.WriteTable(GetAllPlayerJobs())
+    net.Broadcast()
+
+    if PD.LOGS and PD.LOGS.Add then
+        PD.LOGS.Add("[Char]", "Charakter " .. name .. " (" .. id .. ") wurde erstellt. " .. ply:SteamID64(), Color(0, 255, 0))
+    end
+
+    hook.Run("PlayerCreateCharacter", ply, data)
 end)
 
-net.Receive("PD.Char.Play",function()
-    local ply = net.ReadEntity()
-    local id = net.ReadUInt(32)
+net.Receive("PD.Char.Play", function(_, ply)
+    if not IsValid(ply) then return end
 
-    local jobID = PD.Char:PlayerSetChar(ply,id)
+    net.ReadEntity()
+    local charIndex = net.ReadUInt(32)
 
-    hook.Run("PlayerSetCharacter", ply, jobID)
-end)
+    local jobID = PD.Char:PlayerSetChar(ply, charIndex)
+    if not jobID then return end
 
-net.Receive("PD.Char.Delete",function()
-    local ply = net.ReadEntity()
-    local tblID = net.ReadUInt(32)
-    local name = net.ReadString()
-
-    local Atbl = PD.Char:LoadChar(ply:SteamID64(), "Delete Char")
-
-    hook.Run("PlayerDeleteCharacter", ply, Atbl[tblID])
-
-    if PD.Char:PlayerActiveChar(ply) then
-        table.remove(Atbl,tblID)
-        ply:KillSilent()
-
-        PD.Char:SaveChar(ply:SteamID64(),Atbl)
-        PD.Char:SyncChar(ply, "PD.Char.Delete")
-
-        ply:changeTeam(1, true)
-        ply:SetNWString("rname",name)
-
-        timer.Simple(0.5,function()
-            net.Start("OpenCharbyDelete")
-            net.Send(ply)
-        end)
-    else
-        table.remove(Atbl,tblID)
-        PD.Char:SaveChar(ply:SteamID64(),Atbl)
-
-        timer.Simple(0.5,function()
-            net.Start("OpenCharbyDelete")
-            net.Send(ply)
-        end)
+    if PD.LOGS and PD.LOGS.Add then
+        PD.LOGS.Add("[Char]", "Charakter " .. tostring(ply:GetNWString("rpname", ply:Nick())) .. " (" .. tostring(charIndex) .. ") wurde ausgewählt. " .. ply:SteamID64(), Color(0, 255, 0))
     end
 end)
 
-net.Receive("PD.Char.Syncsv",function(len,ply)
-    local b = net.ReadBool()
+net.Receive("PD.Char.Delete", function(_, ply)
+    if not IsValid(ply) then return end
+
+    net.ReadEntity()
+    local tblID = net.ReadInt(32)
+    local displayName = net.ReadString()
+
+    local chars = PD.Char:LoadChar(ply:SteamID64(), "PD.Char.Delete") or {}
+    local deletingChar = chars[tblID]
+    if not deletingChar then return end
+
+    local isActiveDeletedChar = PD.Char:GetCharacterID(ply) == deletingChar.id
+
+    hook.Run("PlayerDeleteCharacter", ply, deletingChar)
+
+    if PD.LOGS and PD.LOGS.Add then
+        PD.LOGS.Add("[Char]", "Charakter " .. deletingChar.id .. " " .. deletingChar.name .. " wurde gelöscht. " .. ply:SteamID64(), Color(255, 0, 0))
+    end
+
+    if isActiveDeletedChar then
+        deletingChar.playtime = (deletingChar.playtime or 0) + PD.Char:StopTimer(ply:SteamID64())
+        deletingChar.lastplaytime = os.date("%d.%m.%Y %H:%M:%S", os.time())
+    end
+
+    if PD.List and PD.List.RemoveFactionByCharID then
+        PD.List:RemoveFactionByCharID(deletingChar.id, false, ply)
+    end
+
+    table.remove(chars, tblID)
+    PD.Char:SaveChar(ply:SteamID64(), chars)
+
+    if isActiveDeletedChar then
+        ply.CharID = nil
+        ply:SetNWString("character_id", "9999")
+        ply:SetNWString("rpname", "")
+
+        local unitIndex, subIndex, jobIndex, jobTable = GetDefaultJobData()
+        if unitIndex and subIndex and jobIndex and jobTable then
+            ply:changeTeam({
+                jobIndex = jobIndex,
+                jobsubunitIndex = subIndex,
+                jobunitIndex = unitIndex
+            }, true)
+
+            ply:SetJob(jobIndex, jobTable)
+            ply:SetModel(GetFirstModel(jobTable) or ply:GetModel())
+        end
+    end
+
+    PD.Char:SyncChar(ply, "PD.Char.Delete")
+
+    if isActiveDeletedChar then
+        ply:SetNWString("rname", displayName)
+    end
+
+    timer.Simple(0.2, function()
+        if not IsValid(ply) then return end
+        net.Start("OpenCharbyDelete")
+        net.Send(ply)
+    end)
+end)
+
+net.Receive("PD.Char.Syncsv", function(_, ply)
+    if not IsValid(ply) then return end
+
+    local openMenu = net.ReadBool()
 
     PD.Char:SyncChar(ply, "PD.Char.Syncsv")
 
-    if b then
-        timer.Simple(1,function()
+    if openMenu then
+        timer.Simple(0.2, function()
+            if not IsValid(ply) then return end
             net.Start("PD.Char.Open")
             net.Send(ply)
         end)
     end
 end)
 
-net.Receive("PD.Char.AdminSave",function()
-    local plyid = net.ReadString()
-    local charid = net.ReadUInt(32)
-    local id = net.ReadString()
-    local name = net.ReadString()
-    local job = net.ReadString()
-    local money = net.ReadUInt(32)
-    local jobName, jobTable = PD.JOBS.GetJob(job, false)
-
-    local tbl = PD.Char:LoadChar(plyid, "AdminSave")
-
-    if tbl then
-        tbl[charid].id = id
-        tbl[charid].name = name
-        tbl[charid].job = {
-            name = jobName,
-            model = jobTable.model[1],
-            unit = jobTable.unit,
-            id = jobName
-        }
-        tbl[charid].money = money
-
-        PD.Char:SaveChar(plyid,tbl)
-    end
-end)
-
-net.Receive("PD.Char.AdminSync",function(len,ply)
-    local tbl = PD.Char:LoadAllChars()
-
-    -- print("AdminSync")
-    -- PrintTable(tbl)
-
-    net.Start("PD.Char.AdminSync")
-    net.WriteTable(tbl)
-    net.Send(ply)
-end)
-
-net.Receive("PD.Char.AdminDelete",function(len,ply)
-    local plyid = net.ReadString()
-    local charid = net.ReadUInt(32)
-
-    local tbl = PD.Char:LoadChar(plyid, "AdminDelete: " .. plyid)
-
-    if tbl then
-        table.remove(tbl,charid)
-        PD.Char:SaveChar(plyid,tbl)
-    end
-end)
-
-hook.Add("PD_Money_AddMoney","PD.Char:playerWalletChanged",function(ply,amount)
-    local tbl = PD.Char:LoadChar(ply:SteamID64(), "playerWalletChanged")
-    local id = FindPlayerCharbyName(string.sub(ply:Nick(),9),tbl)
-
-    if tbl and tbl[id] then
-        tbl[id].money = tbl[id].money + amount
-        PD.Char:SaveChar(ply:SteamID64(),tbl)
-    end
-end)
-
-gameevent.Listen("player_disconnect")
-hook.Add("player_disconnect","PD.Char:PlayerDisconnect",function(data)
-    local ply = Player(data.userid)
+hook.Add("PD_Money_AddMoney", "PD.Char.PlayerWalletChanged", function(ply, amount)
     if not IsValid(ply) then return end
 
-    local tbl = PD.Char:LoadChar(ply:SteamID64(), "PlayerDisconnect")
+    local charID = PD.Char:GetCharacterID(ply)
+    if not charID then return end
 
-    if tbl then
-        local id = FindPlayerCharbyName(string.sub(ply:Nick(),9),tbl)
-        tbl[id].playtime = tbl[id].playtime + PD.Char:StopTimer(ply:SteamID64())
-        tbl[id].lastplaytime = os.date("%d.%m.%Y %H:%M:%S",os.time())
-        tbl[id].money = ply:PDGetMoney()
-        PD.Char:SaveChar(ply:SteamID64(),tbl)
+    local chars = PD.Char:LoadChar(ply:SteamID64(), "PD_Money_AddMoney")
+    if not chars then return end
 
-        print("Player: " .. ply:Nick() .. " wurde gespeichert.")
-        print("Char: " .. tbl[id].name .. " wurde gespeichert.")
-    end
+    local charIndex = PD.Char:GetCharIndexByID(chars, charID)
+    if not charIndex or not chars[charIndex] then return end
+
+    chars[charIndex].money = (chars[charIndex].money or 0) + amount
+    PD.Char:SaveChar(ply:SteamID64(), chars)
 end)
 
-hook.Add("ShutDown","PD.Char:ServerDown",function()
-    for k,v in pairs(player.GetAll()) do
-        local tbl = PD.Char:LoadChar(v:SteamID64(), "ShutDown")
-        local id = FindPlayerCharbyName(string.sub(v:Nick(),9),tbl)
+hook.Add("PlayerDisconnected", "PD.Char.PlayerDisconnected", function(ply)
+    if not IsValid(ply) then return end
 
-        if tbl and tbl[id] then
-            tbl[id].playtime = tbl[id].playtime + PD.Char:StopTimer(v:SteamID64())
-            tbl[id].lastplaytime = os.date("%d.%m.%Y %H:%M:%S",os.time())
-            tbl[id].money = v:PDGetMoney()
-            PD.Char:SaveChar(v:SteamID64(),tbl)
+    local charID = PD.Char:GetCharacterID(ply)
+    if not charID then
+        PD.Char:StopTimer(ply:SteamID64())
+        return
+    end
 
-            print("Player: " .. v:Nick() .. " wurde gespeichert.")
-            print("Char: " .. tbl[id].name .. " wurde gespeichert.")
+    local chars = PD.Char:LoadChar(ply:SteamID64(), "PlayerDisconnected")
+    if not chars then
+        PD.Char:StopTimer(ply:SteamID64())
+        return
+    end
+
+    local charIndex = PD.Char:GetCharIndexByID(chars, charID)
+    if not charIndex or not chars[charIndex] then
+        PD.Char:StopTimer(ply:SteamID64())
+        return
+    end
+
+    chars[charIndex].playtime = (chars[charIndex].playtime or 0) + PD.Char:StopTimer(ply:SteamID64())
+    chars[charIndex].lastplaytime = os.date("%d.%m.%Y %H:%M:%S", os.time())
+
+    PD.Char:SaveChar(ply:SteamID64(), chars)
+end)
+
+hook.Add("ShutDown", "PD.Char.ServerDown", function()
+    for _, v in pairs(player.GetAll()) do
+        if not IsValid(v) then continue end
+
+        local charID = PD.Char:GetCharacterID(v)
+        if not charID then
+            PD.Char:StopTimer(v:SteamID64())
+            continue
         end
+
+        local chars = PD.Char:LoadChar(v:SteamID64(), "ShutDown")
+        if not chars then
+            PD.Char:StopTimer(v:SteamID64())
+            continue
+        end
+
+        local charIndex = PD.Char:GetCharIndexByID(chars, charID)
+        if not charIndex or not chars[charIndex] then
+            PD.Char:StopTimer(v:SteamID64())
+            continue
+        end
+
+        chars[charIndex].playtime = (chars[charIndex].playtime or 0) + PD.Char:StopTimer(v:SteamID64())
+        chars[charIndex].lastplaytime = os.date("%d.%m.%Y %H:%M:%S", os.time())
+
+        PD.Char:SaveChar(v:SteamID64(), chars)
     end
 end)
 
-concommand.Add("charprints",function(ply)
-    local tbl = PD.Char:LoadAllChars()
-
-    PrintTable(tbl)
+concommand.Add("charprints", function()
+    PrintTable(PD.Char:LoadAllChars())
 end)
 
-hook.Add("PlayerSetCharacter", "TestHookChar", function(ply, jobID)
-    print("PlayerSetCharacter")
-    print(ply)
+hook.Add("PD_Faction_Change", "PD.Char.FactionChangeSync", function(ply, factionIndex, subfactionIndex, jobIndex)
+    if not IsValid(ply) then return end
 
-    local jobID, jobTbl = PD.JOBS.GetJob(jobID)
+    local charID = PD.Char:GetCharacterID(ply)
+    if not charID then return end
+
+    local ok, _, jobTable = PD.Char:UpdateStoredCharJobData(ply:SteamID64(), charID, factionIndex, subfactionIndex, jobIndex)
+    if not ok then
+        print("Job Table für Faction Change in sv_char.lua nicht gefunden.")
+        return
+    end
+
+    if jobTable then
+        ply:SetJob(jobIndex, jobTable)
+    end
+
+    PD.Char:SyncChar(ply, "PD_Faction_Change")
 
     net.Start("PD.Char.JobChange")
-        net.WriteEntity(ply)
-        net.WriteString(jobID)
-        net.WriteTable(jobTbl)
+    net.WriteEntity(ply)
+    net.WriteString(jobIndex or "")
+    net.WriteTable(jobTable or {})
+    net.WriteTable(GetAllPlayerJobs())
     net.Broadcast()
 end)
 
-hook.Add("PD_Faction_Change", "PD.Char:PD_Faction_Change", function(ply, factionName, subfactionName, jobName)
-    if not PD.Char:PlayerActiveChar(ply) then return end
-    print("PD_Faction_Change")
+hook.Add("PlayerInitialSpawn", "PD.Char.PlayerInitialSpawn", function(ply)
+    local _, _, defaultJobID, defaultJobTbl = GetDefaultJobData()
 
-    local tbl = PD.Char:LoadChar(ply:SteamID64(), "Char_SetFactionInfomations")
-    local charID = FindPlayerCharbyName(string.sub(ply:Nick(),9),tbl)
-
-    if not tbl[charID] then return end
-
-    tbl[charID].faction.unit = factionName
-    tbl[charID].faction.subunit = subfactionName
-    tbl[charID].faction.job = jobName
-
-    local jobID, jobTbl = PD.JOBS.GetJob(jobName)
-
-    net.Start("PD.Char.JobChange")
-        net.WriteEntity(ply)
-        net.WriteString(jobID)
-        net.WriteTable(jobTbl)
-    net.Broadcast()
-
-    PD.Char:SaveChar(ply:SteamID64(), tbl)
-
-    PD.Char:ChangePlayerJob(ply, jobName)
-end)
-
--- Wenn Spieler joint wird standard Job geladen
-hook.Add("PlayerInitialSpawn", "PD.Char:PlayerInitialSpawn", function(ply)
-    local defaultJobID, defaultJobTbl = PD.JOBS.GetJob(false, false)
-
-    if defaultJobID then
+    if defaultJobID and defaultJobTbl then
         ply:SetJob(defaultJobID, defaultJobTbl)
     end
 
+    ply.CharID = nil
+    ply:SetNWString("character_id", "9999")
+    ply:SetNWString("rpname", "")
     ply:KillSilent()
 end)
-
