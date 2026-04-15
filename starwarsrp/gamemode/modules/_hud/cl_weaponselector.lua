@@ -317,7 +317,6 @@ local function EquipSelectedWeapon()
         -- Auch Server benachrichtigen
         net.Start("PD.WeaponSelector:SelectWeapon")
         net.WriteInt(selectedIndex, 32)
-        net.WriteEntity(ply)
         net.SendToServer()
     end
     

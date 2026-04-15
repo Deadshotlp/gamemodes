@@ -6,11 +6,9 @@ end)
 
 util.AddNetworkString("PD.WeaponSelector:SelectWeapon")
 
-net.Receive("PD.WeaponSelector:SelectWeapon", function(len, p)
+net.Receive("PD.WeaponSelector:SelectWeapon", function(len, ply)
     local selectedWeapon = net.ReadInt(32)
-    local ply = net.ReadEntity()
     local weaponList = ply:GetWeapons()
-    local activeWep = ply:GetActiveWeapon()
 
     for k, v in pairs(weaponList) do
         if k == selectedWeapon then

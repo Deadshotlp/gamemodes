@@ -22,6 +22,5 @@ end)
 
 function PD.AdminCheck()
     net.Start("PD.CheckAdmin")
-    net.WriteEntity(LocalPlayer())
     net.SendToServer()
 end
