@@ -17,6 +17,8 @@ local function sendTouser(ply, tbl)
 end
 
 net.Receive("PD.FV.RequestPlayerInfo", function(len, ply)
+    if not IsValid(ply) or not ply:IsAdmin() then return end
+
     local str = string.Split(net.ReadString(), ",")
     PrintTable(str)
     local unit, subunit, job = str[1], str[2], str[3]

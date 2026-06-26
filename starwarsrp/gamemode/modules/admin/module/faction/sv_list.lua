@@ -32,14 +32,8 @@ end
 
 local function FindTargetFromRankNet(len)
     if len <= 40 then
-        local actor = net.ReadEntity()
-        local target = net.ReadEntity()
-
-        if actor ~= nil then
-            return target
-        end
-
-        return nil
+        net.ReadEntity() -- vom Client mitgesendeter Akteur wird verworfen; Berechtigung läuft über den echten net.Receive ply-Parameter
+        return net.ReadEntity()
     end
 
     local charID = net.ReadString()

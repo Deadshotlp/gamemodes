@@ -14,21 +14,13 @@ function PD.Chat.HandleMessage(ply, text)
     hook.Run("PlayerSay", ply, text, false)
 
     local prefix = string.sub(text, 1, 1)
-    local isCommand = false
 
-    for _, p in pairs(PD.Chat.Command.Prefix) do
-        if prefix == p then
-            isCommand = true
-            break
-        end
-    end
-
-    if isCommand then
+    if PD.Chat.Command.List[prefix] then
         local args = string.Split(text:sub(2), " ")
         local commandKey = args[1]:lower()
         table.remove(args, 1)
 
-        for _, command in pairs(PD.Chat.Command.List) do
+        for _, command in pairs(PD.Chat.Command.List[prefix]) do
             if _ == commandKey then
                 command.callback(ply, args)
                 return

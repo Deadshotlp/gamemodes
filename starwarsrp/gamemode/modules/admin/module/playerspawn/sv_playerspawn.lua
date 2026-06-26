@@ -10,6 +10,8 @@ local Spawns = {}
 PD.JSON.Create("spawn")
 
 net.Receive("PDPlayerSpawnSet", function(len, ply)
+    if not IsValid(ply) or not ply:IsAdmin() then return end
+
     local tbl = net.ReadTable()
 
     for k, v in pairs(tbl) do
@@ -20,6 +22,8 @@ net.Receive("PDPlayerSpawnSet", function(len, ply)
 end)
 
 net.Receive("PDDeletePlayerSpawns", function(len, ply)
+    if not IsValid(ply) or not ply:IsAdmin() then return end
+
     Spawns = {}
 
     PD.JSON.Write("spawn/spawns.json", Spawns)

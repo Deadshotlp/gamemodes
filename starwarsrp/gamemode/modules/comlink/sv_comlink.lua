@@ -11,7 +11,7 @@ net.Receive("PD.Comlink.StartVoice", function(len, ply)
     local channel = net.ReadInt(8)
     local id = net.ReadInt(4)
 
-    if not PD.Comlink.Table[channel].check(ply) then return end
+    if not PD.Comlink.Table[channel] or not PD.Comlink.Table[channel].check(ply) then return end
 
     if not playerTalkerTable[ply:Nick()] then
         playerTalkerTable[ply:Nick()] = {}

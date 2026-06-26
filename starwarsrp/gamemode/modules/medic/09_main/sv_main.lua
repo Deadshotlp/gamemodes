@@ -108,12 +108,13 @@ function PD.DM:RequestTable(ply, key)
     return PD.DM.Main.tbl[ply:SteamID64()][key]
 end
 
-net.Receive("PD.DM.RequestValue", function()
-    local ply1 = net.ReadEntity()
+net.Receive("PD.DM.RequestValue", function(len, ply)
     local ply2 = net.ReadEntity()
     local bone = net.ReadInt(16)
 
     local task = net.ReadString()
+
+    if not IsValid(ply2) or not ply2:IsPlayer() or not PD.DM.Main.tbl[ply2:SteamID64()] then return end
 
     if task == "inspect" then
         local val1 = PD.DM:RequestTable(ply2, task)
@@ -130,79 +131,79 @@ net.Receive("PD.DM.RequestValue", function()
         net.Start("PD.DM.RecieveValue")
         net.WriteString("injuries")
         net.WriteTable(val2)
-        net.Send(ply1)
+        net.Send(ply)
     elseif task == "puls" then
         local val = PD.DM:RequestTable(ply2, task)
 
         net.Start("PD.DM.RecieveValue")
         net.WriteString("puls")
         net.WriteInt(val, 16)
-        net.Send(ply1)
+        net.Send(ply)
     elseif task == "bp" then
         local val = PD.DM:RequestTable(ply2, task)
 
         net.Start("PD.DM.RecieveValue")
         net.WriteString("bp")
         net.WriteTable(val)
-        net.Send(ply1)
+        net.Send(ply)
     end
 end)
 
-net.Receive("PD.DM.ChangeValue", function()
-    local ply1 = net.ReadEntity()
+net.Receive("PD.DM.ChangeValue", function(len, ply)
     local ply2 = net.ReadEntity()
 
     local tbl = net.ReadTable()
 
-    if ply1:GetPos():Distance(ply2:GetPos()) >= 100 then
+    if not IsValid(ply2) or not ply2:IsPlayer() or not PD.DM.Main.tbl[ply2:SteamID64()] then return end
+    if type(tbl) ~= "table" or blanc_clone[tbl[1]] == nil then return end
+
+    if ply:GetPos():Distance(ply2:GetPos()) >= 100 then
         return
     end
 
     PD.DM:UpdateTable(ply2, tbl[1], tbl[2])
 end)
 
-net.Receive("PD.DM.ChangeTourniquetStatus", function()
-    local ply1 = net.ReadEntity()
+net.Receive("PD.DM.ChangeTourniquetStatus", function(len, ply)
     local ply2 = net.ReadEntity()
-    local bone = net.ReceiveInt(16)
+    local bone = net.ReadInt(16)
+
+    if not IsValid(ply2) or not ply2:IsPlayer() then return end
 
     if bone >= 4 then
         return
     end
 end)
 
-net.Receive("PD.DM.Interact", function()
-    local ply1 = net.ReadEntity()
+net.Receive("PD.DM.Interact", function(len, ply)
     local ply2 = net.ReadEntity()
     local task = net.ReadInt(4)
     local index = net.ReadInt(11)
     local body_part_index = net.ReadInt(4)
 
-    if task == "activ_interaktion" then
-        PD.DM:UpdateTable(ply1, "activ_interaktion", nil)
-    end
+    if not IsValid(ply2) or not ply2:IsPlayer() or not PD.DM.Main.tbl[ply2:SteamID64()] then return end
 
     if ply2:Alive() then
-        if ply1:GetPos():Distance(ply2:GetPos()) >= 100 then
+        if ply:GetPos():Distance(ply2:GetPos()) >= 100 then
             return
         end
     else
         local ragdoll = ply2:GetNW2Entity("PD.DM.Ragdoll")
-        if not IsValid(ragdoll) or ply1:GetPos():Distance(ragdoll:GetPos()) >= 100 then
+        if not IsValid(ragdoll) or ply:GetPos():Distance(ragdoll:GetPos()) >= 100 then
             return
         end
     end
 
     if task == 0 then
         PD.DM.Main.tbl[ply2:SteamID64()].triage_card = index
-    elseif task == 1 then
-        PD.DM.Diagnostics.tbl[index].effect(ply1, PD.DM.Main.tbl[ply2:SteamID64()], body_part_index, ply2)
-    elseif task == 2 then
-        PD.DM.Medication.tbl[index].effect(ply1, PD.DM.Main.tbl[ply2:SteamID64()], body_part_index, ply2)
-    elseif task == 3 then
-        PD.DM.Treatments.tbl[index].effect(ply1, PD.DM.Main.tbl[ply2:SteamID64()], body_part_index, ply2)
-    elseif task == 4 then
-        PD.DM.Other.tbl[index].effect(ply1, PD.DM.Main.tbl[ply2:SteamID64()], body_part_index, ply2)
+    elseif task == 1 and PD.DM.Diagnostics.tbl[index] then
+        PD.DM.Diagnostics.tbl[index].effect(ply, PD.DM.Main.tbl[ply2:SteamID64()], body_part_index, ply2)
+    elseif task == 2 and PD.DM.Medication.tbl[index] then
+        PD.DM.Medication.tbl[index].effect(ply, PD.DM.Main.tbl[ply2:SteamID64()], body_part_index, ply2)
+    elseif task == 3 and PD.DM.Treatments.tbl[index] then
+        PD.DM.Treatments.tbl[index].effect(ply, PD.DM.Main.tbl[ply2:SteamID64()], body_part_index, ply2)
+    elseif task == 4 and PD.DM.Other.tbl[index] then
+        PD.DM.Other.tbl[index].effect(ply, PD.DM.Main.tbl[ply2:SteamID64()], body_part_index, ply2)
     end
 end)
 

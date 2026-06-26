@@ -5,7 +5,9 @@ util.AddNetworkString("PD.LOGS.Sync")
 
 PD.LOGS.Tbl = PD.LOGS.Tbl or {}
 
-net.Receive("PD.LOGS.Addcl", function()
+net.Receive("PD.LOGS.Addcl", function(len, ply)
+    if not IsValid(ply) or not ply:IsAdmin() then return end
+
     local typ = net.ReadString()
     local text = net.ReadString()
     local color = net.ReadColor()
@@ -34,9 +36,7 @@ timer.Simple(1, function()
 end)
 
 hook.Add("ShutDown", "SaveLogs", function()
-    if PD.JSON.Read("modules/logs/" .. os.date("%d.%m.%Y") .. ".json") then
-        local old = PD.JSON.Read("modules/logs/" .. os.date("%d.%m.%Y") .. ".json")
-    end
+    local old = PD.JSON.Read("modules/logs/" .. os.date("%d.%m.%Y") .. ".json")
 
     if old then
         for k,v in pairs(old) do

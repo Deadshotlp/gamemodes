@@ -6,13 +6,15 @@ end)
 
 util.AddNetworkString("PD.WeaponSelector:SelectWeapon")
 
-net.Receive("PD.WeaponSelector:SelectWeapon", function(len, ply)
+net.Receive("PD.WeaponSelector:SelectWeapon", function(len, p)
+    if not IsValid(p) then return end
+
     local selectedWeapon = net.ReadInt(32)
-    local weaponList = ply:GetWeapons()
+    local weaponList = p:GetWeapons()
 
     for k, v in pairs(weaponList) do
         if k == selectedWeapon then
-            ply:SelectWeapon(v:GetClass())
+            p:SelectWeapon(v:GetClass())
         end
     end
 end)

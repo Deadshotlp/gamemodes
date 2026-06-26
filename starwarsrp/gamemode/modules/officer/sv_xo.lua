@@ -19,27 +19,6 @@ PD.Officer.JobMap = {
     to = {"Combat Engineers"} -- Techniker
 }
 
--- Add Kommand zum Manuellen Spieler zuweisen
-hook.Add("PlayerSay", "PD.Officer.ManualAssign", function(ply, text)
-    if string.sub(text, 1, 9) == "!officer " then
-        local args = string.Split(string.sub(text, 10), " ")
-        local roleKey = args[1]
-        local targetName = ply:Nick() -- Standardmäßig auf den Spieler selbst setzen
-
-        if PD.Officer.JobMap[roleKey] then
-            PD.Officer.Table[roleKey] = targetName
-
-            net.Start("PD.Officer:Sync")
-                net.WriteTable(PD.Officer.Table)
-            net.Broadcast()
-
-            return ""
-        else
-            return "Ungültige Rolle. Verfügbare Rollen: co, eo, mo, no, so, to."
-        end
-    end
-end)
-
 util.AddNetworkString("PD.Officer:Sync")
 util.AddNetworkString("PD.Officer:Request")
 
@@ -72,6 +51,32 @@ local function matchesRole(jobTable, searchNames)
 
     return false
 end
+
+-- Add Kommand zum Manuellen Spieler zuweisen
+hook.Add("PlayerSay", "PD.Officer.ManualAssign", function(ply, text)
+    if string.sub(text, 1, 9) == "!officer " then
+        local args = string.Split(string.sub(text, 10), " ")
+        local roleKey = args[1]
+        local targetName = ply:Nick() -- Standardmäßig auf den Spieler selbst setzen
+
+        if not PD.Officer.JobMap[roleKey] then
+            return "Ungültige Rolle. Verfügbare Rollen: co, eo, mo, no, so, to."
+        end
+
+        local _, jobTable = ply:GetJob()
+        if not ply:IsAdmin() and not matchesRole(jobTable, PD.Officer.JobMap[roleKey]) then
+            return "Du bist nicht berechtigt, dich als " .. roleKey .. " einzutragen."
+        end
+
+        PD.Officer.Table[roleKey] = targetName
+
+        net.Start("PD.Officer:Sync")
+            net.WriteTable(PD.Officer.Table)
+        net.Broadcast()
+
+        return ""
+    end
+end)
 
 -- Sammelt alle Spieler für eine Rolle, sortiert nach Position (niedrigste Position = höchster Rang)
 local function getPlayersForRole(roleKey)

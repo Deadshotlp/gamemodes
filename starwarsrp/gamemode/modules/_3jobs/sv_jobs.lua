@@ -637,7 +637,15 @@ hook.Add("PlayerInitialSpawn", "PD.SendJobData", function(ply)
     end)
 end)
 
-net.Receive("PD.JOBS.SyncJobs", function(_, _)
+local syncJobsCooldown = {}
+
+net.Receive("PD.JOBS.SyncJobs", function(_, ply)
+    if not IsValid(ply) then return end
+
+    local steamid = ply:SteamID64()
+    if syncJobsCooldown[steamid] and CurTime() - syncJobsCooldown[steamid] < 5 then return end
+    syncJobsCooldown[steamid] = CurTime()
+
     PD.JOBS.LoadJobs(function(ok)
         if not ok then
             return

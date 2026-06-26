@@ -11,7 +11,7 @@ hook.Add("PlayerSay", "MariosDefconSystem", function(ply, txt)
     if DEFCON.Commands[string.sub(txt, 1, 7)] then
         if DEFCON.Jobs[team.GetName(ply:Team())] or DEFCON.Team[ply:GetUserGroup()] then
             local id = tonumber(string.sub(txt, 9, 9))
-            local extraText = string.sub(txt, 11)
+            local extraText = string.sub(txt, 11, 11 + 150)
 
             if DEFCON:GetID(id) then
                 nr = id

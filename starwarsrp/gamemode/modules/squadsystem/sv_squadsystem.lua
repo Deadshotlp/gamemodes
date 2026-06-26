@@ -14,8 +14,7 @@ PD.Squad.Squads = { --PD.Squad.Squads or {
 }
 
 local function_tbl = {
-    ["create_squad"] = function()
-        local ply1 = net.ReadEntity()
+    ["create_squad"] = function(ply)
         local tbl = net.ReadTable()
         local tbl2 = net.ReadTable()
 
@@ -28,7 +27,7 @@ local function_tbl = {
 
         for k, v in SortedPairs(PD.Squad.Squads) do
             for k2, v2 in SortedPairs(v.members) do
-                if v2.id == ply1:SteamID64() then
+                if v2.id == ply:SteamID64() then
                     print("Player is already in a squad, removing from previous squad.")
 
                     table.RemoveByValue(PD.Squad.Squads, v)
@@ -46,7 +45,7 @@ local function_tbl = {
             rolle = tbl2.rolle or "Attack",
             members = {
                 [1] = {
-                    id = ply1:SteamID64(),
+                    id = ply:SteamID64(),
                     rank = "Leader",
                 },
             },
@@ -59,15 +58,14 @@ local function_tbl = {
         net.Start("PD.SQUAD.UpdateSquad")
         net.WriteString("squad_update")
         net.WriteTable(squad_tbl)
-        net.Send(ply1)
+        net.Send(ply)
     end,
-    ["update_squad"] = function()
-        local ply1 = net.ReadEntity()
+    ["update_squad"] = function(ply)
         local tbl1 = net.ReadTable()
         local tbl2 = net.ReadTable()
 
         local squad
-        
+
         for k, v in SortedPairs(PD.Squad.Squads) do
             if v.name == tbl1.name then
                 squad = v
@@ -75,40 +73,50 @@ local function_tbl = {
             end
         end
 
+        if not squad then return end
+
+        local is_leader = false
+        for k2, v2 in SortedPairs(squad.members) do
+            if v2.id == ply:SteamID64() and v2.rank == "Leader" then
+                is_leader = true
+                break
+            end
+        end
+
+        if not is_leader then return end
+
         for k, v in SortedPairs(PD.Squad.Squads) do
             if v.name == tbl2.name and v ~= squad then
                 return -- Prevent duplicate squad names
             end
         end
 
-        if squad then
-            if isstring(tbl2.name) then
-                squad.name = nil
-                squad.name = tbl2.name
-            else
-                print("Invalid squad name provided.")
-            end
+        if isstring(tbl2.name) then
+            squad.name = nil
+            squad.name = tbl2.name
+        else
+            print("Invalid squad name provided.")
+        end
 
-            if isstring(tbl2.rolle) then
-                squad.rolle = nil
-                squad.rolle = tbl2.rolle
-            else
-                print("Invalid squad rolle provided.")
-            end
+        if isstring(tbl2.rolle) then
+            squad.rolle = nil
+            squad.rolle = tbl2.rolle
+        else
+            print("Invalid squad rolle provided.")
+        end
 
-            if isbool(tbl2.show_in_hud) then
-                squad.show_in_hud = nil
-                squad.show_in_hud = tbl2.show_in_hud
-            else
-                print("Invalid squad show_in_hud provided.")
-            end
+        if isbool(tbl2.show_in_hud) then
+            squad.show_in_hud = nil
+            squad.show_in_hud = tbl2.show_in_hud
+        else
+            print("Invalid squad show_in_hud provided.")
+        end
 
-            if isbool(tbl2.show_in_world) then
-                squad.show_in_world = nil
-                squad.show_in_world = tbl2.show_in_world
-            else
-                print("Invalid squad show_in_world provided.")
-            end
+        if isbool(tbl2.show_in_world) then
+            squad.show_in_world = nil
+            squad.show_in_world = tbl2.show_in_world
+        else
+            print("Invalid squad show_in_world provided.")
         end
 
         if #squad.members == 0 then
@@ -136,57 +144,53 @@ local function_tbl = {
         end
 
     end,
-    ["invite_to_squad"] = function()
-        local ply1 = net.ReadEntity()
+    ["invite_to_squad"] = function(ply)
         local ply2 = net.ReadEntity()
-        -- Logic to invite a player to a squad
+
+        if not IsValid(ply2) or not ply2:IsPlayer() then return end
 
         local is_in_squad = false
         local squad
+        local is_leader = false
 
         for k, v in SortedPairs(PD.Squad.Squads) do
             for k2, v2 in SortedPairs(v.members) do
-                if v2.id == ply1:SteamID64() then
+                if v2.id == ply:SteamID64() then
                     squad = v
+                    if v2.rank == "Leader" then is_leader = true end
                 elseif v2.id == ply2:SteamID64() then
                     is_in_squad = true
                 end
             end
         end
 
-        if is_in_squad then return end
+        if is_in_squad or not squad or not is_leader then return end
 
-        if squad then
-            table.insert(squad.members, {
-                id = ply2:SteamID64(),
-                rank = "Member",
-            })
+        table.insert(squad.members, {
+            id = ply2:SteamID64(),
+            rank = "Member",
+        })
 
+        for k, v in SortedPairs(squad.members) do
             net.Start("PD.SQUAD.UpdateSquad")
             net.WriteString("squad_update")
             net.WriteTable(squad)
-            net.Send(ply2)
-
-            for k, v in SortedPairs(squad.members) do
-                net.Start("PD.SQUAD.UpdateSquad")
-                net.WriteString("squad_update")
-                net.WriteTable(squad)
-                net.Send(player.GetBySteamID64(v.id))
-            end
+            net.Send(player.GetBySteamID64(v.id))
         end
     end,
-    ["change_squad_pos"] = function()
-        local ply1 = net.ReadEntity()
+    ["change_squad_pos"] = function(ply)
         local ply2 = net.ReadEntity()
         local squad_name = net.ReadString()
         local new_rank = net.ReadString()
+
+        if not IsValid(ply2) or not ply2:IsPlayer() then return end
 
         local squad
 
         for k, v in SortedPairs(PD.Squad.Squads) do
             if v.name ~= squad_name then continue end
             for k2, v2 in SortedPairs(v.members) do
-                if v2.id == ply1:SteamID64() then
+                if v2.id == ply:SteamID64() and v2.rank == "Leader" then
                     squad = v
                     continue
                 end
@@ -209,17 +213,18 @@ local function_tbl = {
             net.Send(player.GetBySteamID64(v.id))
         end
     end,
-    ["remove_from_squad"] = function()
-        local ply1 = net.ReadEntity()
+    ["remove_from_squad"] = function(ply)
         local ply2 = net.ReadEntity()
         local squad_name = net.ReadString()
+
+        if not IsValid(ply2) or not ply2:IsPlayer() then return end
 
         local squad
 
         for k, v in SortedPairs(PD.Squad.Squads) do
             if v.name ~= squad_name then continue end
             for k2, v2 in SortedPairs(v.members) do
-                if v2.id == ply1:SteamID64() and v2.rank == "Leader" then
+                if v2.id == ply:SteamID64() and v2.rank == "Leader" then
                     squad = v
                     continue
                 end
@@ -264,21 +269,13 @@ local function_tbl = {
         end
     end,
     ["leave_from_squad"] = function(ply)
-        local ply1 = net.ReadEntity()
-
-        if not IsValid(ply1) then
-            if IsValid(ply) then  
-                ply1 = ply
-            else
-                return
-            end
-        end
+        if not IsValid(ply) then return end
 
         local squad
 
         for k, v in SortedPairs(PD.Squad.Squads) do
             for k2, v2 in SortedPairs(v.members) do
-                if v2.id == ply1:SteamID64() then
+                if v2.id == ply:SteamID64() then
                     squad = v
                     continue
                 end
@@ -287,7 +284,7 @@ local function_tbl = {
 
         if not squad then return end
 
-        squad.members = table.RemoveByValue(squad.members, ply1:SteamID64())
+        squad.members = table.RemoveByValue(squad.members, ply:SteamID64())
 
         if #squad.members == 0 then
             table.RemoveByValue(PD.Squad.Squads, squad)
@@ -306,10 +303,10 @@ local function_tbl = {
             end
         end
 
-        if IsValid(ply1) then
+        if IsValid(ply) and ply:IsPlayer() then
             net.Start("PD.SQUAD.UpdateSquad")
             net.WriteString("leave_squad")
-            net.Send(ply1)
+            net.Send(ply)
         end
 
         for k, v in SortedPairs(squad.members) do
@@ -319,9 +316,7 @@ local function_tbl = {
             net.Send(player.GetBySteamID64(v.id))
         end
     end,
-    ["squad_background"] = function()
-        local ply = net.ReadEntity()
-
+    ["squad_background"] = function(ply)
         net.Start("PD.SQUAD.UpdateSquad")
         net.WriteString("squad_background")
         net.WriteTable(PD.SQUAD.rolle_list)
@@ -361,8 +356,10 @@ end
 net.Receive("PD.SQUAD.UpdateSquad", function(len, ply)
     local str = net.ReadString()
 
+    if not IsValid(ply) or not ply:IsPlayer() then return end
+
     if function_tbl[str] then
-        function_tbl[str]()
+        function_tbl[str](ply)
     end
 end)
 

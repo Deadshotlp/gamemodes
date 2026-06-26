@@ -15,6 +15,9 @@ net.Receive("ChangeBodygroup", function(len, ply)
     local bodygroup = net.ReadInt(32)
     local value = net.ReadInt(32)
 
+    if bodygroup < 0 or bodygroup >= ply:GetNumBodyGroups() then return end
+    if value < 0 or value >= ply:GetBodygroupCount(bodygroup) then return end
+
     PD.Entity.Umkleide:ChangeBodygroup(ply, bodygroup, value)
 end)
 

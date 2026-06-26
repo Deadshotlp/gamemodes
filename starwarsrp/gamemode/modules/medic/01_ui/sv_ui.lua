@@ -8,18 +8,20 @@ util.AddNetworkString("PD.DM.UI.CloseTreatmentInterface")
 
 -- Live Player Interaktion Update
 
-net.Receive("PD.DM.UI.RequestTreatmentInterface", function()
-    local ply1 = net.ReadEntity()
+net.Receive("PD.DM.UI.RequestTreatmentInterface", function(len, ply)
     local ply2 = net.ReadEntity()
 
-    PD.DM.UI.AddLiveInteraktion(ply1, ply2)
+    if not IsValid(ply2) or not ply2:IsPlayer() or not PD.DM.Main.tbl[ply2:SteamID64()] then return end
+
+    PD.DM.UI.AddLiveInteraktion(ply, ply2)
 end)
 
-net.Receive("PD.DM.UI.CloseTreatmentInterface", function()
-    local ply1 = net.ReadEntity()
+net.Receive("PD.DM.UI.CloseTreatmentInterface", function(len, ply)
     local ply2 = net.ReadEntity()
 
-    PD.DM.UI.RemoveLiveInteraktion(ply1, ply2)
+    if not IsValid(ply2) or not ply2:IsPlayer() or not PD.DM.Main.tbl[ply2:SteamID64()] then return end
+
+    PD.DM.UI.RemoveLiveInteraktion(ply, ply2)
 end)
 
 function PD.DM.UI.AddLiveInteraktion(ply1, ply2)

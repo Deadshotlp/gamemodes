@@ -5,8 +5,14 @@ util.AddNetworkString("PD.List.SetPlayerFaction")
 util.AddNetworkString("PD.List.kick")
 util.AddNetworkString("PD.List.ChangeUnit")
 
+local listSyncCooldown = {}
+
 net.Receive("PD.List.Sync", function(_, ply)
     if not IsValid(ply) then return end
+
+    local steamid = ply:SteamID64()
+    if listSyncCooldown[steamid] and CurTime() - listSyncCooldown[steamid] < 5 then return end
+    listSyncCooldown[steamid] = CurTime()
 
     PD.List:LoadFactions()
     PD.List:Sync(ply)

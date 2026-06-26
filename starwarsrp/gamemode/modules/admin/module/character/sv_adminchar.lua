@@ -84,6 +84,8 @@ net.Receive("PD.Char.Admin",function(len, ply)
 end)
 
 net.Receive("PD.Char.AdminDelete",function(len,ply)
+    if not IsValid(ply) or not ply:IsAdmin() then return end
+
     local plyid = net.ReadString()
     local charid = net.ReadUInt(32)
 
