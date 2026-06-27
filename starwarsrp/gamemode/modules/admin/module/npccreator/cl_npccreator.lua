@@ -41,11 +41,25 @@ local AimSkills = {
     { text = "Gut", value = "better" },
 }
 
+local SurrenderBehaviors = {
+    { text = "Fliehen", value = "flee" },
+    { text = "Ergeben (stehenbleiben)", value = "surrender" },
+}
+
 local function LabelFor(list, value, fallback)
     for _, opt in ipairs(list) do
         if opt.value == value then return opt.text end
     end
     return fallback
+end
+
+local function FactionSetToString(set)
+    local names = {}
+    for name in pairs(set or {}) do
+        table.insert(names, name)
+    end
+    table.sort(names)
+    return table.concat(names, ", ")
 end
 
 local function DefaultTemplate()
@@ -56,15 +70,26 @@ local function DefaultTemplate()
         health = 150,
         alignment = "hostile",
         attackType = "ranged",
-        damage = 14,
         sightRange = 1800,
-        attackCooldown = 1.2,
         aimSkill = "realistic",
         canMove = true,
         canRotate = true,
-        isSquadLeader = false,
+        seeksCover = true,
+        faction = "",
+        hostileFactions = "",
+        canSurrender = false,
+        surrenderHealthRatio = 0.25,
+        surrenderBehavior = "flee",
+        patrolRoute = "",
+        spawnsTroop = false,
+        troopSize = 9,
         childTemplate = "",
-        squadSize = 9,
+        isSquadLeader = false,
+        maxSquadSize = 9,
+        commandClaimRadius = 1000,
+        usageCount = 0,
+        lastUsedBy = "",
+        lastUsedAt = "",
     }
 end
 
@@ -91,6 +116,16 @@ function PD.NPCCreator.Menu(base)
         draw.DrawText("NPC CREATOR", "MLIB.18", PD.W(20), h / 2 - PD.H(9), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
     end
 
+    local espBtn = PD.Button(PD.NPCCreator.ESPEnabled and "ESP: AN" or "ESP: AUS", header, function()
+        PD.NPCCreator.ESPEnabled = not PD.NPCCreator.ESPEnabled
+    end)
+    espBtn:SetSize(PD.W(110), PD.H(30))
+    espBtn:SetPos(header:GetWide() - PD.W(120), PD.H(10))
+    espBtn.Think = function(s)
+        s:SetText(PD.NPCCreator.ESPEnabled and "ESP: AN" or "ESP: AUS")
+        s:SetPos(header:GetWide() - PD.W(120), PD.H(10))
+    end
+
     local body = vgui.Create("DPanel", base)
     body:Dock(FILL)
     body.Paint = function() end
@@ -98,7 +133,7 @@ function PD.NPCCreator.Menu(base)
     -- Linke Liste: gespeicherte Vorlagen
     local listPanel = vgui.Create("DPanel", body)
     listPanel:Dock(LEFT)
-    listPanel:SetWide(PD.W(220))
+    listPanel:SetWide(PD.W(240))
     listPanel:DockMargin(0, 0, PD.W(10), 0)
     listPanel.Paint = function(s, w, h)
         draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.BackgroundLight)
@@ -125,12 +160,25 @@ function PD.NPCCreator.Menu(base)
         listScroll:GetCanvas():Clear()
 
         for name in SortedPairs(templates) do
+            local tpl = templates[name]
+
             local btn = PD.Button(name, listScroll, function()
                 currentName = name
                 RenderEditor(table.Copy(templates[name]))
             end)
             btn:Dock(TOP)
-            btn:SetTall(PD.H(36))
+            btn:SetTall(PD.H(46))
+
+            local subtitle = "Benutzt: " .. (tpl.usageCount or 0)
+            if tpl.lastUsedBy and tpl.lastUsedBy ~= "" then
+                subtitle = subtitle .. " | zuletzt: " .. tpl.lastUsedBy .. " (" .. tpl.lastUsedAt .. ")"
+            end
+
+            local oldPaint = btn.Paint
+            btn.Paint = function(s, w, h)
+                oldPaint(s, w, h)
+                draw.DrawText(subtitle, "MLIB.12", PD.W(15), h - PD.H(16), PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+            end
         end
     end
 
@@ -143,9 +191,10 @@ function PD.NPCCreator.Menu(base)
 
         widgets.name = PD.TextEntry(scroll, "Name", data.name)
         widgets.model = PD.TextEntry(scroll, "Modellpfad", data.model)
-        widgets.weapon = PD.TextEntry(scroll, "Waffenklasse (z.B. weapon_pistol, leer = keine)", data.weapon)
+        widgets.weapon = PD.TextEntry(scroll, "Waffenklasse (z.B. weapon_pistol, leer = keine) - regelt auch Schaden/Feuerrate", data.weapon)
 
         widgets.health = PD.Slider(scroll, "HP", 1, 1000, data.health, function() end)
+        widgets.sightRange = PD.Slider(scroll, "Sichtweite", 200, 5000, data.sightRange, function() end)
 
         widgets.alignment = PD.Dropdown(scroll, LabelFor(Alignments, data.alignment, "Hostile"), function(text, value)
             widgets.alignment._pdValue = value
@@ -158,10 +207,6 @@ function PD.NPCCreator.Menu(base)
         end)
         widgets.attackType._pdValue = data.attackType
         for _, opt in ipairs(AttackTypes) do widgets.attackType:AddOption(opt.text, opt.value) end
-
-        widgets.damage = PD.Slider(scroll, "Schaden", 1, 200, data.damage, function() end)
-        widgets.sightRange = PD.Slider(scroll, "Sichtweite", 200, 5000, data.sightRange, function() end)
-        widgets.attackCooldown = PD.Slider(scroll, "Angriffstempo (Cooldown Sek.)", 0.1, 5, data.attackCooldown, function() end)
 
         widgets.aimSkill = PD.Dropdown(scroll, LabelFor(AimSkills, data.aimSkill, "Normal"), function(text, value)
             widgets.aimSkill._pdValue = value
@@ -183,25 +228,70 @@ function PD.NPCCreator.Menu(base)
         widgets.canRotate:AddOption("Drehend", true)
         widgets.canRotate:AddOption("Fest ausgerichtet", false)
 
-        -- Squad Leader Sektion
-        local squadSection
-        widgets.isSquadLeader = PD.Checkbox(scroll, "Ist Squad Leader (spawnt eigene Truppe)", data.isSquadLeader, function(value)
-            widgets.isSquadLeader._pdValue = value
-            if IsValid(squadSection) then
-                squadSection:SetVisible(value)
-            end
+        widgets.seeksCover = PD.Checkbox(scroll, "Sucht Deckung", data.seeksCover, function(value)
+            widgets.seeksCover._pdValue = value
         end)
-        widgets.isSquadLeader._pdValue = data.isSquadLeader
+        widgets.seeksCover._pdValue = data.seeksCover
 
-        squadSection = vgui.Create("DPanel", scroll)
-        squadSection:Dock(TOP)
-        squadSection:SetTall(PD.H(110))
-        squadSection:SetVisible(data.isSquadLeader)
-        squadSection.Paint = function() end
+        -- Fraktionen
+        widgets.faction = PD.TextEntry(scroll, "Eigene Fraktion (leer = keine)", data.faction)
+        widgets.hostileFactions = PD.TextEntry(scroll, "Feindliche Fraktionen (kommagetrennt)",
+            istable(data.hostileFactions) and FactionSetToString(data.hostileFactions) or (data.hostileFactions or ""))
 
-        widgets.squadSize = PD.Slider(squadSection, "Squad-Größe", 1, 9, data.squadSize, function() end)
+        -- Ergeben/Fliehen
+        local surrenderSection
+        widgets.canSurrender = PD.Checkbox(scroll, "Darf sich ergeben/fliehen bei wenig HP", data.canSurrender, function(value)
+            widgets.canSurrender._pdValue = value
+            if IsValid(surrenderSection) then surrenderSection:SetVisible(value) end
+        end)
+        widgets.canSurrender._pdValue = data.canSurrender
 
-        widgets.childTemplate = PD.Dropdown(squadSection, data.childTemplate ~= "" and data.childTemplate or "- Standard -", function(text, value)
+        surrenderSection = vgui.Create("DPanel", scroll)
+        surrenderSection:Dock(TOP)
+        surrenderSection:SetTall(PD.H(130))
+        surrenderSection:SetVisible(data.canSurrender)
+        surrenderSection.Paint = function() end
+
+        widgets.surrenderHealthRatio = PD.Slider(surrenderSection, "HP-Schwelle (%)", 1, 100, (data.surrenderHealthRatio or 0.25) * 100, function() end)
+
+        widgets.surrenderBehavior = PD.Dropdown(surrenderSection, LabelFor(SurrenderBehaviors, data.surrenderBehavior, "Fliehen"), function(text, value)
+            widgets.surrenderBehavior._pdValue = value
+        end)
+        widgets.surrenderBehavior._pdValue = data.surrenderBehavior
+        for _, opt in ipairs(SurrenderBehaviors) do widgets.surrenderBehavior:AddOption(opt.text, opt.value) end
+
+        -- Patrol-Route
+        widgets.patrolRoute = PD.Dropdown(scroll, data.patrolRoute ~= "" and data.patrolRoute or "- Keine -", function(text, value)
+            widgets.patrolRoute._pdValue = value
+        end)
+        widgets.patrolRoute._pdValue = data.patrolRoute
+        widgets.patrolRoute:AddOption("- Keine -", "")
+        if PD.PatrolRoutes then
+            PD.PatrolRoutes.RequestRoutes(function(names)
+                if not IsValid(widgets.patrolRoute) then return end
+                for _, routeName in ipairs(names) do
+                    widgets.patrolRoute:AddOption(routeName, routeName)
+                end
+            end)
+        end
+
+        -- Spawnt Trupp
+        local troopSection
+        widgets.spawnsTroop = PD.Checkbox(scroll, "Spawnt Trupp (eigene NPCs beim Spawnen)", data.spawnsTroop, function(value)
+            widgets.spawnsTroop._pdValue = value
+            if IsValid(troopSection) then troopSection:SetVisible(value) end
+        end)
+        widgets.spawnsTroop._pdValue = data.spawnsTroop
+
+        troopSection = vgui.Create("DPanel", scroll)
+        troopSection:Dock(TOP)
+        troopSection:SetTall(PD.H(160))
+        troopSection:SetVisible(data.spawnsTroop)
+        troopSection.Paint = function() end
+
+        widgets.troopSize = PD.Slider(troopSection, "Trupp-Größe", 1, 9, data.troopSize, function() end)
+
+        widgets.childTemplate = PD.Dropdown(troopSection, data.childTemplate ~= "" and data.childTemplate or "- Standard -", function(text, value)
             widgets.childTemplate._pdValue = value
         end)
         widgets.childTemplate._pdValue = data.childTemplate
@@ -212,23 +302,48 @@ function PD.NPCCreator.Menu(base)
             end
         end
 
+        -- Squad Leader
+        local leaderSection
+        widgets.isSquadLeader = PD.Checkbox(scroll, "Ist Squad Leader (übernimmt Kommando über unkommandierte NPCs)", data.isSquadLeader, function(value)
+            widgets.isSquadLeader._pdValue = value
+            if IsValid(leaderSection) then leaderSection:SetVisible(value) end
+        end)
+        widgets.isSquadLeader._pdValue = data.isSquadLeader
+
+        leaderSection = vgui.Create("DPanel", scroll)
+        leaderSection:Dock(TOP)
+        leaderSection:SetTall(PD.H(160))
+        leaderSection:SetVisible(data.isSquadLeader)
+        leaderSection.Paint = function() end
+
+        widgets.maxSquadSize = PD.Slider(leaderSection, "Max. Squad-Größe", 1, 20, data.maxSquadSize, function() end)
+        widgets.commandClaimRadius = PD.Slider(leaderSection, "Kommando-Radius", 100, 4000, data.commandClaimRadius, function() end)
+
         local function CollectFormData()
             return {
                 name = widgets.name:GetValue(),
                 model = widgets.model:GetValue(),
                 weapon = widgets.weapon:GetValue(),
                 health = widgets.health:GetValue(),
+                sightRange = widgets.sightRange:GetValue(),
                 alignment = widgets.alignment._pdValue,
                 attackType = widgets.attackType._pdValue,
-                damage = widgets.damage:GetValue(),
-                sightRange = widgets.sightRange:GetValue(),
-                attackCooldown = widgets.attackCooldown:GetValue(),
                 aimSkill = widgets.aimSkill._pdValue,
                 canMove = widgets.canMove._pdValue,
                 canRotate = widgets.canRotate._pdValue,
-                isSquadLeader = widgets.isSquadLeader._pdValue,
+                seeksCover = widgets.seeksCover._pdValue,
+                faction = widgets.faction:GetValue(),
+                hostileFactions = widgets.hostileFactions:GetValue(),
+                canSurrender = widgets.canSurrender._pdValue,
+                surrenderHealthRatio = widgets.surrenderHealthRatio:GetValue() / 100,
+                surrenderBehavior = widgets.surrenderBehavior._pdValue,
+                patrolRoute = widgets.patrolRoute._pdValue,
+                spawnsTroop = widgets.spawnsTroop._pdValue,
+                troopSize = widgets.troopSize:GetValue(),
                 childTemplate = widgets.childTemplate._pdValue,
-                squadSize = widgets.squadSize:GetValue(),
+                isSquadLeader = widgets.isSquadLeader._pdValue,
+                maxSquadSize = widgets.maxSquadSize:GetValue(),
+                commandClaimRadius = widgets.commandClaimRadius:GetValue(),
             }
         end
 
@@ -284,21 +399,49 @@ function PD.NPCCreator.Menu(base)
     end)
 end
 
--- Namensschild über NPCs, die über den Creator einen Namen bekommen haben
+----------------------------------------------------------------
+-- Namensschild + Admin-Debug-Overlay (ESP)
+----------------------------------------------------------------
+
+local StateColors = {
+    advance = Color(255, 80, 80),
+    hold = Color(255, 200, 0),
+    retreat = Color(0, 150, 255),
+}
+
 hook.Add("HUDPaint", "PD.NPCCreator.NameTags", function()
     local ply = LocalPlayer()
     if not IsValid(ply) or not PD.Theme then return end
 
+    local espOn = PD.NPCCreator.ESPEnabled and ply:IsAdmin()
+
     for _, npc in ipairs(ents.FindByClass("deadshot_npc")) do
         if not IsValid(npc) then continue end
 
+        local distSqr = ply:GetPos():DistToSqr(npc:GetPos())
         local name = npc:GetNWString("PD_NPCName", "")
-        if name == "" then continue end
-        if ply:GetPos():DistToSqr(npc:GetPos()) > 1500 * 1500 then continue end
 
-        local screenPos = (npc:GetPos() + Vector(0, 0, 80)):ToScreen()
-        if not screenPos.visible then continue end
+        if name ~= "" and distSqr <= 1500 * 1500 then
+            local screenPos = (npc:GetPos() + Vector(0, 0, 80)):ToScreen()
+            if screenPos.visible then
+                draw.DrawText(name, "MLIB.14", screenPos.x, screenPos.y, PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
+            end
+        end
 
-        draw.DrawText(name, "MLIB.14", screenPos.x, screenPos.y, PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
+        if espOn and distSqr <= 3000 * 3000 then
+            local screenPos = (npc:GetPos() + Vector(0, 0, 60)):ToScreen()
+            if screenPos.visible then
+                local state = npc.IsSquadLeader and (npc.SquadState or "hold") or (IsValid(npc.SquadLeader) and "member" or "solo")
+                local lines = {
+                    (npc.Faction ~= "" and npc.Faction or "keine Fraktion") .. " | " .. (npc.Alignment or "?"),
+                    "Status: " .. tostring(state),
+                    "Sicht: " .. tostring(npc.SightRange),
+                }
+
+                for i, line in ipairs(lines) do
+                    draw.DrawText(line, "MLIB.12", screenPos.x, screenPos.y + (i - 1) * 14, Color(0, 255, 120), TEXT_ALIGN_CENTER)
+                end
+            end
+        end
     end
 end)

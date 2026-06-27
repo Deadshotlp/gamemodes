@@ -5,6 +5,14 @@ function ENT:Initialize()
     self.BaseClass.Initialize(self)
     self.FireGroup = self.FireGroup or 1
 
+    if self.SpawnsTroop then
+        timer.Simple(0, function()
+            if IsValid(self) then
+                self:SpawnTroop()
+            end
+        end)
+    end
+
     if self.IsSquadLeader then
         self.Squad = {}
         self.SquadState = "hold"
@@ -14,16 +22,10 @@ function ENT:Initialize()
         local timerName = "deadshot_npc_squad_" .. self:EntIndex()
         timer.Create(timerName, self.SquadUpdateInterval, 0, function()
             if IsValid(self) then
+                self:ClaimNearbyTroops()
                 self:UpdateSquadState()
             else
                 timer.Remove(timerName)
-            end
-        end)
-
-        -- Deferred so the leader's own SetPos/SetAngles (e.g. from the spawn tool) has settled
-        timer.Simple(0, function()
-            if IsValid(self) then
-                self:SpawnSquad()
             end
         end)
     end
@@ -37,6 +39,8 @@ function ENT:RunBehaviour()
     while true do
         if self.PanicUntil and CurTime() < self.PanicUntil then
             self:DoPanic()
+        elseif self:ShouldSurrender() then
+            self:DoSurrender()
         elseif IsValid(self.SquadLeader) then
             self:DoSquadDuty()
         else
@@ -75,40 +79,6 @@ function ENT:MoveToFormation(pos, running)
     return false
 end
 
--- Probes points around threatPos's opposite side for a spot whose line of
--- sight to the threat is blocked - a cheap stand-in for a real cover system,
--- since nextbots have no built-in cover-node integration.
-function ENT:FindCoverPosition(threatPos)
-    local myPos = self:GetPos()
-
-    for i = 1, 8 do
-        local ang = (360 / 8) * i
-        local testPos = myPos + Angle(0, ang, 0):Forward() * self.CoverSearchRadius
-
-        local tr = util.TraceLine({
-            start = testPos + Vector(0, 0, 40),
-            endpos = threatPos,
-            filter = self,
-        })
-
-        if tr.Hit and tr.HitPos:Distance(threatPos) > 40 then
-            return testPos
-        end
-    end
-
-    return nil
-end
-
-function ENT:GetCoverPosition(threatPos)
-    if self.NextCoverRecalc and CurTime() < self.NextCoverRecalc then
-        return self.CachedCoverPos
-    end
-
-    self.CachedCoverPos = self:FindCoverPosition(threatPos)
-    self.NextCoverRecalc = CurTime() + self.CoverRecalcInterval
-    return self.CachedCoverPos
-end
-
 function ENT:DoSquadDuty()
     local sl = self.SquadLeader
     if not IsValid(sl) then return end
@@ -123,7 +93,7 @@ function ENT:DoSquadDuty()
 
     local desiredPos = self:GetFormationPos(sl)
 
-    if IsValid(target) and state == "hold" then
+    if IsValid(target) and state == "hold" and self.SeeksCover then
         desiredPos = self:GetCoverPosition(target:GetPos()) or desiredPos
     end
 
@@ -175,7 +145,7 @@ function ENT:SuppressPosition(pos)
         Spread = Vector(0, 0, 0),
         Tracer = 1,
         Force = 5,
-        Damage = self.BulletDamage * 0.5,
+        Damage = self:GetWeaponDamage() * 0.5,
         Callback = function(_, tr, dmgInfo)
             dmgInfo:SetAttacker(owner)
             dmgInfo:SetInflictor(owner)
@@ -186,7 +156,7 @@ function ENT:SuppressPosition(pos)
         self:EmitSound(self.RangedSound)
     end
 
-    self.NextAttackTime = CurTime() + self.AttackCooldown * 0.6
+    self.NextAttackTime = CurTime() + self:GetWeaponCooldown() * 0.6
 end
 
 function ENT:DoRetreat(sl)
@@ -237,27 +207,26 @@ function ENT:DoPanic()
 end
 
 ----------------------------------------------------------------
--- Squad Leader duties: spawning/commanding other deadshot_npc
--- instances. Only active when self.IsSquadLeader == true.
+-- Spawnt Trupp: creates TroopSize child NPCs nearby. Does NOT command
+-- them - that's the separate IsSquadLeader capability below. A leader
+-- placed close enough will pick up freshly spawned troops on its own.
 ----------------------------------------------------------------
 
-function ENT:SpawnSquad()
-    self.Squad = {}
-
+function ENT:SpawnTroop()
     local childData = nil
     if self.ChildTemplateName ~= "" and PD.NPCCreator then
         childData = PD.NPCCreator.Templates[self.ChildTemplateName]
     end
 
-    for i = 1, self.SquadSize do
-        local angle = (360 / self.SquadSize) * i
-        local offset = Angle(0, angle, 0):Forward() * self.FormationRadius
-        local pos = self:GetPos() + offset
+    for i = 1, self.TroopSize do
+        local angle = (360 / self.TroopSize) * i
+        local pos = self:GetPos() + Angle(0, angle, 0):Forward() * self.FormationRadius
 
         local member
         if childData then
             local data = table.Copy(childData)
-            data.isSquadLeader = false -- never let a squad member command its own squad
+            data.isSquadLeader = false -- a troop spawner never creates its own commanders
+            data.spawnsTroop = false   -- and never recursively spawns further troops
             member = PD.NPCCreator.CreateNPCFromTemplate(data, pos, self:GetAngles())
         else
             member = ents.Create("deadshot_npc")
@@ -267,19 +236,54 @@ function ENT:SpawnSquad()
                 member:Spawn()
             end
         end
+    end
+end
 
-        if IsValid(member) then
-            member.SquadLeader = self
-            member.FormationSlot = {angle = angle, radius = self.FormationRadius}
-            member.FireGroup = (i % 2) + 1
-            table.insert(self.Squad, member)
+----------------------------------------------------------------
+-- Squadleader: claims nearby uncommanded, same-faction, same-alignment
+-- NPCs (whether it spawned them or not) and coordinates them as a squad.
+----------------------------------------------------------------
+
+function ENT:ClaimNearbyTroops()
+    self.Squad = self.Squad or {}
+
+    -- drop dead/invalid members so they don't count against MaxSquadSize
+    for i = #self.Squad, 1, -1 do
+        if not IsValid(self.Squad[i]) or self.Squad[i]:Health() <= 0 then
+            table.remove(self.Squad, i)
         end
     end
+
+    if #self.Squad >= self.MaxSquadSize then return end
+
+    for _, npc in ipairs(ents.FindByClass("deadshot_npc")) do
+        if #self.Squad >= self.MaxSquadSize then break end
+        if npc == self or not IsValid(npc) then continue end
+        if npc:Health() <= 0 then continue end
+        if IsValid(npc.SquadLeader) then continue end
+        if npc.IsSquadLeader then continue end
+        if npc.Faction ~= self.Faction then continue end
+        if npc.Alignment ~= self.Alignment then continue end
+        if self:GetRangeTo(npc) > self.CommandClaimRadius then continue end
+
+        local index = #self.Squad + 1
+        local angle = (360 / self.MaxSquadSize) * index
+
+        npc.SquadLeader = self
+        npc.FormationSlot = {angle = angle, radius = self.FormationRadius}
+        npc.FireGroup = (index % 2) + 1
+
+        table.insert(self.Squad, npc)
+    end
+
+    -- highest member count this squad has ever reached - used as the casualty
+    -- baseline instead of MaxSquadSize, since a squad may never fill up
+    self.PeakSquadSize = math.max(self.PeakSquadSize or 0, #self.Squad)
 end
 
 function ENT:CountAliveTroopers()
     local count = 0
-    for _, member in ipairs(self.Squad) do
+    for _, member in ipairs(self.Squad or {}) do
         if IsValid(member) and member:Health() > 0 then
             count = count + 1
         end
@@ -298,28 +302,38 @@ function ENT:GatherVisibleEnemies()
                 end
             end
         end
+
+        if next(npc.HostileFactions or {}) then
+            for _, other in ipairs(ents.FindByClass("deadshot_npc")) do
+                if other ~= npc and IsValid(other) and other:Health() > 0 and npc.HostileFactions[other.Faction] then
+                    if npc:GetRangeTo(other) <= npc.SightRange and npc:Visible(other) then
+                        seen[other] = true
+                    end
+                end
+            end
+        end
     end
 
     scan(self)
-    for _, member in ipairs(self.Squad) do
+    for _, member in ipairs(self.Squad or {}) do
         if IsValid(member) and member:Health() > 0 then
             scan(member)
         end
     end
 
     local list = {}
-    for ply in pairs(seen) do
-        table.insert(list, ply)
+    for ent in pairs(seen) do
+        table.insert(list, ent)
     end
     return list
 end
 
 function ENT:PickPriorityTarget(enemies)
     local nearest, nd = nil, math.huge
-    for _, ply in ipairs(enemies) do
-        local d = self:GetRangeTo(ply)
+    for _, ent in ipairs(enemies) do
+        local d = self:GetRangeTo(ent)
         if d < nd then
-            nearest, nd = ply, d
+            nearest, nd = ent, d
         end
     end
     return nearest
@@ -336,9 +350,9 @@ function ENT:UpdateSquadState()
         self.LastKnownEnemyPos = target:GetPos()
     end
 
-    local casualtyRatio = 1 - (aliveTroopers / math.max(self.SquadSize, 1))
+    local casualtyRatio = 1 - (aliveTroopers / math.max(self.PeakSquadSize or 0, 1))
 
-    if casualtyRatio >= self.RetreatLossThreshold then
+    if self.PeakSquadSize and self.PeakSquadSize > 0 and casualtyRatio >= self.RetreatLossThreshold and aliveTroopers > 0 then
         self.SquadState = "retreat"
     elseif #enemies == 0 then
         self.SquadState = "hold"

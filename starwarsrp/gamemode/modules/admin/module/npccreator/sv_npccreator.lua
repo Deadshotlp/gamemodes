@@ -27,10 +27,34 @@ local AllowedAimSkills = {
     better = true,
 }
 
+local AllowedSurrenderBehaviors = {
+    flee = true,
+    surrender = true,
+}
+
 local function ClampNumber(value, mn, mx, fallback)
     value = tonumber(value)
     if not value then return fallback end
     return math.Clamp(value, mn, mx)
+end
+
+-- "empire, rebels" -> {empire = true, rebels = true}
+local function ParseFactionSet(str)
+    local set = {}
+    for name in tostring(str or ""):gmatch("[^,]+") do
+        name = name:Trim()
+        if name ~= "" then set[name] = true end
+    end
+    return set
+end
+
+local function FactionSetToString(set)
+    local names = {}
+    for name in pairs(set or {}) do
+        table.insert(names, name)
+    end
+    table.sort(names)
+    return table.concat(names, ", ")
 end
 
 local function SanitizeTemplate(tbl)
@@ -47,7 +71,7 @@ local function SanitizeTemplate(tbl)
         weapon = "weapon_pistol"
     end
 
-    local childTemplate = isstring(tbl.childTemplate) and tbl.childTemplate or ""
+    local existing = PD.NPCCreator.Templates[name]
 
     return {
         name = name,
@@ -56,15 +80,33 @@ local function SanitizeTemplate(tbl)
         health = math.floor(ClampNumber(tbl.health, 1, 2000, 150)),
         alignment = AllowedAlignments[tbl.alignment] and tbl.alignment or "hostile",
         attackType = AllowedAttackTypes[tbl.attackType] and tbl.attackType or "ranged",
-        damage = math.floor(ClampNumber(tbl.damage, 1, 500, 14)),
         sightRange = math.floor(ClampNumber(tbl.sightRange, 100, 6000, 1800)),
-        attackCooldown = ClampNumber(tbl.attackCooldown, 0.1, 10, 1.2),
         aimSkill = AllowedAimSkills[tbl.aimSkill] and tbl.aimSkill or "realistic",
         canMove = tbl.canMove ~= false,
         canRotate = tbl.canRotate ~= false,
+        seeksCover = tbl.seeksCover ~= false,
+
+        faction = tostring(tbl.faction or ""):sub(1, 32):Trim(),
+        hostileFactions = ParseFactionSet(tbl.hostileFactions),
+
+        canSurrender = tbl.canSurrender == true,
+        surrenderHealthRatio = ClampNumber(tbl.surrenderHealthRatio, 0.01, 1, 0.25),
+        surrenderBehavior = AllowedSurrenderBehaviors[tbl.surrenderBehavior] and tbl.surrenderBehavior or "flee",
+
+        patrolRoute = isstring(tbl.patrolRoute) and tbl.patrolRoute or "",
+
+        spawnsTroop = tbl.spawnsTroop == true,
+        troopSize = math.floor(ClampNumber(tbl.troopSize, 1, 9, 9)),
+        childTemplate = isstring(tbl.childTemplate) and tbl.childTemplate or "",
+
         isSquadLeader = tbl.isSquadLeader == true,
-        childTemplate = childTemplate,
-        squadSize = math.floor(ClampNumber(tbl.squadSize, 1, 9, 9)),
+        maxSquadSize = math.floor(ClampNumber(tbl.maxSquadSize, 1, 20, 9)),
+        commandClaimRadius = math.floor(ClampNumber(tbl.commandClaimRadius, 100, 4000, 1000)),
+
+        -- usage stats survive being overwritten by a save of the same name
+        usageCount = existing and existing.usageCount or 0,
+        lastUsedBy = existing and existing.lastUsedBy or "",
+        lastUsedAt = existing and existing.lastUsedAt or "",
     }
 end
 
@@ -74,7 +116,7 @@ end
 
 -- Creates and fully configures a deadshot_npc at the given position/angle.
 -- Shared by the admin menu spawn button, the Tool Gun stool and squad
--- leaders spawning their own members.
+-- leaders/troop-spawners creating their own members.
 function PD.NPCCreator.CreateNPCFromTemplate(rawData, pos, ang)
     local data = SanitizeTemplate(rawData)
 
@@ -94,20 +136,25 @@ function PD.NPCCreator.CreateNPCFromTemplate(rawData, pos, ang)
     npc.AimSkill = data.aimSkill
     npc.CanMove = data.canMove
     npc.CanRotate = data.canRotate
+    npc.SeeksCover = data.seeksCover
     npc.SightRange = data.sightRange
-    npc.AttackCooldown = data.attackCooldown
 
-    if data.attackType == "melee" then
-        npc.DamageAmount = data.damage
-    elseif data.attackType == "ranged" then
-        npc.BulletDamage = data.damage
-    elseif data.attackType == "thrown" then
-        npc.ThrowDamage = data.damage
-    end
+    npc.Faction = data.faction
+    npc.HostileFactions = data.hostileFactions
+
+    npc.CanSurrender = data.canSurrender
+    npc.SurrenderHealthRatio = data.surrenderHealthRatio
+    npc.SurrenderBehavior = data.surrenderBehavior
+
+    npc.PatrolRoute = data.patrolRoute
+
+    npc.SpawnsTroop = data.spawnsTroop
+    npc.TroopSize = data.troopSize
+    npc.ChildTemplateName = data.childTemplate
 
     npc.IsSquadLeader = data.isSquadLeader
-    npc.ChildTemplateName = data.childTemplate
-    npc.SquadSize = data.squadSize
+    npc.MaxSquadSize = data.maxSquadSize
+    npc.CommandClaimRadius = data.commandClaimRadius
 
     npc:SetMaxHealth(data.health)
     npc:SetHealth(data.health)
@@ -116,11 +163,27 @@ function PD.NPCCreator.CreateNPCFromTemplate(rawData, pos, ang)
     return npc
 end
 
+local function TrackUsage(ply, name)
+    local tpl = PD.NPCCreator.Templates[name]
+    if not tpl then return end
+
+    tpl.usageCount = (tpl.usageCount or 0) + 1
+    tpl.lastUsedBy = IsValid(ply) and ply:Nick() or "Unbekannt"
+    tpl.lastUsedAt = os.date("%d.%m.%Y %H:%M")
+    SaveTemplates()
+end
+
 function PD.NPCCreator.SpawnFromTemplate(ply, rawData, trace)
     trace = trace or ply:GetEyeTrace()
     local pos = trace.HitPos + trace.HitNormal * 5
     local ang = Angle(0, ply:EyeAngles().y + 180, 0)
-    return PD.NPCCreator.CreateNPCFromTemplate(rawData, pos, ang)
+
+    local npc = PD.NPCCreator.CreateNPCFromTemplate(rawData, pos, ang)
+    if IsValid(npc) and istable(rawData) and isstring(rawData.name) then
+        TrackUsage(ply, rawData.name)
+    end
+
+    return npc
 end
 
 hook.Add("Initialize", "PD.NPCCreator.Load", function()

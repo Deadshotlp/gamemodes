@@ -17,8 +17,9 @@ function ENT:Initialize()
 end
 
 ----------------------------------------------------------------
--- Held weapon (visual only - combat damage is resolved separately
--- per attack type, see MeleeAttack/RangedAttack/ThrownAttack below)
+-- Held weapon - visual hold + the source of truth for combat damage
+-- and fire rate (falls back to FallbackDamage/FallbackCooldown when
+-- no weapon is equipped or it defines no Primary.Damage/Delay)
 ----------------------------------------------------------------
 
 function ENT:EquipWeapon(class)
@@ -45,6 +46,20 @@ function ENT:EquipWeapon(class)
     self.HeldWeapon = wep
 end
 
+function ENT:GetWeaponDamage()
+    if IsValid(self.HeldWeapon) and istable(self.HeldWeapon.Primary) and self.HeldWeapon.Primary.Damage then
+        return self.HeldWeapon.Primary.Damage
+    end
+    return self.FallbackDamage
+end
+
+function ENT:GetWeaponCooldown()
+    if IsValid(self.HeldWeapon) and istable(self.HeldWeapon.Primary) and self.HeldWeapon.Primary.Delay then
+        return self.HeldWeapon.Primary.Delay
+    end
+    return self.FallbackCooldown
+end
+
 function ENT:OnRemove()
     if IsValid(self.HeldWeapon) then
         self.HeldWeapon:Remove()
@@ -52,7 +67,7 @@ function ENT:OnRemove()
 end
 
 ----------------------------------------------------------------
--- Targeting / Zugehörigkeit
+-- Targeting / Zugehörigkeit / Fraktionen
 ----------------------------------------------------------------
 
 -- Override to customize target priority
@@ -61,15 +76,27 @@ function ENT:SelectTarget()
     if self.Alignment == "neutral" and CurTime() > self.ProvokedUntil then return nil end
 
     local nearest, nd = nil, self.SightRange
+
     for _, ply in ipairs(player.GetAll()) do
         if IsValid(ply) and ply:Alive() and not ply:IsFlagSet(FL_NOTARGET) then
             local d = self:GetRangeTo(ply)
             if d < nd and self:Visible(ply) then
-                nearest = ply
-                nd = d
+                nearest, nd = ply, d
             end
         end
     end
+
+    if next(self.HostileFactions or {}) then
+        for _, npc in ipairs(ents.FindByClass("deadshot_npc")) do
+            if npc ~= self and IsValid(npc) and npc:Health() > 0 and self.HostileFactions[npc.Faction] then
+                local d = self:GetRangeTo(npc)
+                if d < nd and self:Visible(npc) then
+                    nearest, nd = npc, d
+                end
+            end
+        end
+    end
+
     return nearest
 end
 
@@ -90,19 +117,54 @@ function ENT:OnKilled(dmg)
 end
 
 ----------------------------------------------------------------
--- Movement / Rotation
+-- Surrender / Flee at low health (independent of squad retreat logic)
+----------------------------------------------------------------
+
+function ENT:ShouldSurrender()
+    if not self.CanSurrender then return false end
+    return self:Health() / math.max(self:GetMaxHealth(), 1) <= self.SurrenderHealthRatio
+end
+
+function ENT:DoSurrender()
+    if self.SurrenderBehavior == "surrender" then
+        self:StartActivity(ACT_IDLE)
+        return
+    end
+
+    local target = self:SelectTarget()
+    local awayDir
+
+    if IsValid(target) then
+        awayDir = (self:GetPos() - target:GetPos()):GetNormalized()
+    else
+        awayDir = VectorRand()
+    end
+
+    local fleeTo = self:GetPos() + awayDir * 500
+
+    self.loco:SetDesiredSpeed(self.RunSpeed)
+    self:StartActivity(ACT_RUN)
+    self:MoveToPos(fleeTo, {maxage = 0.5, repath = 0.4, tolerance = 40})
+end
+
+----------------------------------------------------------------
+-- Movement / Rotation / Deckung
 ----------------------------------------------------------------
 
 function ENT:RunBehaviour()
     while true do
-        local target = self:SelectTarget()
-
-        if IsValid(target) then
-            self:HandleCombat(target)
-        elseif self.CanMove then
-            self:Roam()
+        if self:ShouldSurrender() then
+            self:DoSurrender()
         else
-            coroutine.wait(0.5)
+            local target = self:SelectTarget()
+
+            if IsValid(target) then
+                self:HandleCombat(target)
+            elseif self.CanMove then
+                self:Roam()
+            else
+                coroutine.wait(0.5)
+            end
         end
 
         coroutine.yield()
@@ -126,6 +188,40 @@ function ENT:FaceTarget(target)
     end
 end
 
+-- Probes points around self for a spot whose line of sight to the threat is
+-- blocked - a cheap stand-in for a real cover system, since nextbots have
+-- no built-in cover-node integration.
+function ENT:FindCoverPosition(threatPos)
+    local myPos = self:GetPos()
+
+    for i = 1, 8 do
+        local ang = (360 / 8) * i
+        local testPos = myPos + Angle(0, ang, 0):Forward() * self.CoverSearchRadius
+
+        local tr = util.TraceLine({
+            start = testPos + Vector(0, 0, 40),
+            endpos = threatPos,
+            filter = self,
+        })
+
+        if tr.Hit and tr.HitPos:Distance(threatPos) > 40 then
+            return testPos
+        end
+    end
+
+    return nil
+end
+
+function ENT:GetCoverPosition(threatPos)
+    if self.NextCoverRecalc and CurTime() < self.NextCoverRecalc then
+        return self.CachedCoverPos
+    end
+
+    self.CachedCoverPos = self:FindCoverPosition(threatPos)
+    self.NextCoverRecalc = CurTime() + self.CoverRecalcInterval
+    return self.CachedCoverPos
+end
+
 function ENT:HandleCombat(target)
     local engageRange = self:GetEngageRange()
 
@@ -137,7 +233,12 @@ function ENT:HandleCombat(target)
     while IsValid(target) do
         self:FaceTarget(target)
 
-        if self.CanMove and self:GetRangeTo(target) > engageRange then
+        if self.CanMove and self.SeeksCover and not self:Visible(target) then
+            local cover = self:GetCoverPosition(target:GetPos())
+            if cover then
+                self:MoveToPos(cover, {maxage = 0.6, repath = 0.3, tolerance = 30})
+            end
+        elseif self.CanMove and self:GetRangeTo(target) > engageRange then
             self:MoveToPos(target:GetPos(), {maxage = 0.8, repath = 0.25, tolerance = 20})
         end
 
@@ -154,6 +255,14 @@ function ENT:HandleCombat(target)
 end
 
 function ENT:Roam()
+    if self.PatrolRoute ~= "" and PD.PatrolRoutes then
+        local route = PD.PatrolRoutes.Routes[self.PatrolRoute]
+        if route and #route > 0 then
+            self:WalkPatrolRoute(route)
+            return
+        end
+    end
+
     self:StartActivity(ACT_WALK)
     self.loco:SetDesiredSpeed(self.WalkSpeed)
     local roam = self:GetPos() + VectorRand() * self.RoamRadius
@@ -161,6 +270,25 @@ function ENT:Roam()
     self:MoveToPos(roam, {maxage = 2.0})
     self:StartActivity(ACT_IDLE)
     coroutine.wait(0.5)
+end
+
+function ENT:WalkPatrolRoute(route)
+    self.PatrolIndex = self.PatrolIndex or 1
+    if self.PatrolIndex > #route then
+        self.PatrolIndex = 1
+    end
+
+    local point = route[self.PatrolIndex]
+
+    if self:GetRangeTo(point.pos) <= 40 then
+        self.PatrolIndex = self.PatrolIndex + 1
+        self:StartActivity(ACT_IDLE)
+        coroutine.wait(1)
+    else
+        self:StartActivity(ACT_WALK)
+        self.loco:SetDesiredSpeed(self.WalkSpeed)
+        self:MoveToPos(point.pos, {maxage = 1.0, repath = 0.4, tolerance = 30})
+    end
 end
 
 ----------------------------------------------------------------
@@ -198,13 +326,13 @@ function ENT:MeleeAttack(target)
     if self:GetRangeTo(target) > self.AttackRange then return end
 
     local dmg = DamageInfo()
-    dmg:SetDamage(self.DamageAmount)
+    dmg:SetDamage(self:GetWeaponDamage())
     dmg:SetAttacker(self)
     dmg:SetInflictor(self)
     dmg:SetDamageType(DMG_CLUB)
     target:TakeDamageInfo(dmg)
 
-    self.NextAttackTime = CurTime() + self.AttackCooldown
+    self.NextAttackTime = CurTime() + self:GetWeaponCooldown()
 end
 
 function ENT:RangedAttack(target)
@@ -229,7 +357,7 @@ function ENT:RangedAttack(target)
         Spread = Vector(0, 0, 0),
         Tracer = 1,
         Force = 5,
-        Damage = self.BulletDamage,
+        Damage = self:GetWeaponDamage(),
         Callback = function(_, tr, dmgInfo)
             dmgInfo:SetAttacker(owner)
             dmgInfo:SetInflictor(owner)
@@ -240,7 +368,7 @@ function ENT:RangedAttack(target)
         self:EmitSound(self.RangedSound)
     end
 
-    self.NextAttackTime = CurTime() + self.AttackCooldown
+    self.NextAttackTime = CurTime() + self:GetWeaponCooldown()
 end
 
 function ENT:ThrownAttack(target)
@@ -261,7 +389,7 @@ function ENT:ThrownAttack(target)
 
     proj:SetPos(startPos)
     proj:Spawn()
-    proj:Launch(self, targetPos, self.ThrowSpeed, self.ThrowDamage, self.ThrowRadius, self.ThrownModel)
+    proj:Launch(self, targetPos, self.ThrowSpeed, self:GetWeaponDamage(), self.ThrowRadius, self.ThrownModel)
 
-    self.NextAttackTime = CurTime() + self.AttackCooldown
+    self.NextAttackTime = CurTime() + self:GetWeaponCooldown()
 end
