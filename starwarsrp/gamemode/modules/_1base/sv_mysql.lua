@@ -1,9 +1,9 @@
 PD.SQL = {}
 PD.SQL.Config = {
-    Host = "45.62.160.95",
-    Username = "u15381_JNwvtifGyL",
-    Password = "fMebB^YO+sxa6@R.Gz+WM36i",
-    Database = "s15381_test",
+    Host = "192.168.178.100",
+    Username = "ImIMXAixPE",
+    Password = "jiB^s98S^fjf@E7rxPWnFm5W",
+    Database = "s1_gmod_dev",
     Port = 3306,
 	MySQL = true,
 	MaxQueryRetries = 3,
