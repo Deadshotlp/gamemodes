@@ -1,6 +1,14 @@
 AddCSLuaFile("shared.lua")
 include("shared.lua")
 
+-- SetOwner() alone does not stop a player from walking up and picking up
+-- the NPC's held weapon - block it explicitly via the custom PD_NoPickup flag.
+hook.Add("PlayerCanPickupWeapon", "PD.NPCBase.BlockWeaponPickup", function(ply, wep)
+    if IsValid(wep) and wep.PD_NoPickup then
+        return false
+    end
+end)
+
 function ENT:Initialize()
     local model = util.IsValidModel(self.ModelPath) and self.ModelPath or "models/Combine_Soldier.mdl"
     self:SetModel(model)
@@ -25,20 +33,26 @@ end
 function ENT:EquipWeapon(class)
     if not isstring(class) or class == "" then return end
 
-    local attIndex = self:LookupAttachment(self.WeaponAttachment)
-    local att = attIndex > 0 and self:GetAttachment(attIndex) or nil
-
     local wep = ents.Create(class)
     if not IsValid(wep) then return end
 
-    wep:SetPos(att and att.Pos or self:GetPos())
-    wep:SetAngles(att and att.Ang or self:GetAngles())
+    wep:SetPos(self:GetPos())
+    wep:SetAngles(self:GetAngles())
     wep:Spawn()
     wep:SetOwner(self)
+    wep.PD_NoPickup = true
+
     wep:SetSolid(SOLID_NONE)
     wep:SetMoveType(MOVETYPE_NONE)
     wep:SetParent(self)
 
+    local phys = wep:GetPhysicsObject()
+    if IsValid(phys) then
+        phys:EnableMotion(false)
+        phys:Sleep()
+    end
+
+    local attIndex = self:LookupAttachment(self.WeaponAttachment)
     if attIndex > 0 then
         wep:Fire("SetParentAttachment", self.WeaponAttachment, 0)
     end
@@ -70,18 +84,23 @@ end
 -- Targeting / Zugehörigkeit / Fraktionen
 ----------------------------------------------------------------
 
--- Override to customize target priority
+-- Override to customize target priority. Alignment only gates whether
+-- players are targeted - faction hostility against other NPCs (below)
+-- applies independently, so a player-friendly NPC can still fight an
+-- enemy faction.
 function ENT:SelectTarget()
-    if self.Alignment == "friendly" then return nil end
-    if self.Alignment == "neutral" and CurTime() > self.ProvokedUntil then return nil end
-
     local nearest, nd = nil, self.SightRange
 
-    for _, ply in ipairs(player.GetAll()) do
-        if IsValid(ply) and ply:Alive() and not ply:IsFlagSet(FL_NOTARGET) then
-            local d = self:GetRangeTo(ply)
-            if d < nd and self:Visible(ply) then
-                nearest, nd = ply, d
+    local targetsPlayers = self.Alignment == "hostile"
+        or (self.Alignment == "neutral" and CurTime() <= self.ProvokedUntil)
+
+    if targetsPlayers then
+        for _, ply in ipairs(player.GetAll()) do
+            if IsValid(ply) and ply:Alive() and not ply:IsFlagSet(FL_NOTARGET) then
+                local d = self:GetRangeTo(ply)
+                if d < nd and self:Visible(ply) then
+                    nearest, nd = ply, d
+                end
             end
         end
     end
@@ -225,22 +244,28 @@ end
 function ENT:HandleCombat(target)
     local engageRange = self:GetEngageRange()
 
-    if self.CanMove then
-        self:StartActivity(ACT_RUN)
-        self.loco:SetDesiredSpeed(self.RunSpeed)
-    end
-
     while IsValid(target) do
         self:FaceTarget(target)
 
+        local moving = false
+
         if self.CanMove and self.SeeksCover and not self:Visible(target) then
             local cover = self:GetCoverPosition(target:GetPos())
-            if cover then
+            if cover and self:GetRangeTo(cover) > 40 then
+                self.loco:SetDesiredSpeed(self.RunSpeed)
                 self:MoveToPos(cover, {maxage = 0.6, repath = 0.3, tolerance = 30})
+                moving = true
             end
         elseif self.CanMove and self:GetRangeTo(target) > engageRange then
+            self.loco:SetDesiredSpeed(self.RunSpeed)
             self:MoveToPos(target:GetPos(), {maxage = 0.8, repath = 0.25, tolerance = 20})
+            moving = true
         end
+
+        -- Set every tick instead of once before the loop: leaving ACT_RUN set
+        -- while genuinely stationary (e.g. standing still firing) is what
+        -- breaks the animation blend into a T-pose on some models.
+        self:StartActivity(moving and ACT_RUN or ACT_IDLE)
 
         self:AttackTarget(target)
 

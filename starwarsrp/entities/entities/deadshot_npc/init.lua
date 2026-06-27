@@ -295,10 +295,15 @@ function ENT:GatherVisibleEnemies()
     local seen = {}
 
     local function scan(npc)
-        for _, ply in ipairs(player.GetAll()) do
-            if IsValid(ply) and ply:Alive() and not ply:IsFlagSet(FL_NOTARGET) then
-                if npc:GetRangeTo(ply) <= npc.SightRange and npc:Visible(ply) then
-                    seen[ply] = true
+        local targetsPlayers = npc.Alignment == "hostile"
+            or (npc.Alignment == "neutral" and CurTime() <= npc.ProvokedUntil)
+
+        if targetsPlayers then
+            for _, ply in ipairs(player.GetAll()) do
+                if IsValid(ply) and ply:Alive() and not ply:IsFlagSet(FL_NOTARGET) then
+                    if npc:GetRangeTo(ply) <= npc.SightRange and npc:Visible(ply) then
+                        seen[ply] = true
+                    end
                 end
             end
         end

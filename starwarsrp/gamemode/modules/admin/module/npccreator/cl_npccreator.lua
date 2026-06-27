@@ -159,25 +159,51 @@ function PD.NPCCreator.Menu(base)
         if not IsValid(listScroll) then return end
         listScroll:GetCanvas():Clear()
 
-        for name in SortedPairs(templates) do
-            local tpl = templates[name]
+        -- Group by faction so faction-assigned NPCs are visually clustered
+        local groups = {}
+        for name, tpl in pairs(templates) do
+            local faction = (tpl.faction and tpl.faction ~= "") and tpl.faction or "Keine Fraktion"
+            groups[faction] = groups[faction] or {}
+            table.insert(groups[faction], name)
+        end
 
-            local btn = PD.Button(name, listScroll, function()
-                currentName = name
-                RenderEditor(table.Copy(templates[name]))
-            end)
-            btn:Dock(TOP)
-            btn:SetTall(PD.H(46))
+        local groupNames = {}
+        for faction in pairs(groups) do table.insert(groupNames, faction) end
+        table.sort(groupNames)
 
-            local subtitle = "Benutzt: " .. (tpl.usageCount or 0)
-            if tpl.lastUsedBy and tpl.lastUsedBy ~= "" then
-                subtitle = subtitle .. " | zuletzt: " .. tpl.lastUsedBy .. " (" .. tpl.lastUsedAt .. ")"
+        for _, faction in ipairs(groupNames) do
+            local header = vgui.Create("DPanel", listScroll)
+            header:Dock(TOP)
+            header:SetTall(PD.H(26))
+            header:DockMargin(0, PD.H(6), 0, PD.H(2))
+            header.Paint = function(s, w, h)
+                draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.BackgroundDark)
+                draw.DrawText(faction, "MLIB.12", PD.W(10), h / 2 - PD.H(6), PD.Theme.Colors.AccentGray, TEXT_ALIGN_LEFT)
             end
 
-            local oldPaint = btn.Paint
-            btn.Paint = function(s, w, h)
-                oldPaint(s, w, h)
-                draw.DrawText(subtitle, "MLIB.12", PD.W(15), h - PD.H(16), PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+            local names = groups[faction]
+            table.sort(names)
+
+            for _, name in ipairs(names) do
+                local tpl = templates[name]
+
+                local btn = PD.Button(name, listScroll, function()
+                    currentName = name
+                    RenderEditor(table.Copy(templates[name]))
+                end)
+                btn:Dock(TOP)
+                btn:SetTall(PD.H(46))
+
+                local subtitle = "Benutzt: " .. (tpl.usageCount or 0)
+                if tpl.lastUsedBy and tpl.lastUsedBy ~= "" then
+                    subtitle = subtitle .. " | zuletzt: " .. tpl.lastUsedBy .. " (" .. tpl.lastUsedAt .. ")"
+                end
+
+                local oldPaint = btn.Paint
+                btn.Paint = function(s, w, h)
+                    oldPaint(s, w, h)
+                    draw.DrawText(subtitle, "MLIB.12", PD.W(15), h - PD.H(16), PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+                end
             end
         end
     end
@@ -354,9 +380,23 @@ function PD.NPCCreator.Menu(base)
         buttonContainer.Paint = function() end
 
         local saveBtn = PD.Button("Speichern", buttonContainer, function()
+            local formData = CollectFormData()
+            local oldName = currentName
+
+            -- Update the local list immediately - the server reply only
+            -- reaches a freshly opened RequestTemplates listener, not this
+            -- already-open menu, so without this the list looked stale
+            -- until the tab was reopened.
+            if oldName and oldName ~= formData.name then
+                templates[oldName] = nil
+            end
+            templates[formData.name] = formData
+            currentName = formData.name
+            RefreshList()
+
             net.Start("PD.NPCCreator.Save")
-            net.WriteString(currentName or "")
-            net.WriteTable(CollectFormData())
+            net.WriteString(oldName or "")
+            net.WriteTable(formData)
             net.SendToServer()
             surface.PlaySound("buttons/button14.wav")
         end)
@@ -381,7 +421,10 @@ function PD.NPCCreator.Menu(base)
                 net.Start("PD.NPCCreator.Delete")
                 net.WriteString(currentName)
                 net.SendToServer()
+
+                templates[currentName] = nil
                 currentName = nil
+                RefreshList()
                 RenderEditor(DefaultTemplate())
             end)
             deleteBtn:Dock(RIGHT)

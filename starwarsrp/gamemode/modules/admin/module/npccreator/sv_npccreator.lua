@@ -123,13 +123,12 @@ function PD.NPCCreator.CreateNPCFromTemplate(rawData, pos, ang)
     local npc = ents.Create("deadshot_npc")
     if not IsValid(npc) then return nil end
 
+    -- Every field that Initialize() reads (ModelPath/HealthAmount/WeaponClass/
+    -- SpawnsTroop/IsSquadLeader) MUST be set before Spawn() - Initialize() runs
+    -- synchronously inside Spawn() and would otherwise still see class defaults.
     npc.ModelPath = data.model
     npc.HealthAmount = data.health
     npc.WeaponClass = data.weapon
-
-    npc:SetPos(pos)
-    npc:SetAngles(ang)
-    npc:Spawn()
 
     npc.Alignment = data.alignment
     npc.AttackType = data.attackType
@@ -155,6 +154,10 @@ function PD.NPCCreator.CreateNPCFromTemplate(rawData, pos, ang)
     npc.IsSquadLeader = data.isSquadLeader
     npc.MaxSquadSize = data.maxSquadSize
     npc.CommandClaimRadius = data.commandClaimRadius
+
+    npc:SetPos(pos)
+    npc:SetAngles(ang)
+    npc:Spawn()
 
     npc:SetMaxHealth(data.health)
     npc:SetHealth(data.health)
