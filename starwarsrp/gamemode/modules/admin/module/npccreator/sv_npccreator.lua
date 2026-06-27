@@ -6,12 +6,8 @@ util.AddNetworkString("PD.NPCCreator.Spawn")
 
 PD.JSON.Create("npccreator")
 
-local Templates = {}
-
-local AllowedBases = {
-    deadshot_npc_trooper = true,
-    deadshot_npc_squad_leader = true,
-}
+PD.NPCCreator = PD.NPCCreator or {}
+PD.NPCCreator.Templates = {}
 
 local AllowedAlignments = {
     hostile = true,
@@ -46,10 +42,17 @@ local function SanitizeTemplate(tbl)
     local model = isstring(tbl.model) and tbl.model or "models/Combine_Soldier.mdl"
     if not util.IsValidModel(model) then model = "models/Combine_Soldier.mdl" end
 
+    local weapon = isstring(tbl.weapon) and tbl.weapon or ""
+    if weapon ~= "" and not weapons.GetStored(weapon) then
+        weapon = "weapon_pistol"
+    end
+
+    local childTemplate = isstring(tbl.childTemplate) and tbl.childTemplate or ""
+
     return {
         name = name,
-        base = AllowedBases[tbl.base] and tbl.base or "deadshot_npc_trooper",
         model = model,
+        weapon = weapon,
         health = math.floor(ClampNumber(tbl.health, 1, 2000, 150)),
         alignment = AllowedAlignments[tbl.alignment] and tbl.alignment or "hostile",
         attackType = AllowedAttackTypes[tbl.attackType] and tbl.attackType or "ranged",
@@ -59,24 +62,31 @@ local function SanitizeTemplate(tbl)
         aimSkill = AllowedAimSkills[tbl.aimSkill] and tbl.aimSkill or "realistic",
         canMove = tbl.canMove ~= false,
         canRotate = tbl.canRotate ~= false,
+        isSquadLeader = tbl.isSquadLeader == true,
+        childTemplate = childTemplate,
         squadSize = math.floor(ClampNumber(tbl.squadSize, 1, 9, 9)),
     }
 end
 
 local function SaveTemplates()
-    PD.JSON.Write("npccreator/templates.json", Templates)
+    PD.JSON.Write("npccreator/templates.json", PD.NPCCreator.Templates)
 end
 
-local function SpawnFromTemplate(ply, data)
-    local npc = ents.Create(data.base)
-    if not IsValid(npc) then return end
+-- Creates and fully configures a deadshot_npc at the given position/angle.
+-- Shared by the admin menu spawn button, the Tool Gun stool and squad
+-- leaders spawning their own members.
+function PD.NPCCreator.CreateNPCFromTemplate(rawData, pos, ang)
+    local data = SanitizeTemplate(rawData)
+
+    local npc = ents.Create("deadshot_npc")
+    if not IsValid(npc) then return nil end
 
     npc.ModelPath = data.model
     npc.HealthAmount = data.health
+    npc.WeaponClass = data.weapon
 
-    local tr = ply:GetEyeTrace()
-    npc:SetPos(tr.HitPos + tr.HitNormal * 5)
-    npc:SetAngles(Angle(0, ply:EyeAngles().y + 180, 0))
+    npc:SetPos(pos)
+    npc:SetAngles(ang)
     npc:Spawn()
 
     npc.Alignment = data.alignment
@@ -95,24 +105,33 @@ local function SpawnFromTemplate(ply, data)
         npc.ThrowDamage = data.damage
     end
 
-    if data.base == "deadshot_npc_squad_leader" then
-        npc.SquadSize = data.squadSize
-    end
+    npc.IsSquadLeader = data.isSquadLeader
+    npc.ChildTemplateName = data.childTemplate
+    npc.SquadSize = data.squadSize
 
     npc:SetMaxHealth(data.health)
     npc:SetHealth(data.health)
     npc:SetNWString("PD_NPCName", data.name)
+
+    return npc
+end
+
+function PD.NPCCreator.SpawnFromTemplate(ply, rawData, trace)
+    trace = trace or ply:GetEyeTrace()
+    local pos = trace.HitPos + trace.HitNormal * 5
+    local ang = Angle(0, ply:EyeAngles().y + 180, 0)
+    return PD.NPCCreator.CreateNPCFromTemplate(rawData, pos, ang)
 end
 
 hook.Add("Initialize", "PD.NPCCreator.Load", function()
-    Templates = PD.JSON.Read("npccreator/templates.json") or {}
+    PD.NPCCreator.Templates = PD.JSON.Read("npccreator/templates.json") or {}
 end)
 
 net.Receive("PD.NPCCreator.RequestTemplates", function(len, ply)
     if not IsValid(ply) or not ply:IsAdmin() then return end
 
     net.Start("PD.NPCCreator.Templates")
-    net.WriteTable(Templates)
+    net.WriteTable(PD.NPCCreator.Templates)
     net.Send(ply)
 end)
 
@@ -123,14 +142,14 @@ net.Receive("PD.NPCCreator.Save", function(len, ply)
     local data = SanitizeTemplate(net.ReadTable())
 
     if oldName ~= "" and oldName ~= data.name then
-        Templates[oldName] = nil
+        PD.NPCCreator.Templates[oldName] = nil
     end
 
-    Templates[data.name] = data
+    PD.NPCCreator.Templates[data.name] = data
     SaveTemplates()
 
     net.Start("PD.NPCCreator.Templates")
-    net.WriteTable(Templates)
+    net.WriteTable(PD.NPCCreator.Templates)
     net.Send(ply)
 end)
 
@@ -138,17 +157,16 @@ net.Receive("PD.NPCCreator.Delete", function(len, ply)
     if not IsValid(ply) or not ply:IsAdmin() then return end
 
     local name = net.ReadString()
-    Templates[name] = nil
+    PD.NPCCreator.Templates[name] = nil
     SaveTemplates()
 
     net.Start("PD.NPCCreator.Templates")
-    net.WriteTable(Templates)
+    net.WriteTable(PD.NPCCreator.Templates)
     net.Send(ply)
 end)
 
 net.Receive("PD.NPCCreator.Spawn", function(len, ply)
     if not IsValid(ply) or not ply:IsAdmin() then return end
 
-    local data = SanitizeTemplate(net.ReadTable())
-    SpawnFromTemplate(ply, data)
+    PD.NPCCreator.SpawnFromTemplate(ply, net.ReadTable())
 end)

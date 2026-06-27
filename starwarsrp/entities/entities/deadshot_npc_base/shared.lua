@@ -13,6 +13,11 @@ ENT.AdminOnly = true
 ENT.ModelPath = "models/Combine_Soldier.mdl"
 ENT.HealthAmount = 200
 
+-- Visually held weapon (also fixes T-posing on models like Combine_Soldier
+-- that expect a weapon hold-type for their animations). "" = no weapon.
+ENT.WeaponClass = "weapon_pistol"
+ENT.WeaponAttachment = "anim_attachment_RH"
+
 -- Movement: "Moving" can walk around / chase targets, "Static" stays at spawn.
 -- Rotation only matters for static NPCs (e.g. a turret that turns but never moves).
 ENT.CanMove = true

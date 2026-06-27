@@ -13,6 +13,42 @@ function ENT:Initialize()
     self.NextAttackTime = 0
     self.ProvokedUntil = 0
     self:SetCollisionGroup(COLLISION_GROUP_NPC)
+    self:EquipWeapon(self.WeaponClass)
+end
+
+----------------------------------------------------------------
+-- Held weapon (visual only - combat damage is resolved separately
+-- per attack type, see MeleeAttack/RangedAttack/ThrownAttack below)
+----------------------------------------------------------------
+
+function ENT:EquipWeapon(class)
+    if not isstring(class) or class == "" then return end
+
+    local attIndex = self:LookupAttachment(self.WeaponAttachment)
+    local att = attIndex > 0 and self:GetAttachment(attIndex) or nil
+
+    local wep = ents.Create(class)
+    if not IsValid(wep) then return end
+
+    wep:SetPos(att and att.Pos or self:GetPos())
+    wep:SetAngles(att and att.Ang or self:GetAngles())
+    wep:Spawn()
+    wep:SetOwner(self)
+    wep:SetSolid(SOLID_NONE)
+    wep:SetMoveType(MOVETYPE_NONE)
+    wep:SetParent(self)
+
+    if attIndex > 0 then
+        wep:Fire("SetParentAttachment", self.WeaponAttachment, 0)
+    end
+
+    self.HeldWeapon = wep
+end
+
+function ENT:OnRemove()
+    if IsValid(self.HeldWeapon) then
+        self.HeldWeapon:Remove()
+    end
 end
 
 ----------------------------------------------------------------

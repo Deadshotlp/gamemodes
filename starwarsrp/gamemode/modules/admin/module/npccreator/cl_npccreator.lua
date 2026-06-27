@@ -1,6 +1,27 @@
 -- NPC Creator - eigene NPC-Vorlagen erstellen, bearbeiten und spawnen
 
 PD.NPCCreator = PD.NPCCreator or {}
+PD.NPCCreator.Listeners = PD.NPCCreator.Listeners or {}
+
+-- One-shot request/response: queues callback(s), fires + clears them on the next reply.
+function PD.NPCCreator.RequestTemplates(callback)
+    if isfunction(callback) then
+        table.insert(PD.NPCCreator.Listeners, callback)
+    end
+
+    net.Start("PD.NPCCreator.RequestTemplates")
+    net.SendToServer()
+end
+
+net.Receive("PD.NPCCreator.Templates", function()
+    local templates = net.ReadTable()
+    local listeners = PD.NPCCreator.Listeners
+    PD.NPCCreator.Listeners = {}
+
+    for _, cb in ipairs(listeners) do
+        cb(templates)
+    end
+end)
 
 local Alignments = {
     { text = "Hostile", value = "hostile" },
@@ -30,8 +51,8 @@ end
 local function DefaultTemplate()
     return {
         name = "Neue NPC",
-        base = "deadshot_npc_trooper",
         model = "models/Combine_Soldier.mdl",
+        weapon = "weapon_pistol",
         health = 150,
         alignment = "hostile",
         attackType = "ranged",
@@ -41,6 +62,8 @@ local function DefaultTemplate()
         aimSkill = "realistic",
         canMove = true,
         canRotate = true,
+        isSquadLeader = false,
+        childTemplate = "",
         squadSize = 9,
     }
 end
@@ -98,6 +121,7 @@ function PD.NPCCreator.Menu(base)
     editorPanel.Paint = function() end
 
     RefreshList = function()
+        if not IsValid(listScroll) then return end
         listScroll:GetCanvas():Clear()
 
         for name in SortedPairs(templates) do
@@ -111,24 +135,15 @@ function PD.NPCCreator.Menu(base)
     end
 
     RenderEditor = function(data)
+        if not IsValid(editorPanel) then return end
         editorPanel:Clear()
 
         local widgets = {}
         local scroll = PD.Scroll(editorPanel)
 
         widgets.name = PD.TextEntry(scroll, "Name", data.name)
-
-        widgets.base = PD.Dropdown(scroll, data.base == "deadshot_npc_squad_leader" and "Squad Leader" or "Trooper", function(text, value)
-            widgets.base._pdValue = value
-            if IsValid(widgets.squadSize) then
-                widgets.squadSize:SetVisible(value == "deadshot_npc_squad_leader")
-            end
-        end)
-        widgets.base._pdValue = data.base
-        widgets.base:AddOption("Trooper", "deadshot_npc_trooper")
-        widgets.base:AddOption("Squad Leader", "deadshot_npc_squad_leader")
-
         widgets.model = PD.TextEntry(scroll, "Modellpfad", data.model)
+        widgets.weapon = PD.TextEntry(scroll, "Waffenklasse (z.B. weapon_pistol, leer = keine)", data.weapon)
 
         widgets.health = PD.Slider(scroll, "HP", 1, 1000, data.health, function() end)
 
@@ -168,14 +183,40 @@ function PD.NPCCreator.Menu(base)
         widgets.canRotate:AddOption("Drehend", true)
         widgets.canRotate:AddOption("Fest ausgerichtet", false)
 
-        widgets.squadSize = PD.Slider(scroll, "Squad-Größe (nur Squad Leader)", 1, 9, data.squadSize, function() end)
-        widgets.squadSize:SetVisible(data.base == "deadshot_npc_squad_leader")
+        -- Squad Leader Sektion
+        local squadSection
+        widgets.isSquadLeader = PD.Checkbox(scroll, "Ist Squad Leader (spawnt eigene Truppe)", data.isSquadLeader, function(value)
+            widgets.isSquadLeader._pdValue = value
+            if IsValid(squadSection) then
+                squadSection:SetVisible(value)
+            end
+        end)
+        widgets.isSquadLeader._pdValue = data.isSquadLeader
+
+        squadSection = vgui.Create("DPanel", scroll)
+        squadSection:Dock(TOP)
+        squadSection:SetTall(PD.H(110))
+        squadSection:SetVisible(data.isSquadLeader)
+        squadSection.Paint = function() end
+
+        widgets.squadSize = PD.Slider(squadSection, "Squad-Größe", 1, 9, data.squadSize, function() end)
+
+        widgets.childTemplate = PD.Dropdown(squadSection, data.childTemplate ~= "" and data.childTemplate or "- Standard -", function(text, value)
+            widgets.childTemplate._pdValue = value
+        end)
+        widgets.childTemplate._pdValue = data.childTemplate
+        widgets.childTemplate:AddOption("- Standard -", "")
+        for name in SortedPairs(templates) do
+            if name ~= currentName then
+                widgets.childTemplate:AddOption(name, name)
+            end
+        end
 
         local function CollectFormData()
             return {
                 name = widgets.name:GetValue(),
-                base = widgets.base._pdValue,
                 model = widgets.model:GetValue(),
+                weapon = widgets.weapon:GetValue(),
                 health = widgets.health:GetValue(),
                 alignment = widgets.alignment._pdValue,
                 attackType = widgets.attackType._pdValue,
@@ -185,6 +226,8 @@ function PD.NPCCreator.Menu(base)
                 aimSkill = widgets.aimSkill._pdValue,
                 canMove = widgets.canMove._pdValue,
                 canRotate = widgets.canRotate._pdValue,
+                isSquadLeader = widgets.isSquadLeader._pdValue,
+                childTemplate = widgets.childTemplate._pdValue,
                 squadSize = widgets.squadSize:GetValue(),
             }
         end
@@ -232,15 +275,13 @@ function PD.NPCCreator.Menu(base)
         end
     end
 
-    net.Receive("PD.NPCCreator.Templates", function()
-        templates = net.ReadTable()
-        RefreshList()
-    end)
-
     RenderEditor(DefaultTemplate())
 
-    net.Start("PD.NPCCreator.RequestTemplates")
-    net.SendToServer()
+    PD.NPCCreator.RequestTemplates(function(list)
+        if not IsValid(base) then return end
+        templates = list
+        RefreshList()
+    end)
 end
 
 -- Namensschild über NPCs, die über den Creator einen Namen bekommen haben
@@ -248,7 +289,7 @@ hook.Add("HUDPaint", "PD.NPCCreator.NameTags", function()
     local ply = LocalPlayer()
     if not IsValid(ply) or not PD.Theme then return end
 
-    for _, npc in ipairs(ents.FindByClass("deadshot_npc_*")) do
+    for _, npc in ipairs(ents.FindByClass("deadshot_npc")) do
         if not IsValid(npc) then continue end
 
         local name = npc:GetNWString("PD_NPCName", "")
