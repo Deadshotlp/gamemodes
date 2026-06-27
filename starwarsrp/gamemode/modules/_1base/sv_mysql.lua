@@ -1,7 +1,7 @@
 PD.SQL = {}
 PD.SQL.Config = {
     Host = "192.168.178.100",
-    Username = "ImIMXAixPE",
+    Username = "u1_ImIMXAixPE",
     Password = "jiB^s98S^fjf@E7rxPWnFm5W",
     Database = "s1_gmod_dev",
     Port = 3306,
