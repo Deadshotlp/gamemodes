@@ -585,6 +585,10 @@ function PD.Admin:Menu(wo)
         PlayerSpawnMenu(base)
     end)
 
+    CreateTab("NPC Creator", "npc_creator", function(base)
+        PD.NPCCreator.Menu(base)
+    end)
+
     -- Ersten Tab aktivieren
     if tabs["admin"] then
         tabs["admin"]:DoClick()
