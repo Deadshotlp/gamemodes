@@ -5,7 +5,7 @@ PD.DM.Interactions = {
     ["player"] = {
         -- [1] = {
         --     id = "tourniquet",
-        --     name = LANG.DM_INTERACTION_APPLY_TOURNICATE,
+        --     name = "Tourniquet anlegen",
         --     icon = nil,
         --     func = function(ply1, ply2, bone)
         --         net.Start("PD.DM.ChangeTourniquetStatus")
@@ -19,7 +19,7 @@ PD.DM.Interactions = {
         -- },
         [1] = {
             id = "check_puls",
-            name = LANG.DM_INTERACTION_CHECK_PULS,
+            name = "Puls überprüfen",
             icon = nil,
             func = function(ply1, ply2, bone)
                 net.Start("PD.DM.RequestValue")
@@ -34,7 +34,7 @@ PD.DM.Interactions = {
         },
         [2] = {
             id = "check_bp",
-            name = LANG.DM_INTERACTION_CHECK_BP,
+            name = "Blutdruck überprüfen",
             icon = nil,
             func = function(ply1, ply2, bone)
                 net.Start("PD.DM.RequestValue")
@@ -49,7 +49,7 @@ PD.DM.Interactions = {
         },
         [3] = {
             id = "check_fractured",
-            name = LANG.DM_INTERACTION_CHECK_FRACTURED,
+            name = "Auf Frakturen überprüfen",
             icon = nil,
             func = function(ply1, ply2, bone)
                 net.Start("PD.DM.RequestValue")
@@ -64,7 +64,7 @@ PD.DM.Interactions = {
         },
         [4] = {
             id = "open_interface",
-            name = LANG.DM_INTERACTION_OPEN_INTERFACE,
+            name = "Medizinische Schnittstelle öffnen",
             icon = nil,
             func = function(ply1, ply2, bone)
                 chat.AddText("Try to Open Medical Interface")
@@ -95,7 +95,7 @@ PD.DM.Interactions = {
         -- },
         [1] = {
             id = "check_puls",
-            name = LANG.DM_INTERACTION_CHECK_PULS,
+            name = "Puls überprüfen",
             icon = nil,
             func = function(ply1, ragdoll, bone)
                 local ply2 = ragdoll:GetNW2Entity("PD.DM.RagdollOwner")
@@ -111,7 +111,7 @@ PD.DM.Interactions = {
         },
         [2] = {
             id = "check_bp",
-            name = LANG.DM_INTERACTION_CHECK_BP,
+            name = "Blutdruck überprüfen",
             icon = nil,
             func = function(ply1, ragdoll, bone)
                 local ply2 = ragdoll:GetNW2Entity("PD.DM.RagdollOwner")
@@ -127,7 +127,7 @@ PD.DM.Interactions = {
         },
         [3] = {
             id = "check_fractured",
-            name = LANG.DM_INTERACTION_CHECK_FRACTURED,
+            name = "Auf Frakturen überprüfen",
             icon = nil,
             func = function(ply1, ragdoll, bone)
                 local ply2 = ragdoll:GetNW2Entity("PD.DM.RagdollOwner")
@@ -143,7 +143,7 @@ PD.DM.Interactions = {
         },
         [4] = {
             id = "open_interface",
-            name = LANG.DM_INTERACTION_OPEN_INTERFACE,
+            name = "Medizinische Schnittstelle öffnen",
             icon = nil,
             func = function(ply1, ragdoll, bone)
                 local ply2 = ragdoll:GetNW2Entity("PD.DM.RagdollOwner")
@@ -226,5 +226,5 @@ function PD.DM.Main.EndInteraction(patient)
 end
 
 hook.Add("PD.Interaction.Requested", "PD.DM.Interaction.Answer", function(ent_class)
-    PD.IA.AddEntityActions(PD.DM.Interactions[ent_class], LANG.DM_INTERACTION_MEDIC_OPTIONS)
+    PD.IA.AddEntityActions(PD.DM.Interactions[ent_class], "Medizinische Optionen")
 end)

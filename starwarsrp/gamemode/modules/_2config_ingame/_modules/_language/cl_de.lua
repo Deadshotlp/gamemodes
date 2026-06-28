@@ -264,12 +264,13 @@ PD.LANG.DE = {
     DM_UI_INJURY_PRESENT = "Verletzungen",
 
     -- Medical System Interactions
-    DM_INTERACTION_APPLY_TOURNICATE = "Tourniquet anlegen",
-    DM_INTERACTION_CHECK_PULS = "Puls überprüfen",
-    DM_INTERACTION_CHECK_BP = "Blutdruck überprüfen",
-    DM_INTERACTION_CHECK_FRACTURED = "Auf Frakturen überprüfen",
-    DM_INTERACTION_OPEN_INTERFACE = "Medizinische Schnittstelle öffnen",
-    DM_INTERACTION_MEDIC_OPTIONS = "Medizinische Optionen",
+-- DM_INTERACTION_APPLY_TOURNICATE = "Tourniquet anlegen",
+-- DM_INTERACTION_CHECK_PULS = "Puls überprüfen",
+-- DM_INTERACTION_CHECK_BP = "Blutdruck überprüfen",
+-- DM_INTERACTION_CHECK_FRACTURED = "Auf Frakturen überprüfen",
+-- DM_INTERACTION_OPEN_INTERFACE = "Medizinische Schnittstelle öffnen",
+-- DM_INTERACTION_MEDIC_OPTIONS = "Medizinische Optionen",
+
 
     -- Medical Diagnostics
     DM_DIAGNOSTIC_CHECK_PULS = "Puls überprüfen",
