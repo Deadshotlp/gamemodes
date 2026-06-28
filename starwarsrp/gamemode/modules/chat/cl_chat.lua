@@ -34,15 +34,17 @@ local function populateChat(scrollPanel)
     scrollPanel:Clear()
 
     for _, msg in pairs(PD.Chat.MSG) do
-        local words = string.Explode(" ", msg.text)
-        local lines = {}
-        local maxWidth = scrollPanel:GetWide()
-        local currentLine = ""
+        local displayText = msg.text
 
         if PD.Chat.Config.showTimestamps then
             local time = os.date("%H:%M:%S", msg.time)
-            msg.text = string.format("[%s] %s", time, msg.text)
+            displayText = string.format("[%s] %s", time, displayText)
         end
+
+        local words = string.Explode(" ", displayText)
+        local lines = {}
+        local maxWidth = scrollPanel:GetWide()
+        local currentLine = ""
 
         for _, word in ipairs(words) do
             local testLine = currentLine == "" and word or (currentLine .. " " .. word)
@@ -61,7 +63,7 @@ local function populateChat(scrollPanel)
         end
 
         for _, line in pairs(lines) do
-            local label = PD.Label(line, scrollPanel, {color = PD.Chat.Command.List[msg.key] and PD.Chat.Command.List[msg.key].color or Color(255, 255, 255)})
+            local label = PD.Label(line, scrollPanel, {color = PD.Chat.Command.Flat[msg.key] and PD.Chat.Command.Flat[msg.key].color or Color(255, 255, 255)})
             label:Dock(TOP)
             label:SetAutoStretchVertical(true)
             scrollPanel:ScrollToChild(label)
@@ -211,17 +213,19 @@ AddSmoothElement(PD.Chat.Config.x, PD.Chat.Config.y, PD.Chat.Config.w, PD.Chat.C
     for _, msg in SortedPairs(last_msg, function(a, b) return a.time > b.time end) do
         local timeSince = os.time() - msg.time
         local alpha = math.Clamp(255 - (timeSince / 60) * 255, 0, 255)
-        local color = PD.Chat.Command.List[msg.key] and PD.Chat.Command.List[msg.key].color or Color(255, 255, 255)
+        local color = PD.Chat.Command.Flat[msg.key] and PD.Chat.Command.Flat[msg.key].color or Color(255, 255, 255)
         if alpha > 0 then
-            local words = string.Explode(" ", msg.text)
-            local lines = {}
-            local maxWidth = PD.Chat.Config.w - PD.W(30)
-            local currentLine = ""
+            local displayText = msg.text
 
             if PD.Chat.Config.showTimestamps then
                 local time = os.date("%H:%M:%S", msg.time)
-                msg.text = string.format("[%s] %s", time, msg.text)
+                displayText = string.format("[%s] %s", time, displayText)
             end
+
+            local words = string.Explode(" ", displayText)
+            local lines = {}
+            local maxWidth = PD.Chat.Config.w - PD.W(30)
+            local currentLine = ""
 
             for _, word in ipairs(words) do
                 local testLine = currentLine == "" and word or (currentLine .. " " .. word)
@@ -239,7 +243,7 @@ AddSmoothElement(PD.Chat.Config.x, PD.Chat.Config.y, PD.Chat.Config.w, PD.Chat.C
                 table.insert(lines, currentLine)
             end
 
-            for _, line in SortedPairs(lines, function(a, b) return a.time > b.time end) do
+            for _, line in ipairs(lines) do
                 draw.SimpleText(line, "MLIB.15", PD.Chat.Config.x + PD.W(10), msg_offset - (pos * PD.H(15)), Color(color.r, color.g, color.b, alpha))
                 pos = pos + 1
             end

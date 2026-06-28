@@ -20,20 +20,17 @@ function PD.Chat.HandleMessage(ply, text)
         local commandKey = args[1]:lower()
         table.remove(args, 1)
 
-        for _, command in pairs(PD.Chat.Command.List[prefix]) do
-            if _ == commandKey then
-                command.callback(ply, args)
-                return
-            end
+        local command = PD.Chat.Command.List[prefix][commandKey]
+        if command then
+            command.callback(ply, args)
         end
     elseif prefix == "@" then
         local adminText = text:sub(2)
-        local name = ply:Nick()
 
         PD.Chat.AdminChat.callback(ply, {adminText})
     else
-        -- Normal chat message handling (broadcast to all players)
-        PD.Chat.Command.List["looc"].callback(ply, {text})
+        -- Normal chat message handling (local IC chat)
+        PD.Chat.Command.Flat["looc"].callback(ply, {text})
     end
     
 end

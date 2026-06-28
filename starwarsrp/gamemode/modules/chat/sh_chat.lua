@@ -1,3 +1,6 @@
+GLOBAL = 0
+LOCAL = 1
+
 PD.Chat = PD.Chat or {}
 
 PD.Chat.Command = PD.Chat.Command or {}
@@ -51,7 +54,7 @@ PD.Chat.Command.List = PD.Chat.Command.List or {
         ["me"] = {
             description = "Perform an action. (local)",
             visibility = LOCAL,
-            color = Color(255, 255, 0255),
+            color = Color(255, 255, 255),
             callback = function(ply, args)
                 local text = table.concat(args, " ")
                 local name = ply:Nick()
@@ -159,11 +162,19 @@ PD.Chat.AdminChat = {
     end
 }
 
-GLOBAL = 0
-LOCAL = 1
+PD.Chat.Command.Flat = PD.Chat.Command.Flat or {}
+
+for _, group in pairs(PD.Chat.Command.List) do
+    for name, command in pairs(group) do
+        PD.Chat.Command.Flat[name] = command
+    end
+end
+
+PD.Chat.Command.Flat["admin"] = PD.Chat.AdminChat
 
 if SERVER then
     function PD.Chat.AddCommand(key, name, CommandTbl)
-        table.insert(PD.Chat.Command.List[key][name], CommandTbl)
+        PD.Chat.Command.List[key][name] = CommandTbl
+        PD.Chat.Command.Flat[name] = CommandTbl
     end
 end 
