@@ -179,9 +179,10 @@ function PD.IA.OtherInteraction()
         local trace = ply:GetEyeTrace()
         local ent = trace.Entity
 
+print(ent)
+
         if not ent:IsValid() and not PD.IA.CurrentBone.looked_at then return end
 
-        print(ent)
 
         if PD.IA.LastEntity == nil then PD.IA.LastEntity = ent
 
