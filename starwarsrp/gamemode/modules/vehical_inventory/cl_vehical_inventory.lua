@@ -46,5 +46,6 @@ function PD.VehicalInventory.OpenInventory(name)
 end
 
 hook.Add("PD.Interaction.Requested", "PD.VehicalInventory.Interaction.Answer", function(ent_class)
-    PD.IA.AddEntityActions(PD.VehicalInventory.Interactions[ent_class], "")
+PD.IA.AddEntityActions(PD.VehicalInventory.Interactions[ent_class], "Fahrzeug Inventar")
+
 end)
