@@ -181,10 +181,12 @@ function PD.IA.OtherInteraction()
 
         if not ent:IsValid() and not PD.IA.CurrentBone.looked_at then return end
 
+        print(ent)
+
+        if PD.IA.LastEntity == nil then PD.IA.LastEntity = ent
+
         if ply:GetPos():Distance(ent:GetPos()) >= 100 and ply:GetPos():Distance(PD.IA.LastEntity.ent:GetPos()) >= 100 then return end
     
-print(ent)
-
         RequestEntityInformation(ent, "other")
 
         if PD.IA.LastEntity and PD.IA.LastEntity.bones and PD.IA.LastEntity.ent then
