@@ -179,7 +179,10 @@ function PD.IA.OtherInteraction()
         local trace = ply:GetEyeTrace()
         local ent = trace.Entity
 
-PrintTable(trace)
+print(ent)
+print("Entity is  Vehical: " .. ent:IsVehicle())
+
+
 
 
         if not ent:IsValid() and not PD.IA.CurrentBone.looked_at then return end
