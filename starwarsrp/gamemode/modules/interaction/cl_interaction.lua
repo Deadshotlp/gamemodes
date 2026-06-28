@@ -187,13 +187,13 @@ print("Entity class is: " .. ent:GetClass())
         if not ent:IsValid() and not PD.IA.CurrentBone.looked_at then return end
 
 
-if PD.IA.LastEntity.ent == nil then
-    PD.IA.LastEntity.ent = ent
+if PD.IA.LastEntity == nil then
+    PD.IA.LastEntity = ent
 end
 
 
 
-        if ply:GetPos():Distance(ent:GetPos()) >= 100 and ply:GetPos():Distance(PD.IA.LastEntity.ent:GetPos()) >= 100 then return end
+        if ply:GetPos():Distance(ent:GetPos()) >= 100 and ply:GetPos():Distance(PD.IA.LastEntity:GetPos()) >= 100 then return end
     
         RequestEntityInformation(ent, "other")
 
