@@ -183,6 +183,8 @@ function PD.IA.OtherInteraction()
 
         if ply:GetPos():Distance(ent:GetPos()) >= 100 and ply:GetPos():Distance(PD.IA.LastEntity.ent:GetPos()) >= 100 then return end
     
+print(ent)
+
         RequestEntityInformation(ent, "other")
 
         if PD.IA.LastEntity and PD.IA.LastEntity.bones and PD.IA.LastEntity.ent then
