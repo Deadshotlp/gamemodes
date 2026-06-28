@@ -21,7 +21,9 @@ function ENT:Initialize()
     self.NextAttackTime = 0
     self.ProvokedUntil = 0
     self:SetCollisionGroup(COLLISION_GROUP_NPC)
-    self:EquipWeapon(self.WeaponClass)
+self:SetupCollisionBounds()
+self:Give(self.WeaponClass)
+
 end
 
 ----------------------------------------------------------------
