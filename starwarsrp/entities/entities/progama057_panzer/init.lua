@@ -20,11 +20,13 @@ function ENT:Initialize()
 end
 
 function ENT:Use(ply)
-    if not ply:IsPlayer() then return end
+    if not ply:IsPlayer() then
+        return
+    end
 
     self:Remove()
 
     ply:SetBodygroup(1, 0)
-    ply:PDSetArmor(1, 100)
+    ply:PDSetArmor("panzer", 100)
 end
 

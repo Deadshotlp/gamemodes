@@ -20,12 +20,14 @@ function ENT:Initialize()
 end
 
 function ENT:Use(ply)
-    
-    if not ply:IsPlayer() then return end
+
+    if not ply:IsPlayer() then
+        return
+    end
 
     self:Remove()
 
     ply:SetBodygroup(3, 0)
-    ply:PDSetArmor(3, 100)
+    ply:PDSetArmor("helm", 100)
 end
 

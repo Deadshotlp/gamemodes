@@ -1,111 +1,93 @@
 PD.Char = PD.Char or {}
 
-CONFIG:AddConfig("charakter_minname",{
-    type = "number",
-    default = 3,
-    category = "Charakter",
-    desc = "Wie lang soll der Name mindestens sein?",
-    min = 1,
-    max = 50
-})
+PD.Char.Background = "mario/void_logo.png" -- Hintergrund Bild
+PD.Char.Discord = "" -- Discord Link
+PD.Char.Kollektion = "" -- Kollektion Link
+PD.Char.MaxChars = 5 -- Maximale Anzahl an Charakteren
+PD.Char.DefaultJob = "" -- Default Job
 
-CONFIG:AddConfig("charakter_maxname",{
-    type = "number",
-    default = 20,
-    category = "Charakter",
-    desc = "Wie lang darf der Name maximal sein?",
-    min = 1,
-    max = 50
-})
+PD.Char.UserGroupChar = {
+    ["user"] = 2,
+    ["projekt"] = 5,
+    ["Developer"] = 5,
+    ["teamleitung"] = 4,
+    ["moderator"] = 3,
+    ["supporter"] = 3,
+    ["eventler"] = 3,
+    ["superadmin"] = 5
+}
 
-CONFIG:AddConfig("charakter_nameblacklist",{
-    type = "simpletable",
-    default = {},
-    category = "Charakter",
-    desc = "Welche Namen sollen nicht erlaubt sein?",
-})
+PD.Char.OpenMenuBind = KEY_F6 -- Charaktermenü öffnen
+PD.Char.OpenAdminMenuBind = KEY_F7 -- Adminmenü öffnen
 
-CONFIG:AddConfig("charakter_maxchars",{
-    type = "number",
-    default = 5,
-    category = "Charakter",
-    desc = "Wie viele Charaktere soll es geben?",
-    min = 1,
-    max = 5
-})
+PD.Char.OpenAdminMenuTeam = { -- Welche Teams können das Adminmenü öffnen
+    ["admin"] = true,
+    ["superadmin"] = true
+}
 
-CONFIG:AddConfig("charakter_backgroundbild",{
-    type = "string",
-    default = "mario/void_logo.png",
-    category = "Charakter",
-    desc = "Hintergrundbild für den Charakterbildschirm",
-})
+PD.Char.MinName = 3 -- Minimale Länge des Namens
+PD.Char.MaxName = 20 -- Maximale Länge des Namens
 
-CONFIG:AddConfig("charakter_openmenubind",{
-    type = "bind",
-    default = KEY_F6,
-    category = "Charakter",
-    desc = "Öffnet das Charaktermenü",
-})
+PD.Char.NameBlacklist = { -- Blacklist für Namen
+    [""] = true 
+}
 
-CONFIG:AddConfig("charakter_openadminmenubind",{
-    type = "bind",
-    default = KEY_F7,
-    category = "Charakter",
-    desc = "Öffnet das Adminmenü"
-})
+PD.Char.NotAllowedNumbers = { -- Nicht erlaubt CT / CC Nummern
+    [""] = true
+}
 
-CONFIG:AddConfig("charakter_openadminmenuteam",{
-    type = "team",
-    default = {["superadmin"] = true},
-    category = "Charakter",
-    desc = "Wer darf das Adminmenü öffnen?"
-})
+PD.Config:AddSetting("Character", "Hintergrundbild", "string", "mario/void_logo.png")
+PD.Config:AddSetting("Character", "Discord Link", "string", "")
+PD.Config:AddSetting("Character", "Kollektion Link", "string", "")
+PD.Config:AddSetting("Character", "Maximale Anzahl an Charakteren", "number", 5)
+PD.Config:AddSetting("Character", "Default Job", "string", "")
+PD.Config:AddSetting("Character", "Minimale Namenslänge", "number", 3)
+PD.Config:AddSetting("Character", "Maximale Namenslänge", "number", 20)
+PD.Config:AddSetting("Character", "Name Blacklist", "table", {"Hitler", "Mario1"}, "list")
 
-CONFIG:AddConfig("charakter_defaultjob", {
-    type = "string",
-    default = "",
-    category = "Charakter",
-    desc = "Schreibe den Namen des Jobs rein, der als Standardjob genommen werden soll"
-})
+function FindJobIDByName(jobName)
+    for jobID, jobData in pairs(PD.JOBS.GetJob()) do
+        if jobData.name == jobName then
+            return jobID
+        end
+    end
+    return nil
+end
 
+function FindJobNameByID(jobID)
+    if PD.JOBS.GetJob()[jobID] then
+        return PD.JOBS.GetJob()[jobID].name
+    end
+    return nil
+end
 
-CONFIG:AddConfig("charakter_kolli",{
-    type = "string",
-    default = "",
-    category = "Charakter",
-    desc = "Füge den Kollektionslink ein",
-})
+function FindPlayerbyID(id)
+    for k, v in pairs(player.GetAll()) do
+        if v:SteamID64() == id then
+            return v
+        end
+    end
+    return nil
+end
 
-CONFIG:AddConfig("charakter_discord",{
-    type = "string",
-    default = "",
-    category = "Charakter",
-    desc = "Füge den Discordlink ein",
-})
+function FindPlayerbyCharID(id)
+    for k, v in pairs(player.GetAll()) do
+        if v:GetCharacterID() == id then
+            return v
+        end
+    end
+    return nil
+end
 
-CONFIG:AddConfig("charakter_usergroupchar",{
-    type = "simpletableplus",
-    default = {["user"] = 1, ["superadmin"] = 5},
-    category = "Charakter",
-    desc = "Wie viele Charaktere darf die Gruppe haben?",
-    options = {
-        {
-            type = "string",
-            desc = "Gruppe"
-        },
-        {
-            type = "number",
-            desc = "Anzahl",
-            min = 1,
-            max = 5
-        }
-    }
-})
+function FindPlayerCharbyName(name,tbl)
+    for k,v in pairs(tbl) do
+        if v.name == name then
+            return k
+        end
+    end
 
--- CONFIG:AddConfig("charakter_",{
---     type = "",
---     default = ,
---     category = "Charakter",
---     desc = ""
--- })
+    -- print(name)
+    -- PrintTable(tbl)
+
+    return nil
+end

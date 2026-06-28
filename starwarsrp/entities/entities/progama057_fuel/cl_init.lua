@@ -8,7 +8,7 @@ function ENT:Draw()
 	cam.Start3D2D(self:GetPos() + Vector(0, 0, 45), Angle(0, Angle(0, (LocalPlayer():GetPos() - self:GetPos()):Angle().y + 90, 90).y, 90), 0.1)
 
 		if dist <= 300 then		
-			draw.DrawText("Brennmittel: \n" .. self:GetFuel() .. "L", "MLIB.40", 10, 10, CONFIG:GetConfig("textcolor"), TEXT_ALIGN_CENTER)
+			draw.DrawText("Brennmittel: \n" .. self:GetFuel() .. "L", "MLIB.40", 10, 10, getColor("Text"), TEXT_ALIGN_CENTER)
 		end
 
 	cam.End3D2D()

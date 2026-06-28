@@ -4,12 +4,12 @@ GM.Version = "1.0.0"
 GM.Name = "starwarsrp"
 GM.Author = "Progama057 & Deadshot"
 
+if GM.ModulesLoaded then return end
+GM.ModulesLoaded = true
+
 DeriveGamemode("sandbox")
 DEFINE_BASECLASS("gamemode_sandbox")
 GM.Sandbox = BaseClass
-
-if GAMEMODE_LOADED then return end
-GAMEMODE_LOADED = true
 
 include("shared.lua")
 
@@ -18,6 +18,15 @@ local fileCount = 0
 
 local function LoadFolder(path)
     local files, folders = file.Find(path .. "*", "LUA")
+
+    -- print("Loading folder:", path)
+    for _, folder in SortedPairs(folders) do
+        if string.StartWith(folder, "!old") then continue end
+
+        if string.StartWith(folder, "_") then
+            LoadFolder(path .. folder .. "/")
+        end
+    end
 
     for _, File in SortedPairs(files) do
         if string.GetExtensionFromFilename(File) ~= "lua" then continue end
@@ -37,18 +46,22 @@ local function LoadFolder(path)
     end
 
     for _, folder in SortedPairs(folders) do
-        -- print("Entering folder:", path .. folder)
-        LoadFolder(path .. folder .. "/")
+        if not string.StartWith(folder, "_") then
+            LoadFolder(path .. folder .. "/")
+        end
     end
 end
 
-print("Loading modules...")
+if not file.IsDir("modules", "DATA") then
+        file.CreateDir("modules")
+end
+
+-- print("Loading modules...")
 LoadFolder(fol)
-print("Modules loaded.")
-print("Total files loaded:", fileCount)
+-- print("Modules loaded.")
+-- print("Total files loaded:", fileCount)
 
 local PLAYER = FindMetaTable("Player")
 function PLAYER:Nick()
     return self:GetNWString("rpname") and self:GetNWString("rpname") ~= "" and self:GetNWString("rpname") or "00-0000 Unknown"
 end
-

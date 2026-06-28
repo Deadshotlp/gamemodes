@@ -1,93 +1,232 @@
 PD.List = PD.List or {}
 PD.List.Tbl = PD.List.Tbl or {}
 
-function PD.List:LoadFactions()
-    local units = PD.JOBS.GetUnit(false, true)
-    local allsubunits = PD.JOBS.GetSubUnit(false, true)
-    local alljobs = PD.JOBS.GetJob(false, true)
-    local allplayers = PD.JSON.Read("factions/players.json")
+local playerTimers = {}
 
-    for k, unit in SortedPairs(units) do
-        PD.List.Tbl[k] = {
-            name = k,
-            subunits = {},
-            jobs = {},
-            color = unit.color,
-            default = unit.default
-        }
-    end
-
-    for k, subunit in SortedPairs(allsubunits) do
-        -- print("Subunit: " .. k)
-        -- PrintTable(subunit)
-        PD.List.Tbl[subunit.unit].subunits[k] = {
-            name = k,
-            unit = subunit.unit,
-            jobs = {},
-            color = subunit.color,
-            maxmembers = subunit.maxmembers,
-            default = subunit.default
-        }
-    end
-
-    local rank = 0
-    for k, job in SortedPairs(alljobs) do
-        local subunuitName, subunitTable = PD.JOBS.GetSubUnit(job.subunit)
-
-        -- Wenn subunit ändert wird rank zurückgesetzt
-        if subunitTable.unit != job.subunit then
-            rank = 0
-        end
-
-        -- print("Job: " .. k .. " - " .. subunuitName .. " - " .. subunitTable.unit)
-
-        PD.List.Tbl[subunitTable.unit].subunits[subunuitName].jobs[k] = {
-            name = k,
-            players = {},
-            color = job.color,
-            default = job.default,
-            permissionlevel = job.permissionlevel,
-            rank = rank + 1
-        }
-    end
-
-    for k, v in pairs(allplayers) do
-        if PD.List.Tbl[v.unit] and not PD.List.Tbl[v.unit].subunits[v.subunit].jobs[v.job].players[k] then
-            PD.List.Tbl[v.unit].subunits[v.subunit].jobs[v.job].players[k] = v
-            print("Player: " .. v.name .. " wurde geladen.")
-        end
-    end
+local function GetJobsTable()
+    return PD.JOBS and PD.JOBS.Jobs or {}
 end
 
-hook.Add("PostPDLoaded", "PD.List.LoadFactions", function()
-    PD.List:LoadFactions()
-end)
+local function GetSortedJobs(jobs)
+    local entries = {}
 
-hook.Add("PD.JOBS.SaveJob", "FactionsSync", function()
-    PD.List:LoadFactions()
-end)
+    for jobIndex, jobData in pairs(jobs or {}) do
+        table.insert(entries, {
+            index = jobIndex,
+            data = jobData
+        })
+    end
 
-timer.Simple(1, function()
-    PD.List:LoadFactions()
-end)
+    table.sort(entries, function(a, b)
+        local aPos = tonumber(a.data.position) or 999999
+        local bPos = tonumber(b.data.position) or 999999
 
-function PD.List.Save()
-    local players = {}
+        if aPos == bPos then
+            return tostring(a.index) < tostring(b.index)
+        end
 
-    for _, unit in pairs(PD.List.Tbl) do
-        for _, subunit in pairs(unit.subunits) do
-            for _, job in pairs(subunit.jobs) do
-                for k, v in pairs(job.players) do
-                    players[k] = v
+        return aPos < bPos
+    end)
+
+    return entries
+end
+
+local function GetFactionPath(unitValue, subValue, jobValue)
+    local jobs = GetJobsTable()
+
+    if jobs[unitValue]
+        and jobs[unitValue].subunits
+        and jobs[unitValue].subunits[subValue]
+        and jobs[unitValue].subunits[subValue].jobs
+        and jobs[unitValue].subunits[subValue].jobs[jobValue] then
+        return unitValue, subValue, jobValue, jobs[unitValue].subunits[subValue].jobs[jobValue]
+    end
+
+    for unitIndex, unitData in pairs(jobs) do
+        if unitIndex == unitValue or unitData.name == unitValue then
+            for subIndex, subData in pairs(unitData.subunits or {}) do
+                if subIndex == subValue or subData.name == subValue then
+                    if subData.jobs and subData.jobs[jobValue] then
+                        return unitIndex, subIndex, jobValue, subData.jobs[jobValue]
+                    end
+
+                    for jobIndex, jobData in pairs(subData.jobs or {}) do
+                        if jobIndex == jobValue or jobData.name == jobValue then
+                            return unitIndex, subIndex, jobIndex, jobData
+                        end
+                    end
                 end
             end
         end
     end
 
-    PD.JSON.Write("factions/players.json", players)
+    for unitIndex, unitData in pairs(jobs) do
+        for subIndex, subData in pairs(unitData.subunits or {}) do
+            for jobIndex, jobData in pairs(subData.jobs or {}) do
+                if jobIndex == jobValue or jobData.name == jobValue then
+                    return unitIndex, subIndex, jobIndex, jobData
+                end
+            end
+        end
+    end
 end
 
-local playerTimers = {}
+local function GetDefaultFactionPath()
+    local jobs = GetJobsTable()
+
+    for unitIndex, unitData in pairs(jobs) do
+        if unitData.default then
+            for subIndex, subData in pairs(unitData.subunits or {}) do
+                if subData.default then
+                    for jobIndex, jobData in pairs(subData.jobs or {}) do
+                        if jobData.default then
+                            return unitIndex, subIndex, jobIndex, jobData
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local unitIndex, unitData = next(jobs)
+    if not unitIndex or not unitData then return end
+
+    local subIndex, subData = next(unitData.subunits or {})
+    if not subIndex or not subData then return end
+
+    local jobIndex, jobData = next(subData.jobs or {})
+    if not jobIndex or not jobData then return end
+
+    return unitIndex, subIndex, jobIndex, jobData
+end
+
+local function GetJobNode(unitIndex, subIndex, jobIndex)
+    return PD.List.Tbl[unitIndex]
+        and PD.List.Tbl[unitIndex].subunits
+        and PD.List.Tbl[unitIndex].subunits[subIndex]
+        and PD.List.Tbl[unitIndex].subunits[subIndex].jobs
+        and PD.List.Tbl[unitIndex].subunits[subIndex].jobs[jobIndex]
+end
+
+local function GetPlayerCharID(ply)
+    if not IsValid(ply) then return nil end
+    return PD.Char and PD.Char.GetCharacterID and PD.Char:GetCharacterID(ply) or ply:GetNWString("character_id", "9999")
+end
+
+function PD.List:LoadFactions()
+    PD.List.Tbl = {}
+
+    if PD.JOBS and PD.JOBS.LoadJobs then
+        PD.JOBS.LoadJobs()
+    end
+
+    local allplayers = PD.JSON and PD.JSON.Read and PD.JSON.Read("factions/players.json") or {}
+    allplayers = istable(allplayers) and allplayers or {}
+
+    for unitIndex, unitData in SortedPairs(GetJobsTable()) do
+        PD.List.Tbl[unitIndex] = {
+            index = unitIndex,
+            name = unitData.name or unitIndex,
+            color = unitData.color,
+            default = unitData.default,
+            subunits = {}
+        }
+
+        for subIndex, subData in SortedPairs(unitData.subunits or {}) do
+            PD.List.Tbl[unitIndex].subunits[subIndex] = {
+                index = subIndex,
+                name = subData.name or subIndex,
+                unit = unitIndex,
+                color = subData.color,
+                default = subData.default,
+                maxmembers = subData.maxmembers,
+                jobs = {}
+            }
+
+            local rank = 1
+            for _, entry in ipairs(GetSortedJobs(subData.jobs or {})) do
+                local jobIndex = entry.index
+                local jobData = entry.data
+
+                PD.List.Tbl[unitIndex].subunits[subIndex].jobs[jobIndex] = {
+                    index = jobIndex,
+                    name = jobData.name or jobIndex,
+                    players = {},
+                    color = jobData.color,
+                    default = jobData.default,
+                    permissionlevel = tonumber(jobData.permissionlevel) or 0,
+                    rank = rank,
+                    position = tonumber(jobData.position) or rank
+                }
+
+                rank = rank + 1
+            end
+        end
+    end
+
+    for charID, data in pairs(allplayers) do
+        local unitIndex, subIndex, jobIndex = GetFactionPath(data.unit, data.subunit, data.job)
+
+        local jobNode = GetJobNode(unitIndex, subIndex, jobIndex)
+        if jobNode then
+            data.unit = unitIndex
+            data.subunit = subIndex
+            data.job = jobIndex
+            jobNode.players[charID] = {
+                name = data.name or charID,
+                steamid = data.steamid or "",
+                unit = unitIndex,
+                subunit = subIndex,
+                job = jobIndex,
+                join = data.join or os.date("%d.%m.%Y %H:%M:%S", os.time()),
+                lastplay = data.lastplay or os.date("%d.%m.%Y %H:%M:%S", os.time()),
+                playtime = tonumber(data.playtime) or 0
+            }
+        end
+    end
+end
+
+function PD.List.Save()
+    local players = {}
+
+    for _, unit in pairs(PD.List.Tbl or {}) do
+        for _, subunit in pairs(unit.subunits or {}) do
+            for _, job in pairs(subunit.jobs or {}) do
+                for charID, data in pairs(job.players or {}) do
+                    players[charID] = {
+                        name = data.name,
+                        steamid = data.steamid,
+                        unit = data.unit,
+                        subunit = data.subunit,
+                        job = data.job,
+                        join = data.join,
+                        lastplay = data.lastplay,
+                        playtime = tonumber(data.playtime) or 0
+                    }
+                end
+            end
+        end
+    end
+
+    if PD.JSON and PD.JSON.Write then
+        PD.JSON.Write("factions/players.json", players)
+    end
+end
+
+function PD.List:Sync(ply)
+    if not IsValid(ply) then return end
+
+    net.Start("PD.List.Sync")
+    net.WriteTable(PD.List.Tbl or {})
+    net.Send(ply)
+end
+
+function PD.List:SyncAll()
+    net.Start("PD.List.Sync")
+    net.WriteTable(PD.List.Tbl or {})
+    net.Broadcast()
+end
+
 function PD.List:StartTimer(playerSteamID)
     if not playerTimers[playerSteamID] then
         playerTimers[playerSteamID] = RealTime()
@@ -95,249 +234,273 @@ function PD.List:StartTimer(playerSteamID)
 end
 
 function PD.List:GetTimer(playerSteamID)
-    if playerTimers[playerSteamID] then
-        return true
-    else
-        return false
-    end
+    return playerTimers[playerSteamID] ~= nil
 end
 
 function PD.List:StopTimer(playerSteamID)
-    if playerTimers[playerSteamID] then
-        local elapsedTime = RealTime() - playerTimers[playerSteamID]
-        playerTimers[playerSteamID] = nil
-        print("Timer gestoppt: " .. elapsedTime)
-
-        if not elapsedTime then
-            return 0
-        end
-
-        return elapsedTime
-    else
+    if not playerTimers[playerSteamID] then
         return 0
     end
+
+    local elapsedTime = RealTime() - playerTimers[playerSteamID]
+    playerTimers[playerSteamID] = nil
+
+    return elapsedTime or 0
 end
 
-function PD.List:SetPlayerFaction(ply, factionName, SubFactionName, jobName)
-    if !IsValid(ply) then return end
-    if !PD.List.Tbl[factionName] then return end
-    if !PD.List.Tbl[factionName].subunits[SubFactionName].jobs[jobName] then return end
+function PD.List:GetPlayerFactionByCharID(charID)
+    if not charID then return nil end
 
-    local gfactionName, gsubfactionName, gjobName = PD.List:GetPlayerFaction(ply)
-    if gfactionName then 
-        local gfaction = PD.List.Tbl[gfactionName]
-        local gsubfaction = gfaction.subunits[gsubfactionName]
-        local gjob = gsubfaction.jobs[gjobName]
-
-        gjob.players[ply:GetCharacterID()] = nil
-    end
-
-    local faction = PD.List.Tbl[factionName]
-    local subfaction = faction.subunits[SubFactionName]
-    local job = subfaction.jobs[jobName]
-
-    if ply:GetCharacterID() == "9999" then 
-        PD.Char:SetPlayerCharID(ply)
-    end
-
-    if job.players[ply:GetCharacterID()] then return end
-
-    job.players[ply:GetCharacterID()] = {
-        name = ply:Nick(),
-        steamid = ply:SteamID64(),
-        job = jobName,
-        subunit = SubFactionName,
-        unit = factionName,
-        join = os.date("%d.%m.%Y %H:%M:%S", os.time()),
-        lastplay = os.date("%d.%m.%Y %H:%M:%S", os.time()),
-        playtime = 0
-    }
-
-    PD.List:StartTimer(ply:SteamID64())
-    PD.List.Save()
-
-    print(ply:Nick().." joined "..factionName.." - "..SubFactionName.." - "..jobName)
-
-    hook.Run("PD_Faction_Change", ply, factionName, SubFactionName, jobName)
-end
-
-function PD.List:GetPlayerFaction(ply)
-    if !IsValid(ply) then return end
-
-    for factionName, faction in pairs(PD.List.Tbl) do
-        for subfactionName, subfaction in pairs(faction.subunits) do
-            for jobName, job in pairs(subfaction.jobs) do
-                if job.players[ply:GetCharacterID()] then
-                    return factionName, subfactionName, jobName
+    for factionIndex, faction in pairs(PD.List.Tbl or {}) do
+        for subIndex, subunit in pairs(faction.subunits or {}) do
+            for jobIndex, job in pairs(subunit.jobs or {}) do
+                if job.players and job.players[charID] then
+                    return factionIndex, subIndex, jobIndex, job.players[charID]
                 end
             end
         end
     end
 end
 
-function PD.List:RemovePlayerFaction(ply, change)
-    if !IsValid(ply) then return end
-
-    local factionName, subfactionName, jobName = PD.List:GetPlayerFaction(ply)
-
-    if !factionName then return end
-
-    local faction = PD.List.Tbl[factionName]
-    local subfaction = faction.subunits[subfactionName]
-    local job = subfaction.jobs[jobName]
-
-    job.players[ply:GetCharacterID()] = nil
-
-    -- Setzt den Spieler auf die Default Fraktion
-    local factionName, subfactionName, jobName = PD.List:SetPlayerDefaultFaction(ply)
-
-    -- PD.List:StopTimer(ply:SteamID64())
-    PD.List.Save()
-
-    print(ply:Nick().." left "..factionName.." - "..subfactionName.." - "..jobName)
-
-    hook.Run("PD_Faction_Change", ply, factionName, subfactionName, jobName)
+function PD.List:GetPlayerFaction(ply)
+    local charID = GetPlayerCharID(ply)
+    if not charID then return nil end
+    return PD.List:GetPlayerFactionByCharID(charID)
 end
 
-function PD.List:RankUp(ply, factionName, subfactionName, jobName)
-    if !IsValid(ply) then return end
-    if !PD.List.Tbl[factionName] then return end
-    if !PD.List.Tbl[factionName].subunits[subfactionName] then return end
-    if !PD.List.Tbl[factionName].subunits[subfactionName].jobs[jobName] then return end
+function PD.List:GetPlayerTable(ply)
+    local _, _, _, data = PD.List:GetPlayerFaction(ply)
+    return data
+end
 
-    local faction = PD.List.Tbl[factionName]
-    local subfaction = faction.subunits[subfactionName]
-    local job = subfaction.jobs[jobName]
+function PD.List:GetPlayerData(ply)
+    local unit, subunit, job = PD.List:GetPlayerFaction(ply)
+    if unit and subunit and job then
+        return unit, subunit, job
+    end
 
-    -- Nächsten Job Finden und Spieler hinzufügen
-    for _, nextJob in pairs(subfaction.jobs) do
-        if nextJob.permissionlevel == job.permissionlevel + 1 then
-            PD.List:SetPlayerFaction(ply, factionName, subfactionName, nextJob.name)
+    local activeChar = PD.Char and PD.Char.PlayerActiveChar and PD.Char:PlayerActiveChar(ply)
+    if activeChar and activeChar.faction then
+        return activeChar.faction.unit, activeChar.faction.subunit, activeChar.faction.job
+    end
+end
+
+function PD.List:RemoveFactionByCharID(charID, setDefault, ply)
+    if not charID then return false end
+
+    local factionIndex, subIndex, jobIndex, data = PD.List:GetPlayerFactionByCharID(charID)
+    if not factionIndex or not subIndex or not jobIndex then
+        return false
+    end
+
+    local jobNode = GetJobNode(factionIndex, subIndex, jobIndex)
+    if not jobNode or not jobNode.players then
+        return false
+    end
+
+    if data and data.steamid then
+        local savedTime = 0
+        if IsValid(ply) then
+            savedTime = PD.List:StopTimer(data.steamid)
+        else
+            savedTime = PD.List:StopTimer(data.steamid)
+        end
+
+        if data.playtime then
+            data.playtime = data.playtime + savedTime
+        end
+
+        data.lastplay = os.date("%d.%m.%Y %H:%M:%S", os.time())
+    end
+
+    jobNode.players[charID] = nil
+
+    if setDefault and IsValid(ply) then
+        local defaultUnit, defaultSub, defaultJob = PD.List:SetPlayerDefaultFaction(ply)
+        PD.List.Save()
+        PD.List:SyncAll()
+        hook.Run("PD_Faction_Change", ply, defaultUnit, defaultSub, defaultJob)
+        return true
+    end
+
+    PD.List.Save()
+    PD.List:SyncAll()
+    return true
+end
+
+function PD.List:SetPlayerFaction(ply, factionIndex, subFactionIndex, jobIndex)
+    if not IsValid(ply) then return end
+
+    local charID = GetPlayerCharID(ply)
+    if not charID or charID == "9999" then
+        print("SetPlayerFaction abgebrochen: Kein aktiver Char.")
+        return
+    end
+
+    local resolvedUnit, resolvedSub, resolvedJob = GetFactionPath(factionIndex, subFactionIndex, jobIndex)
+    local jobNode = GetJobNode(resolvedUnit, resolvedSub, resolvedJob)
+    if not resolvedUnit or not resolvedSub or not resolvedJob or not jobNode then
+        print("SetPlayerFaction: Ziel-Fraktion konnte nicht aufgelöst werden.")
+        return
+    end
+
+    local _, _, _, oldData = PD.List:GetPlayerFactionByCharID(charID)
+    PD.List:RemoveFactionByCharID(charID, false, ply)
+
+    jobNode = GetJobNode(resolvedUnit, resolvedSub, resolvedJob)
+    if not jobNode then return end
+
+    local entry = oldData or {}
+    entry.name = ply:GetNWString("rpname", ply:Nick())
+    entry.steamid = ply:SteamID64()
+    entry.unit = resolvedUnit
+    entry.subunit = resolvedSub
+    entry.job = resolvedJob
+    entry.join = entry.join or os.date("%d.%m.%Y %H:%M:%S", os.time())
+    entry.lastplay = os.date("%d.%m.%Y %H:%M:%S", os.time())
+    entry.playtime = tonumber(entry.playtime) or 0
+
+    jobNode.players[charID] = entry
+
+    PD.List:StartTimer(ply:SteamID64())
+    PD.List.Save()
+    PD.List:SyncAll()
+
+    hook.Run("PD_Faction_Change", ply, resolvedUnit, resolvedSub, resolvedJob)
+end
+
+function PD.List:RankUp(ply, factionIndex, subIndex, jobIndex)
+    if not IsValid(ply) then return end
+
+    local currentJob = GetJobNode(factionIndex, subIndex, jobIndex)
+    if not currentJob then return end
+
+    local nextJobIndex
+    local nextRank = currentJob.rank + 1
+
+    for candidateJobIndex, candidateJob in pairs(PD.List.Tbl[factionIndex].subunits[subIndex].jobs or {}) do
+        if candidateJob.rank == nextRank then
+            nextJobIndex = candidateJobIndex
             break
         end
     end
 
-    PD.List.Save()
+    if not nextJobIndex then return end
+
+    PD.List:SetPlayerFaction(ply, factionIndex, subIndex, nextJobIndex)
 end
 
-function PD.List:RankDown(ply, factionName, subfactionName, jobName)
-    if !IsValid(ply) then return end
-    if !PD.List.Tbl[factionName] then return end
-    if !PD.List.Tbl[factionName].subunits[subfactionName] then return end
-    if !PD.List.Tbl[factionName].subunits[subfactionName].jobs[jobName] then return end
+function PD.List:RankDown(ply, factionIndex, subIndex, jobIndex)
+    if not IsValid(ply) then return end
 
-    local faction = PD.List.Tbl[factionName]
-    local subfaction = faction.subunits[subfactionName]
-    local job = subfaction.jobs[jobName]
+    local currentJob = GetJobNode(factionIndex, subIndex, jobIndex)
+    if not currentJob then return end
 
-    -- Nächsten Job Finden und Spieler hinzufügen
-    for _, nextJob in pairs(subfaction.jobs) do
-        if nextJob.rank == job.rank - 1 then
-            PD.List:SetPlayerFaction(ply, factionName, subfactionName, nextJob.name)
+    local nextJobIndex
+    local nextRank = currentJob.rank - 1
+
+    for candidateJobIndex, candidateJob in pairs(PD.List.Tbl[factionIndex].subunits[subIndex].jobs or {}) do
+        if candidateJob.rank == nextRank then
+            nextJobIndex = candidateJobIndex
             break
         end
     end
 
-    PD.List.Save()
+    if not nextJobIndex then return end
+
+    PD.List:SetPlayerFaction(ply, factionIndex, subIndex, nextJobIndex)
 end
 
 function PD.List:PlayerHasFaction(ply)
-    return PD.List:GetPlayerFaction(ply) != nil
+    return PD.List:GetPlayerFaction(ply) ~= nil
 end
 
-function PD.List:ChangeFaction(ply, factionName, subfactionName, jobName)
-    PD.List:RemovePlayerFaction(ply)
-    PD.List:SetPlayerFaction(ply, factionName, subfactionName, jobName)
+function PD.List:ChangeFaction(ply, factionIndex, subIndex, jobIndex)
+    PD.List:SetPlayerFaction(ply, factionIndex, subIndex, jobIndex)
 end
 
-function PD.List:CheckPermissionLevel(ply, factionName, subfactionName, jobName)
-    if !IsValid(ply) then return end
-    if !PD.List.Tbl[factionName] then return end
-    if !PD.List.Tbl[factionName].subunits[subfactionName] then return end
-    if !PD.List.Tbl[factionName].subunits[subfactionName].jobs[jobName] then return end
+function PD.List:CheckPermissionLevel(ply, factionIndex, subIndex, jobIndex)
+    if not IsValid(ply) then return false end
+    if ply:IsAdmin() then return true end
 
-    local faction = PD.List.Tbl[factionName]
-    local subfaction = faction.subunits[subfactionName]
-    local job = subfaction.jobs[jobName]
-    local plyLevel = PD.JOBS.GetJob(jobName).permissionlevel or 0
+    local actorFaction, actorSub, actorJob = PD.List:GetPlayerFaction(ply)
+    if not actorFaction or not actorSub or not actorJob then return false end
+    if actorFaction ~= factionIndex or actorSub ~= subIndex then return false end
 
-    if not job.permissionlevel then job.permissionlevel = 0 end
+    local actorJobNode = GetJobNode(actorFaction, actorSub, actorJob)
+    local targetJobNode = GetJobNode(factionIndex, subIndex, jobIndex)
+    if not actorJobNode or not targetJobNode then return false end
 
-    return job.permissionlevel <= plyLevel
+    return tonumber(actorJobNode.rank or 0) > tonumber(targetJobNode.rank or 0) + 1
 end
 
 function PD.List:SetPlayerDefaultFaction(ply)
     if not IsValid(ply) then return end
 
-    local factionName = PD.JOBS.GetUnit()
-    local subfactionName = PD.JOBS.GetSubUnit()
-    local jobName = PD.JOBS.GetJob()
+    local unitIndex, subIndex, jobIndex = GetDefaultFactionPath()
+    if not unitIndex or not subIndex or not jobIndex then return end
 
-    print("SetPlayerDefaultFaction: " .. factionName .. " - " .. subfactionName .. " - " .. jobName)
-    
-    PD.List:SetPlayerFaction(ply, factionName, subfactionName, jobName)
-
-
-    return factionName, subfactionName, jobName                    
+    PD.List:SetPlayerFaction(ply, unitIndex, subIndex, jobIndex)
+    return unitIndex, subIndex, jobIndex
 end
 
-function PD.List:GetPlayerTable(ply)
-    if !IsValid(ply) then return end
-
-    local factionName, subfactionName, jobName = PD.List:GetPlayerFaction(ply)
-
-    if !factionName then return end
-
-    local faction = PD.List.Tbl[factionName]
-    local subfaction = faction.subunits[subfactionName]
-    local job = subfaction.jobs[jobName]
-
-    for k, v in pairs(job.players) do
-        if k == ply:GetCharacterID() then
-            return v
-        end
-    end
-    
+if PD.JSON and PD.JSON.Create then
+    timer.Simple(1, function()
+        PD.JSON.Create("factions")
+    end)
 end
-
-timer.Simple(1, function()
-    PD.JSON.Create("factions")
-end)
 
 local PLAYER = FindMetaTable("Player")
+
 function PLAYER:GetCharacterID()
-    return self:GetNWString("character_id","9999")
+    return self.CharID or self:GetNWString("character_id", "9999")
 end
 
-gameevent.Listen("player_disconnect")
-hook.Add("PlayerDisconnected", "PD.List.PlayerDisconnected", function(ply)
-    local time = PD.List:StopTimer(ply:SteamID64())
-    local plyTable = PD.List:GetPlayerTable(ply)
+hook.Add("PostPDLoaded", "PD.List.LoadFactions.Core", function()
+    PD.List:LoadFactions()
+end)
 
-    plyTable.playtime = plyTable.playtime + time
+hook.Add("PD.JOBS.SaveJob", "PD.List.ReloadFactions.OnJobSave", function()
+    PD.List:LoadFactions()
+    PD.List:SyncAll()
+end)
 
-    if time > 0 then
-        print("Spieler: " .. ply:Nick() .. " war " .. time .. " Sekunden online.")
+timer.Simple(1, function()
+    PD.List:LoadFactions()
+    PD.List:SyncAll()
+end)
+
+hook.Add("PlayerDisconnected", "PD.List.PlayerDisconnected.Core", function(ply)
+    if not IsValid(ply) then return end
+
+    local data = PD.List:GetPlayerTable(ply)
+    if not data then
+        PD.List:StopTimer(ply:SteamID64())
+        PD.List.Save()
+        return
     end
+
+    local time = PD.List:StopTimer(ply:SteamID64())
+    data.playtime = (data.playtime or 0) + time
+    data.lastplay = os.date("%d.%m.%Y %H:%M:%S", os.time())
 
     PD.List.Save()
 end)
 
-hook.Add("ShutDown", "PD.List.ShutDown", function()
+hook.Add("ShutDown", "PD.List.ShutDown.Core", function()
+    for _, ply in pairs(player.GetAll()) do
+        if not IsValid(ply) then continue end
 
-    for k, v in pairs(playerTimers) do
-        local time = PD.List:StopTimer(k:SteamID64())
-        local plyTable = PD.List:GetPlayerTable(v)
-
-        plyTable.playtime = plyTable.playtime + time
-
-        if time > 0 then
-            print("Spieler: " .. k .. " war " .. time .. " Sekunden online.")
+        local data = PD.List:GetPlayerTable(ply)
+        if not data then
+            PD.List:StopTimer(ply:SteamID64())
+            continue
         end
 
-
+        local time = PD.List:StopTimer(ply:SteamID64())
+        data.playtime = (data.playtime or 0) + time
+        data.lastplay = os.date("%d.%m.%Y %H:%M:%S", os.time())
     end
 
     PD.List.Save()
 end)
-

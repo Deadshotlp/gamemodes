@@ -39,9 +39,9 @@ function ENT:Draw()
 
 		if dist <= 300 then		
 			if IsNearEntity(self, "progama057_cool", 50) then
-                draw.DrawText("Kühlflüssigkeit\ngefunden!", "PD.REAKTOR:SmallFont", 28, 17, CONFIG:GetConfig("textcolor"), TEXT_ALIGN_CENTER)
+                draw.DrawText("Kühlflüssigkeit\ngefunden!", "PD.REAKTOR:SmallFont", 28, 17, getColor("Text"), TEXT_ALIGN_CENTER)
             else
-                draw.DrawText("Kühlflüssigkeit\nnicht\ngefunden!", "PD.REAKTOR:SmallFont", 28, 12, CONFIG:GetConfig("textcolor"), TEXT_ALIGN_CENTER)
+                draw.DrawText("Kühlflüssigkeit\nnicht\ngefunden!", "PD.REAKTOR:SmallFont", 28, 12, getColor("Text"), TEXT_ALIGN_CENTER)
             end
 		end
 
@@ -54,9 +54,9 @@ function ENT:Draw()
 
 		if dist <= 300 then		
 			if IsNearEntity(self, "progama057_fuel", 50) then
-                draw.DrawText("Brennmittel\ngefunden!", "PD.REAKTOR:SmallFont", 28, 17, CONFIG:GetConfig("textcolor"), TEXT_ALIGN_CENTER)
+                draw.DrawText("Brennmittel\ngefunden!", "PD.REAKTOR:SmallFont", 28, 17, getColor("Text"), TEXT_ALIGN_CENTER)
             else
-                draw.DrawText("Brennmittel\nnicht\ngefunden!", "PD.REAKTOR:SmallFont", 28, 12, CONFIG:GetConfig("textcolor"), TEXT_ALIGN_CENTER)
+                draw.DrawText("Brennmittel\nnicht\ngefunden!", "PD.REAKTOR:SmallFont", 28, 12, getColor("Text"), TEXT_ALIGN_CENTER)
             end
 		end
 

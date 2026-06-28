@@ -1,49 +1,53 @@
 PD.WB = PD.WB or {}
 
-local function GetPlayerCheckWeapons(wep)
-    local weps = {}
-    local id, jobTbl = PD.JOBS.GetJob(LocalPlayer():GetJob())
-
-    if jobTbl.equip[wep] then 
-        return true
-    end
-
-    return false
-end
-
 local function GetWepsByCategory(category)
     local weps = {}
-    for k, v in SortedPairs(PD.WB.Weapons) do
-        if k == category then
-            for wep, _ in SortedPairs(v) do
-                if GetPlayerCheckWeapons(wep) then
-                    table.insert(weps, wep)
-                end
-            end
+    local JobID, JobTable = LocalPlayer():GetJob()
+    local name, subunit = PD.JOBS.GetSubUnit(JobTable.unit)
+    local jobWeps = JobTable.equip or {}
+    local subunitWeps = subunit.equip or {}
+
+    for _, wep in SortedPairs(subunitWeps) do
+        if PD.WB.Weapons[category] and PD.WB.Weapons[category][wep] then
+            table.insert(weps, wep)
         end
     end
+
+    --table.Add(jobWeps, subunitWeps)
+
+    for num, wep in SortedPairs(jobWeps) do
+        if PD.WB.Weapons[category] and PD.WB.Weapons[category][wep] then
+            table.insert(weps, wep)
+        end
+    end
+    
     return weps
 end
 
 local function GetWepCategorys()
     local cate = {}
     for k, wep in SortedPairs(PD.WB.Weapons) do
-        if #GetWepsByCategory(k) == 0 then
-            continue
-        end
+        local weps = GetWepsByCategory(k)
 
-        if not table.HasValue(cate, k) then
-            table.insert(cate, k)
-        end
+        if table.IsEmpty(weps) then continue end
+
+        cate[k] = weps
     end
     return cate
 end
 
 local function GetPlayerWeapons(ply, wep)
     local weps = {}
-    for _, wep in ipairs(ply:GetWeapons()) do
-        table.insert(weps, wep:GetClass())
+    local JobName, JobTable = ply:GetJob()
+    local name, subunit = PD.JOBS.GetSubUnit(JobTable.unit)
+
+    for _, wep in SortedPairs(JobTable.equip) do
+        table.insert(weps, wep)
     end
+    for _, wep in SortedPairs(subunit.equip) do
+        table.insert(weps, wep)
+    end
+    
     return weps
 end
 
@@ -67,70 +71,105 @@ function PD.WB:Menu()
 
     self.Frame = PD.Frame("Waffenkiste", PD.W(800), PD.H(600), true)
 
-    local leftPnl = PD.Panel("", self.Frame, function(self, w, h)
-        draw.DrawText("Ausgerüstete Waffen", "MLIB.25", w/2, 10, Color(255,255,255), TEXT_ALIGN_CENTER)
-
-        if #activeWeapons == 0 then
-            draw.DrawText("Nichts ausgewählt", "MLIB.15", 10, 50, Color(255,255,255), TEXT_ALIGN_LEFT)
-        else
-            for i in #activeWeapons do
-                draw.DrawText(activeWeapons[i], "MLIB.15", 10, 10 + i * 25, Color(255,255,255), TEXT_ALIGN_LEFT)
-            end
-        end
-
-        draw.DrawText("Gewicht: " .. GetWepWeights() .. "/" .. PD.WB.MaxWeigth .. " Kg", "MLIB.25", w/2, h - 35, Color(255,255,255), TEXT_ALIGN_CENTER)
-    end)
+    local leftPnl = PD.Panel(self.Frame)
     leftPnl:Dock(LEFT)
     leftPnl:SetWide(PD.W(250))
 
-    local rightPnl = PD.Panel("", self.Frame)
+    local lbl = PD.Label("Ausgerüstete Waffen", leftPnl, {
+        font = "MLIB.25",
+        height = PD.H(40),
+    })
+
+    local scrl = PD.Scroll(leftPnl)
+
+    local yOffset = PD.H(50)
+    for cateName, wep in SortedPairs(activeWeapons) do
+        local wepWeight = PD.WB.GetWeaponWeights(wep)
+        -- wep = wep:GetPrintName() or wep:GetClass()
+        local wepText = wep -- .. " (" .. wepWeight .. " Kg)"
+        local btn = PD.Button(wepText, scrl, function()
+            net.Start("PD.WB:RemoveWeapon")
+                net.WriteString(wep)
+            net.SendToServer()
+
+            table.RemoveByValue(activeWeapons[cateName], wep)
+
+            self.Frame:Remove()
+        end)
+        btn:Dock(TOP)
+        btn:SetTall(PD.H(50))
+        btn:SetPos(PD.W(10), yOffset)
+        btn:SetAccentColor(Color(0, 255, 0))
+        yOffset = yOffset + PD.H(110)
+    end
+
+    local WeaponWeight = GetWepWeights() .. " / " .. PD.WB.MaxWeigth .. " Kg"
+
+    local lbl = PD.Label(WeaponWeight, leftPnl, {
+        font = "MLIB.25",
+        height = PD.H(40),
+        dock = BOTTOM
+    })
+
+    local rightPnl = PD.Panel(self.Frame)
     rightPnl:Dock(FILL)
 
     local scrl = PD.Scroll(self.Frame)
 
     local categorys = GetWepCategorys()
 
-    if #categorys == 0 then
+    if table.IsEmpty(categorys) then
         PD.Label("Keine Waffen verfügbar!", scrl)
         return
     end
 
-    for _, cate in ipairs(categorys) do
-        local weps = GetWepsByCategory(cate)
-        if #weps == 0 then
-            continue
-        end
-
-        local catBtn = PD.Button("", scrl, function()
+    for cateName, weps in SortedPairs(categorys) do
+        local catBtn = PD.Button(cateName, scrl, function()
             scrl:Clear()
 
             for _, wep in ipairs(weps) do
-                local btn = PD.Button(wep, scrl, function()
+                -- wep = wep:GetPrintName() or wep:GetClass()
+                local activeWep = wep
+
+                if LocalPlayer():HasWeapon(wep) then
+                    activeWep = wep .. " (Bereits im Besitz)"
+                end
+
+                local btn = PD.Button(activeWep, scrl, function()
                     scrl:Clear()
 
+                    if not activeWeapons[cateName] then
+                        activeWeapons[cateName] = {}
+                    end
+
                     if GetWepWeights() + PD.WB.GetWeaponWeights(wep) > PD.WB.MaxWeigth then
-                        PD.Notify("Du kannst nicht mehr als " .. PD.WB.MaxWeigth .. " Kg tragen!")
+                        PD.Popup("Du kannst nicht mehr als " .. PD.WB.MaxWeigth .. " Kg tragen!")
                         return
                     end
 
-                    if activeWeapons[cate] then 
-                        net.Start("PD.WB:RemoveWeapon")
-                            net.WriteString(activeWeapons[cate])
-                        net.SendToServer()
-                    end
+                    -- if activeWeapons[cateName] then 
+                    --     net.Start("PD.WB:RemoveWeapon")
+                    --         net.WriteString(activeWeapons[cateName])
+                    --     net.SendToServer()
+                    -- end
 
                     if LocalPlayer():HasWeapon(wep) then
                         net.Start("PD.WB:RemoveWeapon")
                             net.WriteString(wep)
                         net.SendToServer()
                         
-                        activeWeapons[cate] = nil
+                        table.RemoveByValue(activeWeapons[cateName], wep)
 
                         self.Frame:Remove()
                         return
                     end
 
-                    activeWeapons[cate] = wep
+                    if PD.WB.CategoryAmount[cateName] and table.Count(activeWeapons[cateName]) >= PD.WB.CategoryAmount[cateName] then
+                        PD.Popup("Du kannst nur " .. PD.WB.CategoryAmount[cateName] .. " Waffen aus der Kategorie " .. cateName .. " tragen!")
+                        return
+                    end
+
+                    table.insert(activeWeapons[cateName], wep)
 
                     net.Start("PD.WB:GiveWeapon")
                         net.WriteString(wep)
@@ -141,21 +180,33 @@ function PD.WB:Menu()
                 btn:Dock(TOP)
 
                 if LocalPlayer():HasWeapon(wep) then
-                    btn:SetBackColor(Color(0, 255, 0))
-                    btn:SetText(wep .. " (Bereits im Besitz)")
+                    btn:SetAccentColor(Color(0, 255, 0))
                 end
             end
-        end, function(self, w, h)
-            draw.DrawText(cate, "MLIB.25", w/2, 10, Color(255,255,255), TEXT_ALIGN_CENTER)
-
-            if PD.WB.Weigths then 
-
-            end
-
-            draw.DrawText(activeWeapons[cate] or "Nichts ausgewählt", "MLIB.25", w/2, h - 35, Color(255,255,255), TEXT_ALIGN_CENTER)
         end)
         catBtn:Dock(TOP)
         catBtn:SetTall(PD.H(150))
     end
 end
 
+concommand.Add("pd_waffenkiste_Prints", function()
+    -- Waffen von Spieler
+    local jobName, jobTable = LocalPlayer():GetJob()
+    PrintTable(jobTable)
+
+    print("Spieler Waffen:")
+    PrintTable(GetPlayerWeapons(LocalPlayer()))
+
+    -- print("Waffen Kategorien:")
+    -- PrintTable(GetWepCategorys())
+
+    print("Waffen nach Kategorie:")
+    for cateName, weps in SortedPairs(GetWepCategorys()) do
+        print("Kategorie: " .. cateName)
+        PrintTable(GetWepsByCategory(cateName))
+    end
+end)
+
+for k, v in pairs(player.GetAll()) do
+    print(v:SteamID64())
+end

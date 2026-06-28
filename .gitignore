@@ -1,0 +1,23 @@
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor/IDE junk (project .vscode/.idx settings stay tracked)
+*.swp
+*.swo
+*~
+.vscode/*.local.json
+
+# Backup / temp files
+*.bak
+*.old
+*.orig
+*.tmp
+
+# Logs
+*.log
+
+# GMod build/workshop artifacts
+*.gma
+workshop.vdf
