@@ -180,7 +180,8 @@ function PD.IA.OtherInteraction()
         local ent = trace.Entity
 
 print(ent)
-print("Entity is  Vehical: " .. ent:IsVehicle())
+print("Entity class is: " .. ent:GetClass())
+
 
 
 
