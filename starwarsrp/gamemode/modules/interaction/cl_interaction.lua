@@ -182,6 +182,10 @@ function PD.IA.OtherInteraction()
 print(ent)
 print("Entity class is: " .. ent:GetClass())
 
+for i = 0, ent:GetBoneCount() - 1 do
+    print(i, ent:GetBoneName(i))
+end
+
 
 
         if not ent:IsValid() and not PD.IA.CurrentBone.looked_at then return end
