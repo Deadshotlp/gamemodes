@@ -59,7 +59,7 @@ local function GetDisplayName(ent)
         return "Unbekannte Leiche"
     end
 
-    local fileName = string.StripExtension(string.GetFileName(ent:GetModel() or ""))
+    local fileName = string.StripExtension(string.GetFileFromFilename(ent:GetModel() or ""))
     if fileName and fileName ~= "" then
         return fileName
     end
@@ -151,9 +151,11 @@ local function CanInteract(ply, vehicle)
 end
 
 local function SendStateTo(vehicle, ply)
+    local state = BuildClientState(vehicle)
+
     net.Start("PD.VehicalInventory.UpdateRequestItems")
     net.WriteEntity(vehicle)
-    net.WriteTable(BuildClientState(vehicle))
+    net.WriteTable(state)
     net.Send(ply)
 end
 
