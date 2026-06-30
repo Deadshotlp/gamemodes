@@ -103,21 +103,20 @@ hook.Add("PlayerCanHearPlayersVoice", "PD.Comlink.Voice", function(listener, tal
         return false
     end
 
-    if not listenerChannel.active then
+    -- Hört der Listener den Talker-Channel überhaupt (aktiv oder passiv)?
+    local listenerOnChannel = listenerChannel.active == talkerChannel
+        or listenerChannel.passive1 == talkerChannel
+        or listenerChannel.passive2 == talkerChannel
+        or listenerChannel.passive3 == talkerChannel
+
+    if not listenerOnChannel then
         return listener:GetPos():DistToSqr(talker:GetPos()) <= 250000, true
     end
 
-    -- Check auch für Listener
-    if not PD.Comlink.Table[listenerChannel.active].check(listener, unit) then
+    -- Check auch für Listener auf dem Talker-Channel
+    if not channelConfig.check(listener, unit) then
         return false
     end
 
-    -- Selber Channel oder passiv verbunden → hören erlaubt
-    if listenerChannel.active == talkerChannel
-        or listenerChannel.passive1 == talkerChannel
-        or listenerChannel.passive2 == talkerChannel
-        or listenerChannel.passive3 == talkerChannel then
-
-        return true, false
-    end
+    return true, false
 end)
