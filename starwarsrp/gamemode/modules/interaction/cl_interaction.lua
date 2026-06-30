@@ -191,9 +191,10 @@ end
         if not ent:IsValid() and not PD.IA.CurrentBone.looked_at then return end
 
 
-if PD.IA.LastEntity == nil then
-    PD.IA.LastEntity = ent
-end
+-- if PD.IA.LastEntity == nil then
+--     PD.IA.LastEntity = ent
+-- end
+
 
 
 
