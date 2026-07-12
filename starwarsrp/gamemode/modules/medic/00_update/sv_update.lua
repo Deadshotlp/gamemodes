@@ -46,7 +46,7 @@ function PD.DM:Update()
         local ply = player.GetBySteamID64(_)
 
         if not IsValid(ply) then
-            table.remove(PD.DM.Main.tbl, _)
+            PD.DM.Main.tbl[_] = nil
             continue
         end
 
@@ -91,7 +91,7 @@ function PD.DM:Update()
             end
             
             local rand = math.random(1, 100)
-            if rand <= 5 and not ply_tbl.recovery_position and not ply_tbl.respiratory_system.airway_clear then
+            if rand <= 5 and not ply_tbl.recovery_position and ply_tbl.respiratory_system.airway_clear then
                 ply_tbl.respiratory_system.airway_clear = false
             end
         end

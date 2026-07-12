@@ -78,7 +78,6 @@ PD.DM.Injury.tbl = {
             return true
         end,
         onApply = function(tbl)
-            return true
         end,
         bypass_armor = false,
         needs_desinfication = true,
@@ -100,7 +99,6 @@ PD.DM.Injury.tbl = {
             return true
         end,
         onApply = function(tbl)
-            return true
         end,
         bypass_armor = false,
         needs_desinfication = true,
@@ -402,7 +400,6 @@ PD.DM.Injury.tbl = {
             return true
         end,
         onApply = function(tbl)
-            return true
         end,
         bypass_armor = false,
         needs_desinfication = false,
@@ -424,7 +421,6 @@ PD.DM.Injury.tbl = {
             return true
         end,
         onApply = function(tbl)
-            return true
         end,
         bypass_armor = false,
         needs_desinfication = false,
@@ -1082,12 +1078,12 @@ hook.Add("EntityTakeDamage", "DM.Injury", function(target, dmg)
         hitGroup = math.random(1, 7)
     end
 
-    if attacker:GetActiveWeapon() == nil then
-        return
+    local wep
+    if attacker and attacker:IsValid() and attacker:IsPlayer() then
+        wep = attacker:GetActiveWeapon()
     end
 
-    local wep = attacker:GetActiveWeapon()
-    if IsValid(wep) and wep.ArcCW then 
+    if IsValid(wep) and wep.ArcCW then
         local attachments = wep.Attachments
         if attachments then
             for slot, slotData in pairs(attachments) do

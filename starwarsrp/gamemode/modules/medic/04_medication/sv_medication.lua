@@ -36,7 +36,7 @@ function PD.DM:CalculateMedication(tbl)
         else
             -- Medication has EXPIRED
             -- Optional: Call the onExpire function if it exists
-            for _, v in ipairs(PD.DM.Medication) do
+            for _, v in ipairs(PD.DM.Medication.tbl) do
                 if v.name == med.name and v.onExpire and type(v.onExpire) == "function" then
                     v.onExpire(tbl)
                 end

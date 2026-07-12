@@ -384,14 +384,14 @@ function PD.DM:AddMedication(actor, ply, medication_template)
     -- Validate input template
     if not medication_template or type(medication_template) ~= "table" or not medication_template.name or
         not medication_template.time then
-        PD.LOGS.Add("[MEDIC]", "AddMedication: Invalid medication template provided: " .. medication_template.name,
+        PD.LOGS.Add("[MEDIC]", "AddMedication: Invalid medication template provided.",
             Color(255, 255, 255))
         return false
     end
 
     -- Request the player's current medication list
     if not ply["medication"] then
-        PD.LOGS.Add("[MEDIC]", "AddMedication: Player medication table not found for " .. ply:Nick(),
+        PD.LOGS.Add("[MEDIC]", "AddMedication: Patient medication table not found, creating a new one.",
             Color(255, 255, 255))
         ply["medication"] = {}
     end

@@ -34,7 +34,7 @@ PD.DM.Diagnostics.tbl = {
 
             local str
 
-            if not patient.respiratory_system.breathing_rate == 0 then
+            if patient.respiratory_system.breathing_rate == 0 then
                 str = "Keine Atmung erkannt"
             else
                 str = "Atmung erkannt"

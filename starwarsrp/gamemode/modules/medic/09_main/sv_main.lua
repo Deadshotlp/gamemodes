@@ -149,13 +149,23 @@ net.Receive("PD.DM.RequestValue", function(len, ply)
     end
 end)
 
+-- Nur unkritische, rein informative Felder dürfen über diesen Weg geändert werden.
+-- Vitalwerte (puls, bp, spo2, stunning_level, blood_amount, ...) sind bewusst NICHT
+-- enthalten, da darüber sonst Spieler getötet oder unverwundbar gemacht werden könnten.
+local CHANGE_VALUE_WHITELIST = {
+    species = true,
+    blood_type = true
+}
+
 net.Receive("PD.DM.ChangeValue", function(len, ply)
     local ply2 = net.ReadEntity()
 
     local tbl = net.ReadTable()
 
     if not IsValid(ply2) or not ply2:IsPlayer() or not PD.DM.Main.tbl[ply2:SteamID64()] then return end
-    if type(tbl) ~= "table" or blanc_clone[tbl[1]] == nil then return end
+    if type(tbl) ~= "table" or type(tbl[1]) ~= "string" or not CHANGE_VALUE_WHITELIST[tbl[1]] then return end
+    if type(tbl[2]) ~= "string" or #tbl[2] > 64 then return end
+    if not PD.DM.IsMedic(ply) then return end
 
     if ply:GetPos():Distance(ply2:GetPos()) >= 100 then
         return
@@ -194,16 +204,33 @@ net.Receive("PD.DM.Interact", function(len, ply)
         end
     end
 
+    local patient_tbl = PD.DM.Main.tbl[ply2:SteamID64()]
+
+    -- body_part_index 0 bedeutet "kein Körperteil ausgewählt" und ist für manche Aktionen gültig.
+    -- Jeder andere Wert muss ein tatsächlich existierender Körperteil sein.
+    if body_part_index ~= 0 and not patient_tbl.body_part[body_part_index] then return end
+
     if task == 0 then
-        PD.DM.Main.tbl[ply2:SteamID64()].triage_card = index
+        if not PD.DM.IsMedic(ply) then return end
+        if index < 0 or index > 4 then return end
+
+        patient_tbl.triage_card = index
     elseif task == 1 and PD.DM.Diagnostics.tbl[index] then
-        PD.DM.Diagnostics.tbl[index].effect(ply, PD.DM.Main.tbl[ply2:SteamID64()], body_part_index, ply2)
+        if not PD.DM.Diagnostics.tbl[index].condition(ply, patient_tbl, body_part_index, ply2) then return end
+
+        PD.DM.Diagnostics.tbl[index].effect(ply, patient_tbl, body_part_index, ply2)
     elseif task == 2 and PD.DM.Medication.tbl[index] then
-        PD.DM.Medication.tbl[index].effect(ply, PD.DM.Main.tbl[ply2:SteamID64()], body_part_index, ply2)
+        if not PD.DM.Medication.tbl[index].condition(ply, patient_tbl, body_part_index, ply2) then return end
+
+        PD.DM.Medication.tbl[index].effect(ply, patient_tbl, body_part_index, ply2)
     elseif task == 3 and PD.DM.Treatments.tbl[index] then
-        PD.DM.Treatments.tbl[index].effect(ply, PD.DM.Main.tbl[ply2:SteamID64()], body_part_index, ply2)
+        if not PD.DM.Treatments.tbl[index].condition(ply, patient_tbl, body_part_index, ply2) then return end
+
+        PD.DM.Treatments.tbl[index].effect(ply, patient_tbl, body_part_index, ply2)
     elseif task == 4 and PD.DM.Other.tbl[index] then
-        PD.DM.Other.tbl[index].effect(ply, PD.DM.Main.tbl[ply2:SteamID64()], body_part_index, ply2)
+        if not PD.DM.Other.tbl[index].condition(ply, patient_tbl, body_part_index, ply2) then return end
+
+        PD.DM.Other.tbl[index].effect(ply, patient_tbl, body_part_index, ply2)
     end
 end)
 
@@ -311,22 +338,21 @@ concommand.Add("pd_dm_prints", function()
 end)
 
 concommand.Add("pd_dm_set_med_value", function(ply, cmd, args)
-    local ply_name = args[1]
-    local key = args[2]
-    local value = args[3]
+    if IsValid(ply) and not ply:IsSuperAdmin() then return end
+
+    if #args < 3 then
+        print("Usage: pd_dm_set_med_value <player name> <key> <value>")
+        return
+    end
+
+    local key = args[#args - 1]
+    local value = args[#args]
+    local ply_name = table.concat(args, " ", 1, #args - 2)
 
     for _, v in pairs(player.GetAll()) do
-        local str = string.Split(v:Nick(), " ")
-        for i = 2, #str do
-            if i > 2 then
-                ply_name = ply_name .. " " .. str[i]
-            else
-                ply_name = str[i]
-            end
-        end
-        if string.lower(ply_name) == string.lower(ply_name) then
+        if string.lower(v:Nick()) == string.lower(ply_name) then
             PD.DM.Main.tbl[v:SteamID64()][key] = tonumber(value)
-            print("Set " .. key .. " to " .. value .. " for " .. ply_name)
+            print("Set " .. key .. " to " .. value .. " for " .. v:Nick())
             return
         end
     end
