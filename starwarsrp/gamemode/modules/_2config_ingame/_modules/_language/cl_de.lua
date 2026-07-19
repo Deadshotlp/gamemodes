@@ -33,23 +33,23 @@ PD.LANG.DE = {
     CHAR_UI_CONTINUE = "Fortsetzen",
 
     -- Faction UI
-    FACTION_UI_TITLE = "Einheiten-Verwaltung",
-    FACTION_UI_FACTIONS = "Fraktionen",
-    FACTION_UI_NO_PLAYERS = "Es sind keine Spieler in dieser Einheit Online.",
-    FACTION_UI_UNIT = "Einheit",
-    FACTION_UI_NOT_IN_UNIT = "Du bist in keiner Einheit.",
-    FACTION_UI_PLAY_TIME = "Spielzeit",
-    FACTION_UI_LAST_SEEN = "Zuletzt gesehen",
-    FACTION_UI_JOINED_UNIT = "Einheit beigetreten",
-    FACTION_UI_PROMOTE = "Befördern",
-    FACTION_UI_DEMOTE = "Degradieren",
-    FACTION_UI_KICK = "Einheit verweisen",
-    FACTION_UI_SUBUNIT = "Untereinheit",
-    FACTION_UI_JOB = "Job",
-    FACTION_UI_SELECT_NEW_JOB = "Neuen Job auswählen",
-    FACTION_UI_CHANGE_UNIT = "Einheit wechseln",
-    FACTION_UI_DEFAULT_FACTION = "Standardfraktion",
-    FACTION_UI_ALL_UNITS = "Alle Einheiten",
+    -- FACTION_UI_TITLE = "Einheiten-Verwaltung",
+    -- FACTION_UI_FACTIONS = "Fraktionen",
+    -- FACTION_UI_NO_PLAYERS = "Es sind keine Spieler in dieser Einheit Online.",
+    -- FACTION_UI_UNIT = "Einheit",
+    -- FACTION_UI_NOT_IN_UNIT = "Du bist in keiner Einheit.",
+    -- FACTION_UI_PLAY_TIME = "Spielzeit",
+    -- FACTION_UI_LAST_SEEN = "Zuletzt gesehen",
+    -- FACTION_UI_JOINED_UNIT = "Einheit beigetreten",
+    -- FACTION_UI_PROMOTE = "Befördern",
+    -- FACTION_UI_DEMOTE = "Degradieren",
+    -- FACTION_UI_KICK = "Einheit verweisen",
+    -- FACTION_UI_SUBUNIT = "Untereinheit",
+    -- FACTION_UI_JOB = "Job",
+    -- FACTION_UI_SELECT_NEW_JOB = "Neuen Job auswählen",
+    -- FACTION_UI_CHANGE_UNIT = "Einheit wechseln",
+    -- FACTION_UI_DEFAULT_FACTION = "Standardfraktion",
+    -- FACTION_UI_ALL_UNITS = "Alle Einheiten",
 
     -- Bind UI
     -- BIND_UI_TITLE = "Tastenbelegung",
@@ -102,9 +102,9 @@ PD.LANG.DE = {
     -- BIND_UI_SQUAD_MANAGEMENT_DESC = "Öffnet die Squad Verwaltung.",
     
     -- Comlink UI
-    COMLINK_UI_TITLE = "Comlink Menü",
-    COMLINK_UI_ACTIVATE = "Aktivieren",
-    COMLINK_UI_TALKING = "Du bist Aktiv",
+    -- COMLINK_UI_TITLE = "Comlink Menü",
+    -- COMLINK_UI_ACTIVATE = "Aktivieren",
+    -- COMLINK_UI_TALKING = "Du bist Aktiv",
 
     -- Commands UI
     COMMANDS_UI_DECODE_TIME = "Verbleibende Zeit: ",
@@ -116,55 +116,55 @@ PD.LANG.DE = {
     DATAPAD_TITLE = "Datenpad",
 
     -- Death Screen
-    DEATH_SCREEN_FIRST_PART = "Du kannst in ",
-    DEATH_SCREEN_SECOND_PART = " Sekunden Respawnen",
-    DEATH_SCREEN_RESPAWN_BUTTON = "Respawnen",
-    DEATH_SCREEN_ADMIN_RESPAWN_BUTTON = "Admin Respawn",
-    DEATH_SCREEN_MOUSE_INSTRUCTION_FIRST = "Drücke '",
-    DEATH_SCREEN_MOUSE_INSTRUCTION_LAST = "' um dir den Mauszeiger Anzeigen zu lassen!",
-    DEATH_SCREEN_NO_MOUSE_BIND = "[Keine Taste Ausgewählt]",
+    -- DEATH_SCREEN_FIRST_PART = "Du kannst in ",
+    -- DEATH_SCREEN_SECOND_PART = " Sekunden Respawnen",
+    -- DEATH_SCREEN_RESPAWN_BUTTON = "Respawnen",
+    -- DEATH_SCREEN_ADMIN_RESPAWN_BUTTON = "Admin Respawn",
+    -- DEATH_SCREEN_MOUSE_INSTRUCTION_FIRST = "Drücke '",
+    -- DEATH_SCREEN_MOUSE_INSTRUCTION_LAST = "' um dir den Mauszeiger Anzeigen zu lassen!",
+    -- DEATH_SCREEN_NO_MOUSE_BIND = "[Keine Taste Ausgewählt]",
 
     -- Defcon UI
-    DEFCON_UI_CHANGED_First = "DEFCON Stufe wurde von ",
-    DEFCON_UI_CHANGED_Second = " auf ",
-    DEFCON_UI_CHANGED_Third = " gesetzt",
-    DEFCON_UI_COMMANDS = "Befehle",
+    -- DEFCON_UI_CHANGED_First = "DEFCON Stufe wurde von ",
+    -- DEFCON_UI_CHANGED_Second = " auf ",
+    -- DEFCON_UI_CHANGED_Third = " gesetzt",
+    -- DEFCON_UI_COMMANDS = "Befehle",
 
     -- Weapon Selector
     WEAPON_SELECTOR_TITLE = "Waffen-Auswahl",
 
     -- Admin Menu
-    ADMIN_MENU_TITLE = "Admin Menü",
-    ADMIN_MENU_WELCOME = "Willkommen im Admin Menü, ",
-    ADMIN_MENU_PLAYER_MANAGEMENT = "Spieler-Verwaltung",
-    ADMIN_MENU_CHAR = "Charakter",
-    ADMIN_MENU_CREATE_TIME = "Erstellungszeit",
-    ADMIN_MENU_LAST_PLAYED = "Zuletzt gespielt",
-    ADMIN_MENU_PLAYTIME = "Spielzeit",
-    ADMIN_MENU_CREDITS = "Credits",
-    ADMIN_MENU_ID = "ID",
-    ADMIN_MENU_SET = "Setzen",
+    -- ADMIN_MENU_TITLE = "Admin Menü",
+    -- -- ADMIN_MENU_WELCOME = "Willkommen im Admin Menü, ",
+    -- -- ADMIN_MENU_PLAYER_MANAGEMENT = "Spieler-Verwaltung",
+    -- -- ADMIN_MENU_CHAR = "Charakter",
+    -- ADMIN_MENU_CREATE_TIME = "Erstellungszeit",
+    -- ADMIN_MENU_LAST_PLAYED = "Zuletzt gespielt",
+    -- ADMIN_MENU_PLAYTIME = "Spielzeit",
+    -- ADMIN_MENU_CREDITS = "Credits",
+    -- ADMIN_MENU_ID = "ID",
+    -- ADMIN_MENU_SET = "Setzen",
 
     -- ESC
-    ESC_CONTINUE = "Weiterspielen",
-    ESC_SETTINGS = "Spieleinstellungen",
-    ESC_LEAVE = "Verlassen",
+    -- ESC_CONTINUE = "Weiterspielen",
+    -- ESC_SETTINGS = "Spieleinstellungen",
+    -- ESC_LEAVE = "Verlassen",
 
     -- ESC Config
-    ESC_CONFIG_TITLE = "PD Config Menü",
+    -- ESC_CONFIG_TITLE = "PD Config Menü",
 
     -- ESC Config Language
-    ESC_CONFIG_LANGUAGE = "Sprache",
-    ESC_CONFIG_LANGUAGE_CHANGED = "Sprache wurde geändert! Das Menü wird neu geladen...",
+    -- ESC_CONFIG_LANGUAGE = "Sprache",
+    -- ESC_CONFIG_LANGUAGE_CHANGED = "Sprache wurde geändert! Das Menü wird neu geladen...",
 
     -- ESC Config FOV
-    ESC_CONFIG_FOV = "FOV - Einstellungen",
-    ESC_CONFIG_FOV_CHANGED = "FOV-Einstellungen wurden geändert!",
-    ESC_CONFIG_FOV_CURRENT = "Aktuelles FOV: ",
+    -- ESC_CONFIG_FOV = "FOV - Einstellungen",
+    -- ESC_CONFIG_FOV_CHANGED = "FOV-Einstellungen wurden geändert!",
+    -- ESC_CONFIG_FOV_CURRENT = "Aktuelles FOV: ",
 
     -- ID Card
-    ID_CARD_CHECK_SUCCESS = "ID Karte erfolgreich überprüft!",
-    ID_CARD_TAKE = "ID Card raus holen",
+    -- ID_CARD_CHECK_SUCCESS = "ID Karte erfolgreich überprüft!",
+    -- ID_CARD_TAKE = "ID Card raus holen",
 
     -- Written Radio
     -- RADIO_WRITTEN_DM = "Direkt",
@@ -175,9 +175,9 @@ PD.LANG.DE = {
     -- RADIO_WRITTEN_RECENT_CONVERSATIONS = "Letzte Unterhaltungen",
 
     -- Meet System
-    MEET_UNKNOWN = "Unbekannt",
-    MEET_WHATS_THIS = "Was'n das?",
-    MEET_WANTS_NAME = "möchte deinen Namen wissen",
+    -- MEET_UNKNOWN = "Unbekannt",
+    -- MEET_WHATS_THIS = "Was'n das?",
+    -- MEET_WANTS_NAME = "möchte deinen Namen wissen",
 
     -- Logs System
     LOG_SYSTEM_TITLE = "Protokoll-System",
@@ -185,7 +185,7 @@ PD.LANG.DE = {
     LOG_SEARCH = "Suche...",
 
     -- Generic Language Entries
-    LANGUAGE_LOADED = "Deutsches Sprachmodul geladen.",
+    -- LANGUAGE_LOADED = "Deutsches Sprachmodul geladen.",
 
     -- Medical System UI
 
@@ -285,11 +285,11 @@ PD.LANG.DE = {
     -- End of Medical System UI
 
     -- Player Spawns
-    SPAWN_MENU_TITLE = "Spieler Spawn Menü",
-    SPAWN_MENU_DELETE = "Spawns Löschen",
-    SPAWN_MENU_SHOW = "Spawns Anzeigen",
-    SPAWN_MENU_SET = "Spawn Setzten",
-    SPAWN_MENU_SPAWN = "Spawn",
+    -- SPAWN_MENU_TITLE = "Spieler Spawn Menü",
+    -- SPAWN_MENU_DELETE = "Spawns Löschen",
+    -- SPAWN_MENU_SHOW = "Spawns Anzeigen",
+    -- SPAWN_MENU_SET = "Spawn Setzten",
+    -- SPAWN_MENU_SPAWN = "Spawn",
 
     -- Reaktor
     REAKTOR_MENU_TITLE = "Reaktor Menü",
@@ -346,7 +346,7 @@ PD.LANG.DE = {
     SKILL_UTILITY_MINOR_2_DESC = "Verbesserte Übersicht.",
 
     -- Squad System
-    SQUAD_INTERACTION_INVITE = "In Einheit einladen",
-    SQUAD_INTERACTION_REMOVE = "Aus Einheit entfernen",
-    SQUAD_INTERACTION_CREATE = "Einheit erstellen"
+    -- SQUAD_INTERACTION_INVITE = "In Einheit einladen",
+    -- SQUAD_INTERACTION_REMOVE = "Aus Einheit entfernen",
+    -- SQUAD_INTERACTION_CREATE = "Einheit erstellen"
 }

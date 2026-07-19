@@ -49,7 +49,7 @@ function PD.LANG.Load()
 
             LANG = PD.LANG[k]
 
-            chat.AddText(LANG.LANGUAGE_LOADED)
+            chat.AddText("Sprachmodul geladen. (Wird nach und nach Entfernt)")
         end
     end
 end
@@ -62,8 +62,6 @@ hook.Add("PD.Config.LoadModule", "PD.language", function()
     end
 
     PD.LANG.Load()
-
-    -- PrintTable(LANG)
 
     PD.Config:AddModule(LANG.ESC_CONFIG_LANGUAGE, function(base)
         PD.LANG.Menu(base)

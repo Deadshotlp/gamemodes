@@ -54,7 +54,7 @@ local function PlayerAdminInteract(data, panel)
         surface.DrawRect(PD.W(4), h - 1, w - PD.W(4), 1)
         
         -- Titel
-        draw.DrawText(LANG.ADMIN_MENU_CHAR, "MLIB.18", PD.W(20), h / 2 - PD.H(9), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+        draw.DrawText("Charakter", "MLIB.18", PD.W(20), h / 2 - PD.H(9), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
         
         -- Anzahl
         draw.DrawText(#charadminData .. " Charaktere", "MLIB.12", w - PD.W(15), h / 2 - PD.H(6), PD.Theme.Colors.TextDim, TEXT_ALIGN_RIGHT)
@@ -126,7 +126,7 @@ local function PlayerAdminInteract(data, panel)
             
             local nameLabel = vgui.Create("DLabel", detailScroll)
             nameLabel:Dock(TOP)
-            nameLabel:SetText(LANG.CHAR_UI_NAME)
+            nameLabel:SetText("Name")
             nameLabel:SetFont("MLIB.12")
             nameLabel:SetTextColor(PD.Theme.Colors.TextDim)
             nameLabel:DockMargin(PD.W(5), PD.H(10), 0, 0)
@@ -138,7 +138,7 @@ local function PlayerAdminInteract(data, panel)
             
             local moneyLabel = vgui.Create("DLabel", detailScroll)
             moneyLabel:Dock(TOP)
-            moneyLabel:SetText(LANG.ADMIN_MENU_CREDITS)
+            moneyLabel:SetText("Credits")
             moneyLabel:SetFont("MLIB.12")
             moneyLabel:SetTextColor(PD.Theme.Colors.TextDim)
             moneyLabel:DockMargin(PD.W(5), PD.H(10), 0, 0)
@@ -149,7 +149,7 @@ local function PlayerAdminInteract(data, panel)
             moneyEntry:DockMargin(0, 0, 0, PD.H(15))
 
             -- Aktions-Buttons
-            local saveBtn = PD.Button(LANG.GENERIC_SAVE, detailScroll, function()
+            local saveBtn = PD.Button("Speichern", detailScroll, function()
                 net.Start("PD.Char.Admin")
                 net.WriteString("save")
                 net.WriteString(data.steamid)
@@ -162,7 +162,7 @@ local function PlayerAdminInteract(data, panel)
             saveBtn:SetTall(PD.H(45))
             saveBtn:SetAccentColor(PD.Theme.Colors.StatusActive)
 
-            local setBtn = PD.Button(LANG.ADMIN_MENU_SET, detailScroll, function()
+            local setBtn = PD.Button("Setzen", detailScroll, function()
                 net.Start("PD.Char.Admin")
                 net.WriteString("set")
                 net.WriteString(data.steamid)
@@ -174,7 +174,7 @@ local function PlayerAdminInteract(data, panel)
             setBtn:Dock(TOP)
             setBtn:SetTall(PD.H(45))
 
-            local deleteBtn = PD.Button(LANG.GENERIC_DELETE, detailScroll, function()
+            local deleteBtn = PD.Button("Löschen", detailScroll, function()
                 net.Start("PD.Char.Admin")
                 net.WriteString("delete")
                 net.WriteString(data.steamid)
@@ -206,7 +206,7 @@ local function PlayerAdminInteract(data, panel)
                 surface.SetDrawColor(PD.Theme.Colors.AccentGray)
                 surface.DrawRect(PD.W(4), 0, w - PD.W(4), 1)
                 surface.DrawRect(PD.W(4), h - 1, w - PD.W(4), 1)
-                draw.DrawText(LANG.CHAR_UI_UNIT, "MLIB.18", PD.W(20), h / 2 - PD.H(9), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+                draw.DrawText("Einheit", "MLIB.18", PD.W(20), h / 2 - PD.H(9), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
             end
 
             -- Aktuelle Fraktion Info
@@ -386,7 +386,7 @@ function PD.Admin:Menu(wo)
     headerPanel:SetTall(PD.H(60))
     headerPanel:DockMargin(0, 0, 0, PD.H(15))
     
-    local welcomeText = LANG.ADMIN_MENU_WELCOME .. LocalPlayer():Nick() .. "!"
+    local welcomeText = "Willkommen im Admin Menü, " .. LocalPlayer():Nick() .. "!"
     local welcomeIndex = 0
     local welcomeDisplayed = ""
     
@@ -500,7 +500,7 @@ function PD.Admin:Menu(wo)
     end
 
     -- Tabs erstellen
-    CreateTab(LANG.ADMIN_MENU_PLAYER_MANAGEMENT, "admin", function(base)
+    CreateTab("Spieler-Verwaltung", "admin", function(base)
         -- Header
         local listHeader = vgui.Create("DPanel", base)
         listHeader:Dock(TOP)

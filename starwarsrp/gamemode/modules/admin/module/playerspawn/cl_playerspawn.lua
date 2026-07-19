@@ -135,7 +135,7 @@ function PlayerSpawnMenu(base)
     buttonContainer.Paint = function() end
 
     -- Setzen Button
-    local setBtn = PD.Button(LANG.SPAWN_MENU_SET or "Spawns setzen", buttonContainer, function()
+    local setBtn = PD.Button("Spawn Setzten" or "Spawns setzen", buttonContainer, function()
         net.Start("PDPlayerSpawnSet")
         net.WriteTable(unitTbl)
         net.SendToServer()
@@ -148,7 +148,7 @@ function PlayerSpawnMenu(base)
     setBtn:SetAccentColor(PD.Theme.Colors.StatusActive)
 
     -- Anzeigen Button
-    local showBtn = PD.Button(LANG.SPAWN_MENU_SHOW or "Spawns anzeigen", buttonContainer, function()
+    local showBtn = PD.Button("Spawns Anzeigen" or "Spawns anzeigen", buttonContainer, function()
         showSpawns = not showSpawns
         surface.PlaySound("UI/buttonclick.wav")
     end)
@@ -157,7 +157,7 @@ function PlayerSpawnMenu(base)
     showBtn:SetAccentColor(PD.Theme.Colors.AccentBlue)
 
     -- Löschen Button
-    local deleteBtn = PD.Button(LANG.SPAWN_MENU_DELETE or "Alle Spawns löschen", buttonContainer, function()
+    local deleteBtn = PD.Button("Spawns Löschen" or "Alle Spawns löschen", buttonContainer, function()
         unitTbl = {}
         
         net.Start("PDDeltePlayerSpawns")
@@ -185,7 +185,7 @@ hook.Add("HUDPaint", "PlayerSpawnShow", function()
         local screenPos = pos:ToScreen()
         if not screenPos.visible then continue end
         
-        local text = (LANG.SPAWN_MENU_SPAWN or "Spawn") .. ": " .. k
+        local text = ("Spawn") .. ": " .. k
         surface.SetFont("MLIB.16")
         local w, h = surface.GetTextSize(text)
         

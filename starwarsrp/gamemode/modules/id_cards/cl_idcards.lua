@@ -79,7 +79,7 @@ function PD.IDCards:CheckID()
                     PD.IDCards.Menu:Remove()
                 end)
 
-                PD.Notify(LANG.ID_CARD_CHECK_SUCCESS, Color(0, 255, 0))
+                PD.Notify("ID Karte erfolgreich überprüft!", Color(0, 255, 0))
             else
                 checkZone.Paint = function(self, w, h)
                     draw.RoundedBox(10, 0, 0, w, h, Color(255, 0, 0))
@@ -88,7 +88,7 @@ function PD.IDCards:CheckID()
         end
     end
 
-    local createCard = PD.Button(LANG.ID_CARD_TAKE, self.Menu, function(self)
+    local createCard = PD.Button("ID Card raus holen", self.Menu, function(self)
         self:Remove()
         dropCard()
     end)

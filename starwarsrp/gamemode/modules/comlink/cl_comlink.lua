@@ -16,7 +16,7 @@ function PD.Comlink:Menu()
     local hasActiveChannel = ply.Extra1 or ply.Extra2 or ply.Extra3
     local accentColor = hasActiveChannel and PD.Theme.Colors.StatusActive or PD.Theme.Colors.AccentRed
 
-    self.Frame = PD.Frame(LANG.COMLINK_UI_TITLE or "KOMMUNIKATION", PD.W(550), PD.H(650), true)
+    self.Frame = PD.Frame("Comlink Menü" or "KOMMUNIKATION", PD.W(550), PD.H(650), true)
     
     -- Custom Andor Imperial Background
     local frameW, frameH = self.Frame:GetSize()
@@ -329,7 +329,7 @@ AddSmoothElement(ScrW() - PD.W(240), PD.H(20), PD.W(220), PD.H(130), function(sm
     surface.DrawLine(smoothX, smoothY + panelH - cornerSize, smoothX, smoothY + panelH)
 
     -- "COMM-LINK" Label
-    local titleText = LANG.COMLINK_UI_TITLE or "KOMMUNIKATION"
+    local titleText = "Comlink Menü" or "KOMMUNIKATION"
 
     if not table.IsEmpty(comlinkChannelAktive) then
         local index = comlinkChannelAktive.channel

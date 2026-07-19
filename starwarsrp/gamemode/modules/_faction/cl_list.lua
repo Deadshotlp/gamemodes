@@ -71,14 +71,14 @@ end
 function PD.List:Menu(wo)
     if IsValid(ListBase) then return end
 
-    ListBase = PD.Frame(LANG.FACTION_UI_TITLE,PD.W(1400),PD.H(700),true)
+    ListBase = PD.Frame("Einheiten-Verwaltung",PD.W(1400),PD.H(700),true)
 
     local rightPnl = PD.Panel("",ListBase)
     rightPnl:Dock(FILL)
 
     PD.SideTab(ListBase, rightPnl)
     
-    PD.AddSideItem(LANG.FACTION_UI_FACTIONS, function(pnl)
+    PD.AddSideItem("Fraktionen", function(pnl)
         pnl:Clear()
 
         local scrl = PD.Scroll(pnl)
@@ -89,7 +89,7 @@ function PD.List:Menu(wo)
                 local playerTbl = GetPlayersByUnit(k)
 
                 if table.Count(playerTbl) == 0 then 
-                    local lbl = PD.Label(LANG.FACTION_UI_NO_PLAYERS, scrl)   
+                    local lbl = PD.Label("Es sind keine Spieler in dieser Einheit Online.", scrl)   
         
                     return 
                 end
@@ -119,14 +119,14 @@ function PD.List:Menu(wo)
         end
     end)
 
-    PD.AddSideItem(LANG.FACTION_UI_UNIT, function(pnl)
+    PD.AddSideItem("Einheit", function(pnl)
         pnl:Clear()
 
         local scrl = PD.Scroll(pnl)
         local unit, subunit, job = FindPlayerUnit(LocalPlayer())
 
         if not unit then
-            local lbl = PD.Label(LANG.FACTION_UI_NOT_IN_UNIT,scrl)
+            local lbl = PD.Label("Du bist in keiner Einheit.",scrl)
             return
         end
 
@@ -156,14 +156,14 @@ function PD.List:Menu(wo)
                 online = "Online"
             end
 
-            local lbl = PD.Label( LANG.FACTION_UI_PLAY_TIME .. ": " .. v.playtime, mainPlayerPanel)
-            local lbl = PD.Label(LANG.FACTION_UI_LAST_SEEN .. ": " .. online, mainPlayerPanel)
-            local lbl = PD.Label(LANG.FACTION_UI_JOINED_UNIT .. ": " .. v.join, mainPlayerPanel)
+            local lbl = PD.Label( "Spielzeit" .. ": " .. v.playtime, mainPlayerPanel)
+            local lbl = PD.Label("Zuletzt gesehen" .. ": " .. online, mainPlayerPanel)
+            local lbl = PD.Label("Einheit beigetreten" .. ": " .. v.join, mainPlayerPanel)
 
             if LocalPlayer():IsAdmin() or table.HasValue(PD.List.Permission, v.job) then
                 if FindPlayerbyCharID(charID) == LocalPlayer() then continue end
 
-                local rankUp = PD.Button(LANG.FACTION_UI_PROMOTE,playerpnl,function()
+                local rankUp = PD.Button("Befördern",playerpnl,function()
                     net.Start("PD.List.RankUp")
                         net.WriteString(charID)
                     net.SendToServer()
@@ -171,7 +171,7 @@ function PD.List:Menu(wo)
                 rankUp:Dock(RIGHT)
                 rankUp:SetWide(PD.W(200))
 
-                local rankDown = PD.Button(LANG.FACTION_UI_DEMOTE,playerpnl,function()
+                local rankDown = PD.Button("Degradieren",playerpnl,function()
                     net.Start("PD.List.RankDown")
                         net.WriteString(charID)
                     net.SendToServer()
@@ -179,7 +179,7 @@ function PD.List:Menu(wo)
                 rankDown:Dock(RIGHT)
                 rankDown:SetWide(PD.W(200))
 
-                local kick = PD.Button(LANG.FACTION_UI_KICK,playerpnl,function()
+                local kick = PD.Button("Einheit verweisen",playerpnl,function()
                     net.Start("PD.List.kick")
                         net.WriteString(charID)
                     net.SendToServer()
@@ -215,14 +215,14 @@ function PD.List:Menu(wo)
                         end
 
                         local lbl = PD.Label(LANG.CHAR_UI_NAME .. ": " .. v.name .. " | (" .. steamName .. ")", scrl)
-                        local lbl = PD.Label(LANG.FACTION_UI_UNIT .. ": " .. unit, scrl)
-                        local lbl = PD.Label(LANG.FACTION_UI_SUBUNIT .. ": " .. subunit, scrl)
-                        local lbl = PD.Label(LANG.FACTION_UI_JOB .. ": " .. job, scrl)
-                        local lbl = PD.Label(LANG.FACTION_UI_LAST_SEEN .. ": " .. online, scrl)
-                        local lbl = PD.Label(LANG.FACTION_UI_JOINED_UNIT .. ": " .. ply.join, scrl)
-                        local lbl = PD.Label(LANG.FACTION_UI_PLAY_TIME .. ": " .. ply.playtime, scrl)
+                        local lbl = PD.Label("Einheit" .. ": " .. unit, scrl)
+                        local lbl = PD.Label("Untereinheit" .. ": " .. subunit, scrl)
+                        local lbl = PD.Label("Job" .. ": " .. job, scrl)
+                        local lbl = PD.Label("Zuletzt gesehen" .. ": " .. online, scrl)
+                        local lbl = PD.Label("Einheit beigetreten" .. ": " .. ply.join, scrl)
+                        local lbl = PD.Label("Spielzeit" .. ": " .. ply.playtime, scrl)
 
-                        local ComboBoxJob = PD.ComboBox(LANG.FACTION_UI_SELECT_NEW_JOB, scrl, function(val)
+                        local ComboBoxJob = PD.ComboBox("Neuen Job auswählen", scrl, function(val)
                             val = string.Explode(" | ",val)
 
                             newJob = val[1]
@@ -237,8 +237,8 @@ function PD.List:Menu(wo)
                             end
                         end
 
-                        local changeUnit = PD.Button(LANG.FACTION_UI_CHANGE_UNIT,scrl,function()
-                            if not newJob then chat.AddText(LANG.FACTION_UI_SELECT_NEW_JOB) return end
+                        local changeUnit = PD.Button("Einheit wechseln",scrl,function()
+                            if not newJob then chat.AddText("Neuen Job auswählen") return end
 
                             net.Start("PD.List.ChangeUnit")
                                 net.WriteString(vp:GetCharacterID())
@@ -247,21 +247,21 @@ function PD.List:Menu(wo)
                         end)
                         changeUnit:Dock(TOP)
 
-                        local rankUp = PD.Button(LANG.FACTION_UI_PROMOTE,scrl,function()
+                        local rankUp = PD.Button("Befördern",scrl,function()
                             net.Start("PD.List.RankUp")
                                 net.WriteString(vp:GetCharacterID())
                             net.SendToServer()
                         end)
                         rankUp:Dock(TOP)
 
-                        local rankDown = PD.Button(LANG.FACTION_UI_DEMOTE,scrl,function()
+                        local rankDown = PD.Button("Degradieren",scrl,function()
                             net.Start("PD.List.RankDown")
                                 net.WriteString(vp:GetCharacterID())
                             net.SendToServer()
                         end)
                         rankDown:Dock(TOP)
 
-                        local kick = PD.Button(LANG.FACTION_UI_KICK,scrl,function()
+                        local kick = PD.Button("Einheit verweisen",scrl,function()
                             net.Start("PD.List.kick")
                                 net.WriteString(vp:GetCharacterID())
                             net.SendToServer()
@@ -269,7 +269,7 @@ function PD.List:Menu(wo)
                         kick:Dock(TOP)
 
  
-                        local defaultFaction = PD.Button(LANG.FACTION_UI_DEFAULT_FACTION,scrl,function()
+                        local defaultFaction = PD.Button("Standardfraktion",scrl,function()
                             net.Start("PD.List.SetPlayerFaction")
                                 net.WriteEntity(vp)
                                 net.WriteString("Ausbildung")
@@ -285,7 +285,7 @@ function PD.List:Menu(wo)
             playerBtn:Dock(TOP)
             playerBtn:SetTall(PD.H(50))
 
-            local adminUnit = PD.Button(LANG.FACTION_UI_ALL_UNITS, pnl, function()
+            local adminUnit = PD.Button("Alle Einheiten", pnl, function()
                 pnl:Clear()
                 local scrl = PD.Scroll(pnl)
 
@@ -330,7 +330,7 @@ function PD.List:Menu(wo)
         end)
     end
             
-    PD.SelectItem(wo or LANG.FACTION_UI_UNIT)
+    PD.SelectItem(wo or "Einheit")
 end
 
 concommand.Add("pd_list_print",function()

@@ -67,7 +67,7 @@ PD.SQUAD.Interactions = {
     ["player"] = {
         [1] = {
             id = "invite_to_squad",
-            name = LANG.SQUAD_INTERACTION_INVITE,
+            name = "In Einheit einladen",
             icon = nil,
             func = function(ply1, ply2)
                 net.Start("PD.SQUAD.UpdateSquad")
@@ -79,7 +79,7 @@ PD.SQUAD.Interactions = {
         },
         [2] = {
             id = "remove_from_squad",
-            name = LANG.SQUAD_INTERACTION_REMOVE,
+            name = "Aus Einheit entfernen",
             icon = nil,
             func = function(ply1, ply2)
                 net.Start("PD.SQUAD.UpdateSquad")
@@ -92,7 +92,7 @@ PD.SQUAD.Interactions = {
         },
         [3] = {
             id = "squad_create",
-            name = LANG.SQUAD_INTERACTION_CREATE,
+            name = "Einheit erstellen",
             icon = nil,
             func = function(ply1, ply2)
                 PD.SQUAD.OpenInterface()

@@ -18,7 +18,7 @@ function PD.HUD.GetKnownPlayers(plyID)
         return LocalPlayer():Nick()
     end
 
-    return knownPlayers[plyID] or LANG.MEET_UNKNOWN
+    return knownPlayers[plyID] or "Unbekannt"
 end
 
 function PD.HUD.GetKnownPlayersAll()
@@ -38,19 +38,19 @@ end)
 --         return
 --     end
 --     if not name or name == "" then
---         name = LANG.MEET_UNKNOWN
+--         name = "Unbekannt"
 --     end
 
---     knownMenuFrame = PD.Frame(LANG.MEET_WHATS_THIS, PD.W(400), PD.H(150), true, nil, true)
+--     knownMenuFrame = PD.Frame("Was'n das?", PD.W(400), PD.H(150), true, nil, true)
 --     knownMenuFrame:SetPos(PD.W(200), PD.H(20))
 
---     local lbl = PD.Label(name .. LANG.MEET_WANTS_NAME, knownMenuFrame)
+--     local lbl = PD.Label(name .. "möchte deinen Namen wissen", knownMenuFrame)
 
 --     local bottomPanel = PD.Panel("", knownMenuFrame)
 --     bottomPanel:Dock(BOTTOM)
 --     bottomPanel:SetTall(PD.H(50))
 
---     local accept = PD.Button(LANG.GENERIC_OK, bottomPanel, function()
+--     local accept = PD.Button("OK", bottomPanel, function()
 --         knownMenuFrame:Remove()
 
 --         net.Start("ConfirmMeet")
@@ -62,7 +62,7 @@ end)
 --     accept:SetWide(bottomPanel:GetWide() / 2 - PD.W(40))
 --     accept:SetHoverColor(getColor("Green"))
 
---     local decline = PD.Button(LANG.GENERIC_CANCEL, bottomPanel, function()
+--     local decline = PD.Button("Abbrechen", bottomPanel, function()
 --         knownMenuFrame:Remove()
 --     end)
 --     decline:Dock(RIGHT)

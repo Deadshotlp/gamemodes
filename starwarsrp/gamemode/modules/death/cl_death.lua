@@ -30,7 +30,7 @@ local function start_death_timer()
             waitTime = 0
             DeathButton:SetDisabled(false)
         end
-        DeathLabel:SetText(LANG.DEATH_SCREEN_FIRST_PART .. waitTime .. LANG.DEATH_SCREEN_SECOND_PART)
+        DeathLabel:SetText("Du kannst in " .. waitTime .. " Sekunden Respawnen")
     end)
 end
 
@@ -42,15 +42,15 @@ function PD.Death:Screen()
     DeathFrame = PD.Frame("", ScrW(), ScrH(), true)
 
     surface.SetFont("MLIB.16")
-    local nameW2, nameH2 = surface.GetTextSize(LANG.DEATH_SCREEN_FIRST_PART .. PD.Death.RespawnDelay .. LANG.DEATH_SCREEN_SECOND_PART)
+    local nameW2, nameH2 = surface.GetTextSize("Du kannst in " .. PD.Death.RespawnDelay .. " Sekunden Respawnen")
 
-    DeathLabel = PD.Label(LANG.DEATH_SCREEN_FIRST_PART .. PD.Death.RespawnDelay .. LANG.DEATH_SCREEN_SECOND_PART,
+    DeathLabel = PD.Label("Du kannst in " .. PD.Death.RespawnDelay .. " Sekunden Respawnen",
         DeathFrame)
     DeathLabel:Dock(NODOCK)
     DeathLabel:SetWide(nameW2)
     DeathLabel:SetPos((ScrW() / 2) - (DeathLabel:GetWide() / 2), ScrH() / 2)
 
-    DeathButton = PD.Button(LANG.DEATH_SCREEN_RESPAWN_BUTTON, DeathFrame, function()
+    DeathButton = PD.Button("Respawnen", DeathFrame, function()
         timer.Remove("PD.Death.Timer")
         net.Start("PD.Respawn")
         net.WriteEntity(LocalPlayer())
@@ -62,7 +62,7 @@ function PD.Death:Screen()
     DeathButton:SetDisabled(true)
 
     if LocalPlayer():IsAdmin() then
-        local button2 = PD.Button(LANG.DEATH_SCREEN_ADMIN_RESPAWN_BUTTON, DeathFrame, function()
+        local button2 = PD.Button("Admin Respawn", DeathFrame, function()
             timer.Remove("PD.Death.Timer")
             net.Start("PD.AdminRespawn")
             net.WriteEntity(LocalPlayer())
@@ -76,17 +76,17 @@ function PD.Death:Screen()
     local key_num = PD.Binds:FindBindByID("mouse")
     local key_lbl
     if not key_num or key_num == 0 then
-        key_lbl = LANG.DEATH_SCREEN_NO_MOUSE_BIND
+        key_lbl = "[Keine Taste Ausgewählt]"
     else
         key_lbl = input.GetKeyName(PD.Binds:FindBindByID("mouse"))
     end
 
     surface.SetFont("MLIB.16")
-    local nameW2, nameH2 = surface.GetTextSize(LANG.DEATH_SCREEN_MOUSE_INSTRUCTION_FIRST .. key_lbl ..
-                               LANG.DEATH_SCREEN_MOUSE_INSTRUCTION_LAST)
+    local nameW2, nameH2 = surface.GetTextSize("Drücke '" .. key_lbl ..
+                               "' um dir den Mauszeiger Anzeigen zu lassen!")
 
-    local lbl_g = PD.Label(LANG.DEATH_SCREEN_MOUSE_INSTRUCTION_FIRST .. key_lbl ..
-                               LANG.DEATH_SCREEN_MOUSE_INSTRUCTION_LAST, DeathFrame)
+    local lbl_g = PD.Label("Drücke '" .. key_lbl ..
+                               "' um dir den Mauszeiger Anzeigen zu lassen!", DeathFrame)
     lbl_g:Dock(NODOCK)
     lbl_g:SetWide(nameW2)
     lbl_g:SetPos((ScrW() / 2) - (lbl_g:GetWide() / 2), ScrH() - lbl_g:GetTall() - PD.H(20))
