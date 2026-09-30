@@ -244,3 +244,4 @@ local function color_interpolieren(baseColor, count)
 
     return colors
 end
+

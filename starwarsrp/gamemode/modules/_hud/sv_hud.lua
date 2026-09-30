@@ -9,14 +9,16 @@ util.AddNetworkString("PD.WeaponSelector:SelectWeapon")
 net.Receive("PD.WeaponSelector:SelectWeapon", function(len, p)
     if not IsValid(p) then return end
 
-    local selectedWeapon = net.ReadInt(32)
-    local weaponList = p:GetWeapons()
+    -- Die Klasse statt des Listenindex: GetWeapons() muss auf Client und
+    -- Server nicht dieselbe Reihenfolge haben, ein Index traf hier also
+    -- gelegentlich eine andere Waffe als die angeklickte.
+    local class = net.ReadString()
+    if class == "" then return end
 
-    for k, v in pairs(weaponList) do
-        if k == selectedWeapon then
-            p:SelectWeapon(v:GetClass())
-        end
-    end
+    -- Nur was der Spieler auch wirklich traegt.
+    if not IsValid(p:GetWeapon(class)) then return end
+
+    p:SelectWeapon(class)
 end)
 
 function SpawnMultipleProps()

@@ -52,7 +52,7 @@ end
 --         return
 --     end
 
---     PD.Config.base = PD.Frame(LANG.ESC_CONFIG_TITLE, PD.W(700), PD.H(800), true)
+--     PD.Config.base = PD.Frame("PD Config Menü", PD.W(700), PD.H(800), true)
 
 --     local panel = PD.Panel("", PD.Config.base)
 --     panel:Dock(FILL)
@@ -66,13 +66,13 @@ end
 --         PD.AddSideItem(v.name, v.menu)
 --     end
 
---     PD.AddSideItem(LANG.GENERIC_SAVE, function()
+--     PD.AddSideItem("Speichern", function()
 --         save()
 
 --         reopen()
 --     end)
 
---     PD.AddSideItem(LANG.GENERIC_RESET, function()
+--     PD.AddSideItem("Zurücksetzen", function()
 --         reset()
 
 --         reopen()

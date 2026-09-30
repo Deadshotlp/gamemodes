@@ -6,8 +6,8 @@ PD.Officer.Table = {
     co = "Nicht im Dienst",
     eo = "Nicht im Dienst",
     mo = "Nicht im Dienst",
-    no = "Nicht im Dienst",
-    so = "Nicht im Dienst",
+    -- no = "Nicht im Dienst",
+    -- so = "Nicht im Dienst",
     to = "Nicht im Dienst"
 }
 PD.Officer.JobMap = {

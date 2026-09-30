@@ -1,7 +1,11 @@
 PD.VehicalInventory = PD.VehicalInventory or {}
 
 PD.VehicalInventory.VehicleNames = {
-    ["lvs_sw_transport"] = "Transporter"
+    ["lvs_sw_transport"] = "Transporter",
+    ["lvs_fakehover_iftx"] = "TX-130",
+    ["lvs_mixy_atte_rep"] = "AT-TE Front",
+    ["lvs_mixy_atte_rear_rep"] = "AT-TE Back"
+
 }
 
 PD.VehicalInventory.Interactions = {
@@ -14,6 +18,39 @@ PD.VehicalInventory.Interactions = {
                 PD.VehicalInventory.OpenInventory(ent)
             end,
             ad = {"static_prop"}
+        }
+    },
+    ["lvs_fakehover_iftx"] = {
+        [1] = {
+            id = "open_inventory",
+            name = "Öffne Fahrzeug Inventar",
+            icon = nil,
+            func = function(ply, ent, bone)
+                PD.VehicalInventory.OpenInventory(ent)
+            end,
+            ad = {"root"}
+        }
+    },
+    ["lvs_mixy_atte_rep"] = {
+        [1] = {
+            id = "open_inventory",
+            name = "Öffne Fahrzeug Inventar",
+            icon = nil,
+            func = function(ply, ent, bone)
+                PD.VehicalInventory.OpenInventory(ent)
+            end,
+            ad = {"root_front"}
+        }
+    },
+    ["lvs_mixy_atte_rear_rep"] = {
+        [1] = {
+            id = "open_inventory",
+            name = "Öffne Fahrzeug Inventar",
+            icon = nil,
+            func = function(ply, ent, bone)
+                PD.VehicalInventory.OpenInventory(ent)
+            end,
+            ad = {"root_rear"}
         }
     }
 }

@@ -65,3 +65,7 @@ local PLAYER = FindMetaTable("Player")
 function PLAYER:Nick()
     return self:GetNWString("rpname") and self:GetNWString("rpname") ~= "" and self:GetNWString("rpname") or "00-0000 Unknown"
 end
+
+function PLAYER:Name()
+    return self:GetNWString("rpname") and self:GetNWString("rpname") ~= "" and self:GetNWString("rpname") or "00-0000 Unknown"
+end

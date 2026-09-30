@@ -4,7 +4,9 @@ util.AddNetworkString("PD.JOBS.UpdateTabel")
 util.AddNetworkString("PD.JOBS.SyncJobs")
 PD.JOBS = PD.JOBS or {}
 
-PD.JOBS.Jobs = {
+-- Grundbaum fuer eine leere Datenbank. Der eigentliche Baum kommt aus den
+-- Tabellen pd_jobs_units, pd_jobs_subunits und pd_jobs_jobs.
+PD.JOBS.DefaultJobs = {
     ["Ausbildung"] = {
         default = true,
         equip = {},
@@ -37,16 +39,20 @@ PD.JOBS.Jobs = {
     }
 }
 
-local dir = "modules/jobs"
-local file = "/jobs.json"
-local legacyPath = dir .. file
-local legacySqlTableName = "pd_jobs_data"
-local legacySqlConfigKey = "jobs"
+-- Beim Laden und nach einem Lua-Refresh den geladenen Baum nicht mit dem
+-- Grundbaum ueberschreiben - sonst stuende bis zum Nachladen der falsche Stand
+-- im Speicher.
+if not istable(PD.JOBS.Jobs) or next(PD.JOBS.Jobs) == nil then
+    PD.JOBS.Jobs = table.Copy(PD.JOBS.DefaultJobs)
+end
+
 local sqlUnitsTable = "pd_jobs_units"
 local sqlSubUnitsTable = "pd_jobs_subunits"
 local sqlJobsTable = "pd_jobs_jobs"
 local loadInProgress = false
 local pendingLoadCallbacks = {}
+local loadToken = nil
+local LOAD_TIMEOUT = 20
 
 local function log(msg)
     print("[PD.JOBS] " .. tostring(msg))
@@ -194,23 +200,6 @@ local function decodeJsonArray(raw)
     end
 
     return {}
-end
-
-local function loadLegacyJobs()
-    if not PD.JSON.Exists(dir) then
-        PD.JSON.Create(dir)
-    end
-
-    if not PD.JSON.Exists(legacyPath) then
-        PD.JSON.Write(legacyPath, PD.JOBS.Jobs)
-    end
-
-    local legacy = PD.JSON.Read(legacyPath)
-    if istable(legacy) and next(legacy) ~= nil then
-        return legacy
-    end
-
-    return table.Copy(PD.JOBS.Jobs)
 end
 
 local function ensureSQLTable(callback)
@@ -509,45 +498,23 @@ local function loadJobsFromNormalizedSQL(callback)
     end)
 end
 
-local function loadJobsFromLegacySQL(callback)
-    local existsQuery = "SHOW TABLES LIKE " .. sqlEscape(legacySqlTableName)
-
-    sqlFetchOne(existsQuery, function(existsRow)
-        if not existsRow then
-            if isfunction(callback) then
-                callback(nil)
-            end
-            return
-        end
-
-        local selectQuery = "SELECT `jobs_json` FROM `" .. legacySqlTableName .. "` WHERE `config_key` = " .. sqlEscape(legacySqlConfigKey) .. " LIMIT 1"
-        sqlFetchOne(selectQuery, function(row)
-            if not row or not row.jobs_json or row.jobs_json == "" then
-                if isfunction(callback) then
-                    callback(nil)
-                end
-                return
-            end
-
-            local decoded = util.JSONToTable(row.jobs_json)
-            if istable(decoded) and next(decoded) ~= nil then
-                if isfunction(callback) then
-                    callback(decoded)
-                end
-                return
-            end
-
-            if isfunction(callback) then
-                callback(nil)
-            end
-        end)
-    end)
-end
-
 function PD.JOBS.LoadDir(callback)
     return PD.JOBS.LoadJobs(callback)
 end
 
+--[[
+    Jobbaum aus der Datenbank laden.
+
+    Die frueheren Wege ueber data/modules/jobs/jobs.json und die Alt-Tabelle
+    pd_jobs_data sind entfernt. Sind die Tabellen leer, wird der aktuelle
+    Stand (bei neuer Datenbank der Grundbaum) hineingeschrieben.
+
+    Eine fehlgeschlagene Abfrage ruft keinen Callback auf. Vorher blieb
+    loadInProgress dann fuer immer gesetzt, jedes weitere Laden - auch
+    pd_reload jobs aus dem Web-Panel - kam nie mehr an, und der Job-Editor
+    speicherte seinen veralteten Stand ueber die Datenbank. Deshalb die
+    Zeitgrenze.
+]]
 function PD.JOBS.LoadJobs(callback)
     if isfunction(callback) then
         table.insert(pendingLoadCallbacks, callback)
@@ -559,44 +526,52 @@ function PD.JOBS.LoadJobs(callback)
 
     loadInProgress = true
 
+    local token = {}
+    loadToken = token
+
+    local function finish(ok, source)
+        if loadToken ~= token then return end
+
+        loadToken = nil
+        loadInProgress = false
+        timer.Remove("PD.JOBS.LoadTimeout")
+
+        if ok then
+            PD.JOBS.LoadedOnce = true
+        end
+
+        runLoadCallbacks(ok, source)
+
+        if ok then
+            hook.Run("PD.JOBS.Loaded", source)
+        end
+    end
+
+    timer.Create("PD.JOBS.LoadTimeout", LOAD_TIMEOUT, 1, function()
+        if loadToken ~= token then return end
+
+        log("Laden der Jobs hat nach " .. LOAD_TIMEOUT .. "s nicht geantwortet - bisheriger Stand bleibt")
+        finish(false, "timeout")
+    end)
+
     ensureSQLTable(function(tableOk)
         if not tableOk then
-            PD.JOBS.Jobs = loadLegacyJobs()
-            log("SQL nicht bereit, nutze Legacy-JSON als Laufzeit-Fallback")
-            loadInProgress = false
-            runLoadCallbacks(true, "legacy")
+            log("Job-Tabellen nicht verfuegbar - bisheriger Stand bleibt")
+            finish(false, "no_table")
             return
         end
 
         loadJobsFromNormalizedSQL(function(ok, tree)
             if ok and istable(tree) and next(tree) ~= nil then
                 PD.JOBS.Jobs = tree
-                loadInProgress = false
-                runLoadCallbacks(true, "sql_normalized")
+                finish(true, "sql")
                 return
             end
 
-            loadJobsFromLegacySQL(function(legacySqlTree)
-                local importTree = legacySqlTree
-                local source = "legacy_sql"
+            log("Job-Tabellen sind leer - schreibe den aktuellen Stand hinein")
 
-                if not istable(importTree) or next(importTree) == nil then
-                    importTree = loadLegacyJobs()
-                    source = "legacy_json"
-                end
-
-                PD.JOBS.Jobs = importTree
-
-                saveJobsToSQL(importTree, function(saved)
-                    if saved then
-                        log("Migration in normalisierte SQL-Tabellen abgeschlossen (Quelle: " .. source .. ")")
-                    else
-                        log("Migration in normalisierte SQL-Tabellen fehlgeschlagen (Quelle: " .. source .. ")")
-                    end
-
-                    loadInProgress = false
-                    runLoadCallbacks(saved, "migration_normalized")
-                end)
+            saveJobsToSQL(PD.JOBS.Jobs, function(saved)
+                finish(saved == true, "seeded")
             end)
         end)
     end)
@@ -627,14 +602,30 @@ end)
 
 PD.JOBS.LoadJobs()
 
-hook.Add("PlayerInitialSpawn", "PD.SendJobData", function(ply)
-    PD.JOBS.LoadJobs(function(ok)
-        if not ok then
-            return
-        end
+--[[
+    Jobbaum an einen Spieler schicken.
 
+    Frueher lud jeder Join und jede Client-Anfrage den kompletten Baum neu aus
+    der Datenbank, und die Anfrage schickte ihn danach an ALLE Spieler. Jetzt
+    gilt der Stand im Speicher; neu geladen wird nur beim Start, vor
+    Aenderungen im Job-Editor und bei pd_reload jobs. Nur solange noch nie
+    geladen wurde, wartet die Antwort auf das Laden.
+]]
+local function SendJobsTo(ply)
+    if PD.JOBS.LoadedOnce then
         PD.JOBS.UpdateTabel(ply)
+        return
+    end
+
+    PD.JOBS.LoadJobs(function(ok)
+        if ok and IsValid(ply) then
+            PD.JOBS.UpdateTabel(ply)
+        end
     end)
+end
+
+hook.Add("PlayerInitialSpawn", "PD.SendJobData", function(ply)
+    SendJobsTo(ply)
 end)
 
 local syncJobsCooldown = {}
@@ -646,15 +637,7 @@ net.Receive("PD.JOBS.SyncJobs", function(_, ply)
     if syncJobsCooldown[steamid] and CurTime() - syncJobsCooldown[steamid] < 5 then return end
     syncJobsCooldown[steamid] = CurTime()
 
-    PD.JOBS.LoadJobs(function(ok)
-        if not ok then
-            return
-        end
-
-        timer.Simple(0.1, function()
-            PD.JOBS.UpdateTabel()
-        end)
-    end)
+    SendJobsTo(ply)
 end)
 
 function PD.JOBS.UpdateTabel(targetPly)
@@ -796,7 +779,10 @@ function PD.JOBS.GetTable()
     return PD.JOBS.Jobs
 end
 
-concommand.Add("pd_jobs_prints", function()
+-- Serverbefehle kann jeder Client ausfuehren: nur Konsole und Superadmins.
+concommand.Add("pd_jobs_prints", function(ply)
+    if IsValid(ply) and not ply:IsSuperAdmin() then return end
+
     print("===============================Start=======================================")
     PrintTable(PD.JOBS.Jobs)
     print("================================Ende=======================================")

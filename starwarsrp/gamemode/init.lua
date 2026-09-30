@@ -24,6 +24,7 @@ PD.Admin.Ranks = {
     ["admin"] = 50,
     ["projektleitung"] = 10,
     ["teamleitung"] = 8,
+    ["moderationsverwaltung"] = 5,
     ["moderator"] = 4,
     ["supporter"] = 2,
 }
@@ -38,6 +39,7 @@ PD.Admin.PayDayPercent = {
     ["admin"] = 2,
     ["projektleitung"] = 2,
     ["teamleitung"] = 2,
+    ["moderationsverwaltung"] = 2,
     ["moderator"] = 2,
     ["supporter"] = 2,
     ["user"] = 1
@@ -48,6 +50,7 @@ PD.Admin.Slots = {
     ["admin"] = 4,
     ["projektleitung"] = 4,
     ["teamleitung"] = 4,
+    ["moderationsverwaltung"] = 4,
     ["moderator"] = 3,
     ["supporter"] = 3,
     ["user"] = 2
@@ -108,6 +111,10 @@ print(string.format("Modules loaded. Total files: %d | Total time: %.6f sec", fi
 
 local PLAYER = FindMetaTable("Player")
 function PLAYER:Nick()
+   return self:GetNWString("rpname") and self:GetNWString("rpname") ~= "" and self:GetNWString("rpname") or "Unknown"
+end
+
+function PLAYER:Name()
    return self:GetNWString("rpname") and self:GetNWString("rpname") ~= "" and self:GetNWString("rpname") or "Unknown"
 end
 

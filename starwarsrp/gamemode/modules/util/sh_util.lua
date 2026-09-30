@@ -44,28 +44,34 @@ function PD.deepTablesEqual(t1, t2)
     return true
 end
 
-function PD.CheckUnitAccess(ply, unit)
-    if not IsValid(ply) then return false end
-    if not unit then return false end
+-- function PD.CheckUnitAccess(ply, unit)
+--     print(1)
+--     if not IsValid(ply) then return false end
+--     print(2)
+--     if not unit then return false end
 
-    local jobName, jobTable = ply:GetJob()
-    local subunitName, subunitTable = PD.JOBS.GetSubUnit(jobTable.unit, false)
+--     local jobName, jobTable = ply:GetJob()
+--     local subunitName, subunitTable = PD.JOBS.GetSubUnit(jobTable.unit, false)
 
-    if subunitTable.unit and subunitTable.unit ~= unit then
-        return false
-    end
+--     print(unit)
+--     print(subunitTable.unit)
 
-    return true
-end
+--     if subunitTable.unit and subunitTable.unit ~= unit then
+--         return false
+--     end
 
-function PD.CheckSubUnitAccess(ply, unit)
-    if not IsValid(ply) then return false end
-    if not unit then return false end
+--     return true
+-- end
 
-    local jobName, jobTable = ply:GetJob()
-    if jobTable.unit and jobTable.unit ~= unit then
-        return false
-    end
+-- function PD.CheckSubUnitAccess(ply, unit)
+--     print("bkjniglndfawd")
+--     if not IsValid(ply) then return false end
+--     if not unit then return false end
 
-    return true
-end
+--     local jobName, jobTable = ply:GetJob()
+--     if jobTable.unit and jobTable.unit ~= unit then
+--         return false
+--     end
+
+--     return true
+-- end

@@ -18,10 +18,12 @@ local function GenerateRandomNumber()
     return prefix .. "-" .. suffix
 end
 
+-- Direkt auf dem Zwischenspeicher: LoadAllChars kopiert jedes Mal alle
+-- Charaktere aller Spieler, hier wird nur gelesen.
 local function IDCheck(id)
-    local tbl = PD.Char:LoadAllChars()
+    local tbl = PD.Char.Storage and PD.Char.Storage.cache or {}
 
-    for _, chars in pairs(tbl or {}) do
+    for _, chars in pairs(tbl) do
         for _, char in pairs(chars or {}) do
             if char.id == id then
                 return false
@@ -104,12 +106,60 @@ net.Receive("PD.Char.DefaultFaction", function(_, ply)
     end
 end)
 
+--[[
+    Pruefungen fuer einen neuen Charakter. Dieselben Regeln prueft das Menue
+    zur Anzeige - verbindlich sind sie nur hier, der Client laesst sich
+    umgehen. Gibt bei Ablehnung den Grund zurueck.
+]]
+local function CanCreateChar(ply, name, chars)
+    if not PD.Char:IsStorageReady() then
+        return false, "Charaktere werden noch geladen, bitte kurz warten."
+    end
+
+    local maxSlots = math.min(PD.Char.UserGroupChar[ply:GetUserGroup()] or 2, PD.Char.MaxChars or 5)
+    if #chars >= maxSlots then
+        return false, "Du hast bereits die maximale Anzahl an Charakteren (" .. maxSlots .. ")."
+    end
+
+    local len = utf8.len(name) or #name
+    if len < (PD.Char.MinName or 3) then
+        return false, "Name zu kurz! (Min. " .. (PD.Char.MinName or 3) .. " Zeichen)"
+    end
+
+    if len > (PD.Char.MaxName or 20) then
+        return false, "Name zu lang! (Max. " .. (PD.Char.MaxName or 20) .. " Zeichen)"
+    end
+
+    local lower = string.lower(name)
+    for blocked in pairs(PD.Char.NameBlacklist or {}) do
+        if blocked ~= "" and string.find(lower, string.lower(blocked), 1, true) then
+            return false, "Dieser Name ist nicht erlaubt."
+        end
+    end
+
+    return true
+end
+
+local CREATE_COOLDOWN = 2
+
 net.Receive("PD.Char.Create", function(_, ply)
     if not IsValid(ply) then return end
+
+    local now = CurTime()
+    if (ply.PD_CharCreateNext or 0) > now then return end
+    ply.PD_CharCreateNext = now + CREATE_COOLDOWN
 
     net.ReadEntity()
     local name = string.Trim(net.ReadString() or "")
     if name == "" then return end
+
+    local chars = PD.Char:LoadChar(ply:SteamID64(), "PD.Char.Create") or {}
+
+    local allowed, reason = CanCreateChar(ply, name, chars)
+    if not allowed then
+        PD.Notify(reason, Color(255, 60, 60), false, ply)
+        return
+    end
 
     local id = GenerateRandomNumber()
     while not IDCheck(id) do
@@ -122,8 +172,6 @@ net.Receive("PD.Char.Create", function(_, ply)
         print("Default Job nicht gefunden. (PD.Char.Create)")
         return
     end
-
-    local chars = PD.Char:LoadChar(ply:SteamID64(), "PD.Char.Create") or {}
 
     local data = {
         name = name,
@@ -163,7 +211,7 @@ net.Receive("PD.Char.Create", function(_, ply)
 
     ply.CharID = id
     ply:SetNWString("character_id", id)
-    ply:SetNWString("rpname", id .. " " .. name)
+    ply:SetNWString("rpname", PD.Char.BuildRPName(id, name))
 
     PD.Char:SaveChar(ply:SteamID64(), chars)
     PD.Char:StartTimer(ply:SteamID64())
@@ -202,6 +250,16 @@ net.Receive("PD.Char.Play", function(_, ply)
     net.ReadEntity()
     local charIndex = net.ReadUInt(32)
 
+    -- Den Charakter, in dem man schon ist, nicht neu setzen: PlayerSetChar
+    -- wechselt ueber changeTeam den Job und spawnt dabei neu. Das Menue
+    -- schliesst der Client selbst.
+    local chars = PD.Char:LoadChar(ply:SteamID64(), "PD.Char.Play")
+    local activeID = PD.Char:GetCharacterID(ply)
+
+    if activeID and chars and chars[charIndex] and chars[charIndex].id == activeID then
+        return
+    end
+
     local jobID = PD.Char:PlayerSetChar(ply, charIndex)
     if not jobID then return end
 
@@ -215,7 +273,7 @@ net.Receive("PD.Char.Delete", function(_, ply)
 
     net.ReadEntity()
     local tblID = net.ReadInt(32)
-    local displayName = net.ReadString()
+    net.ReadString() -- Anzeigename, wird nicht mehr verwendet
 
     local chars = PD.Char:LoadChar(ply:SteamID64(), "PD.Char.Delete") or {}
     local deletingChar = chars[tblID]
@@ -260,10 +318,6 @@ net.Receive("PD.Char.Delete", function(_, ply)
     end
 
     PD.Char:SyncChar(ply, "PD.Char.Delete")
-
-    if isActiveDeletedChar then
-        ply:SetNWString("rname", displayName)
-    end
 
     timer.Simple(0.2, function()
         if not IsValid(ply) then return end
@@ -360,7 +414,10 @@ hook.Add("ShutDown", "PD.Char.ServerDown", function()
     end
 end)
 
-concommand.Add("charprints", function()
+-- Serverbefehle kann jeder Client ausfuehren: nur Konsole und Superadmins.
+concommand.Add("charprints", function(ply)
+    if IsValid(ply) and not ply:IsSuperAdmin() then return end
+
     PrintTable(PD.Char:LoadAllChars())
 end)
 

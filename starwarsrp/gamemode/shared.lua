@@ -1,7 +1,6 @@
 --
 PD = PD or {}
 CONFIG = CONFIG or {}
-LANG = LANG or {}
 function GM:Initialize()
     -- Do stuff
 end

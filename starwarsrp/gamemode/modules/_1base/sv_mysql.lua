@@ -297,13 +297,13 @@ function SQL.Commit(callback, onError)
 	tx.SQL_traceback = traceback("", 2)
 
 	tx.onSuccess = function(...)
-		if callback then
+		if isfunction(callback) then
 			callback(...)
 		end
 	end
 
 	tx.onError = function(_, error_text)
-		if onError then
+		if isfunction(onError) then
 			onError(error_text)
 			return
 		end
@@ -320,6 +320,18 @@ function SQL.Commit(callback, onError)
 end
 function SQL.Query(queryString, callback, firstRow, callbackObj, retryCount)
 	retryCount = retryCount or 0
+
+	-- Der Callback muss eine Funktion sein. Ist er es nicht, liegt der Fehler
+	-- beim Aufrufer: die Abfrage laeuft trotzdem, nur das Ergebnis wird
+	-- verworfen. Ohne diese Pruefung stirbt spaeter query.onSuccess mit
+	-- "attempt to call field 'SQL_callback'", und zwar erst in der Antwort von
+	-- mysqloo - dort steht der Aufrufer nicht mehr im Traceback. Deshalb wird
+	-- er hier ausgegeben, solange der Aufrufstapel noch stimmt.
+	if callback ~= nil and not isfunction(callback) then
+		Error("SQL.Query: callback ist kein function-Wert, sondern " .. type(callback)
+			.. ". Query: " .. string.sub(tostring(queryString), 1, 300), traceback("", 2))
+		callback = nil
+	end
 
 	if not ensureMySQLoo() then
 		return nil
@@ -347,7 +359,7 @@ function SQL.Query(queryString, callback, firstRow, callbackObj, retryCount)
 	query.SQL_traceback = traceback("", 2)
 
 	query.onSuccess = function(q, data)
-		if q.SQL_callback then
+		if isfunction(q.SQL_callback) then
 			if q.SQL_first_row then
 				data = data and data[1] or nil
 			end

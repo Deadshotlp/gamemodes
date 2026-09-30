@@ -68,23 +68,35 @@ local function ResolveJobData(unitIndex, subIndex, jobIndex)
     return GetFallbackJob()
 end
 
-local charDir = "modules/char"
-local charFilePattern = "modules/char/*.json"
 local charSQLTable = "pd_characters"
-local migrationSaveTimeout = 15
+local reloadTimeout = 20
 
-local charCache = {}
-local charStorageReady = false
-local charStorageInitRunning = false
+--[[
+    Charakterdaten liegen nur noch in der Datenbank (pd_characters). Die
+    frueheren JSON-Dateien unter data/modules/char werden weder gelesen noch
+    geschrieben.
+
+    Der Zwischenspeicher haengt an PD.Char, damit ein Lua-Refresh dieser Datei
+    nicht alle Charaktere vergisst.
+
+    pending: SteamIDs, die gespeichert wurden, waehrend die Datenbank gerade
+    geladen wurde. Ihr Stand im Speicher ist neuer als das, was aus der
+    Datenbank kommt - er gewinnt und wird danach nachgeschrieben.
+]]
+PD.Char.Storage = PD.Char.Storage or {
+    cache = {},
+    ready = false,
+    pending = {}
+}
+
+local storage = PD.Char.Storage
+storage.renaming = storage.renaming or {}
+storage.loading = false
+storage.callbacks = {}
+storage.token = nil
 
 local function CharLog(msg)
     print("[PD.Char] " .. tostring(msg))
-end
-
-local function EnsureCharDir()
-    if not file.IsDir(charDir, "DATA") then
-        file.CreateDir(charDir)
-    end
 end
 
 local function SQLAvailable()
@@ -105,21 +117,6 @@ local function SQLEscape(value)
     escaped = escaped:gsub("'", "\\'")
     escaped = escaped:gsub('"', '\\"')
     return "'" .. escaped .. "'"
-end
-
-local function SQLFetchOne(query, callback)
-    if not SQLAvailable() then
-        if isfunction(callback) then
-            callback(nil)
-        end
-        return nil
-    end
-
-    if isfunction(PD.SQL.FetchOne) then
-        return PD.SQL.FetchOne(query, callback)
-    end
-
-    return PD.SQL.Query(query, callback, true)
 end
 
 local function SQLFetchAll(query, callback)
@@ -153,37 +150,6 @@ local function SQLExecute(query, callback)
     end, false)
 end
 
-local function ReadLegacyCharFile(steamid64)
-    EnsureCharDir()
-
-    local path = charDir .. "/" .. tostring(steamid64) .. ".json"
-    if not file.Exists(path, "DATA") then
-        return nil
-    end
-
-    local raw = file.Read(path, "DATA")
-    local data = util.JSONToTable(raw or "")
-    return istable(data) and data or {}
-end
-
-local function LoadAllLegacyChars()
-    EnsureCharDir()
-
-    local all = {}
-    for _, fileName in pairs(file.Find(charFilePattern, "DATA")) do
-        local steamid = string.gsub(fileName, "%.json$", "")
-        local data = util.JSONToTable(file.Read(charDir .. "/" .. fileName, "DATA") or "")
-        all[steamid] = istable(data) and data or {}
-    end
-
-    return all
-end
-
-local function SaveLegacyCharFile(steamid64, chars)
-    EnsureCharDir()
-    file.Write(charDir .. "/" .. tostring(steamid64) .. ".json", util.TableToJSON(chars or {}, true) or "[]")
-end
-
 local function BuildCharEntries(chars)
     local entries = {}
 
@@ -210,21 +176,7 @@ local function BuildCharEntries(chars)
         return (a.slot or 0) < (b.slot or 0)
     end)
 
-    for i = 1, #entries do
-        if entries[i].slot == entries[i - 1] and entries[i - 1] ~= nil then
-            entries[i].slot = i
-        end
-    end
-
     return entries
-end
-
-local function CountCharEntries(chars)
-    return #BuildCharEntries(chars)
-end
-
-local function HasCharEntries(chars)
-    return CountCharEntries(chars) > 0
 end
 
 local function EnsureCharSQLTable(callback)
@@ -257,27 +209,9 @@ local function EnsureCharSQLTable(callback)
         .. ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
 
     SQLExecute(query, function(ok)
-        if not ok then
-            if isfunction(callback) then
-                callback(false)
-            end
-            return
+        if isfunction(callback) then
+            callback(ok == true)
         end
-
-        SQLExecute("ALTER TABLE `" .. charSQLTable .. "` MODIFY `char_money` BIGINT NOT NULL DEFAULT 0", function(okMoney)
-            if not okMoney then
-                if isfunction(callback) then
-                    callback(false)
-                end
-                return
-            end
-
-            SQLExecute("ALTER TABLE `" .. charSQLTable .. "` MODIFY `char_playtime` BIGINT NOT NULL DEFAULT 0", function(okPlaytime)
-                if isfunction(callback) then
-                    callback(okPlaytime == true)
-                end
-            end)
-        end)
     end)
 end
 
@@ -353,15 +287,41 @@ local function SaveSteamCharsToSQL(steamid64, chars, callback)
         return
     end
 
-    addQuery("DELETE FROM `" .. charSQLTable .. "` WHERE `steamid64` = " .. SQLEscape(steamid64))
-
+    --[[
+        Upsert je Charakter statt "alle loeschen und neu einfuegen": Zeilen
+        bleiben erhalten (eine fortlaufende id-Spalte bleibt stabil), und es
+        wird nur geloescht, was es im Speicher nicht mehr gibt. Der Schluessel
+        fuer ON DUPLICATE KEY ist der Primaerschluessel (steamid64, char_id)
+        bzw. nach einer Migration der eindeutige Schluessel auf char_id.
+        steamid64 und char_id werden dabei nie ueberschrieben.
+    ]]
     local allowedFields = {
         "steamid64", "slot_index", "char_id", "char_name", "char_rank", "char_money", "char_playtime",
         "char_cratedate", "char_lastplaytime", "faction_unit", "faction_subunit", "faction_job",
         "job_id", "job_name", "job_model", "job_unit"
     }
 
+    local updateParts = {}
+    for _, field in ipairs(allowedFields) do
+        if field ~= "steamid64" and field ~= "char_id" then
+            updateParts[#updateParts + 1] = "`" .. field .. "` = VALUES(`" .. field .. "`)"
+        end
+    end
+    local onDuplicate = " ON DUPLICATE KEY UPDATE " .. table.concat(updateParts, ", ")
+
     local charEntries = BuildCharEntries(chars)
+
+    local keepIDs = {}
+    for i = 1, #charEntries do
+        keepIDs[#keepIDs + 1] = SQLEscape(tostring(charEntries[i].data.id or ("char_" .. tostring(charEntries[i].slot))))
+    end
+
+    if #keepIDs > 0 then
+        addQuery("DELETE FROM `" .. charSQLTable .. "` WHERE `steamid64` = " .. SQLEscape(steamid64)
+            .. " AND `char_id` NOT IN (" .. table.concat(keepIDs, ", ") .. ")")
+    else
+        addQuery("DELETE FROM `" .. charSQLTable .. "` WHERE `steamid64` = " .. SQLEscape(steamid64))
+    end
 
     for i = 1, #charEntries do
         local index = charEntries[i].slot
@@ -386,7 +346,7 @@ local function SaveSteamCharsToSQL(steamid64, chars, callback)
         }, allowedFields)
 
         if insertQuery then
-            addQuery(insertQuery)
+            addQuery(insertQuery .. onDuplicate)
         end
     end
 
@@ -398,37 +358,6 @@ local function SaveSteamCharsToSQL(steamid64, chars, callback)
         CharLog("SQL Save fehlgeschlagen: " .. tostring(err))
         if isfunction(callback) then
             callback(false)
-        end
-    end)
-end
-
-local function SaveSteamCharsToSQLWithTimeout(steamid64, chars, callback)
-    local done = false
-    local timerName = "PD.Char.MigrationTimeout." .. tostring(steamid64)
-
-    if timer.Exists(timerName) then
-        timer.Remove(timerName)
-    end
-
-    timer.Create(timerName, migrationSaveTimeout, 1, function()
-        if done then return end
-        done = true
-        CharLog("Migration timeout fuer SteamID " .. tostring(steamid64))
-        if isfunction(callback) then
-            callback(false)
-        end
-    end)
-
-    SaveSteamCharsToSQL(steamid64, chars, function(ok)
-        if done then return end
-        done = true
-
-        if timer.Exists(timerName) then
-            timer.Remove(timerName)
-        end
-
-        if isfunction(callback) then
-            callback(ok)
         end
     end)
 end
@@ -452,140 +381,102 @@ local function LoadAllCharsFromSQL(callback)
     end)
 end
 
-function PD.Char:InitStorage()
-    if charStorageInitRunning then return end
-    charStorageInitRunning = true
+local function FinishReload(token, ok, count)
+    if storage.token ~= token then return end
 
-    charCache = LoadAllLegacyChars()
+    storage.token = nil
+    storage.loading = false
+    timer.Remove("PD.Char.ReloadTimeout")
+
+    local callbacks = storage.callbacks
+    storage.callbacks = {}
+
+    for _, cb in ipairs(callbacks) do
+        cb(ok, count)
+    end
+end
+
+--[[
+    Alle Charaktere aus der Datenbank laden. Beim Start und nach Aenderungen
+    von aussen (Web-Panel, pd_reload chars).
+]]
+function PD.Char:ReloadFromSQL(callback)
+    if isfunction(callback) then
+        table.insert(storage.callbacks, callback)
+    end
+
+    if storage.loading then return end
+
+    storage.loading = true
+
+    local token = {}
+    storage.token = token
+
+    -- Eine fehlgeschlagene Abfrage ruft keinen Callback auf. Ohne Zeitgrenze
+    -- bliebe loading dann fuer immer gesetzt und nichts wuerde mehr geladen.
+    timer.Create("PD.Char.ReloadTimeout", reloadTimeout, 1, function()
+        if storage.token ~= token then return end
+
+        CharLog("Laden der Charaktere hat nach " .. reloadTimeout .. "s nicht geantwortet")
+        FinishReload(token, false, 0)
+    end)
 
     EnsureCharSQLTable(function(ok)
+        if storage.token ~= token then return end
+
         if not ok then
-            charStorageReady = false
-            charStorageInitRunning = false
-            CharLog("SQL nicht verfuegbar, nutze Legacy-JSON fuer Character")
+            CharLog("Tabelle " .. charSQLTable .. " nicht verfuegbar - Charaktere nicht geladen")
+            FinishReload(token, false, 0)
             return
         end
 
-        SQLFetchOne("SELECT COUNT(*) AS c FROM `" .. charSQLTable .. "`", function(countRow)
-            local count = tonumber(countRow and countRow.c or 0) or 0
+        LoadAllCharsFromSQL(function(all)
+            if storage.token ~= token then return end
 
-            if count > 0 then
-                LoadAllCharsFromSQL(function(allFromSQL)
-                    charCache = allFromSQL or {}
-                    charStorageReady = true
+            all = all or {}
 
-                    local legacyAll = LoadAllLegacyChars()
-                    local backfillQueue = {}
+            local pending = storage.pending
+            storage.pending = {}
 
-                    for sid, legacyChars in pairs(legacyAll) do
-                        local sqlCount = CountCharEntries(charCache[sid])
-                        local legacyCount = CountCharEntries(legacyChars)
+            local resave = {}
 
-                        if legacyCount > sqlCount then
-                            table.insert(backfillQueue, {
-                                sid = sid,
-                                chars = legacyChars,
-                                legacyCount = legacyCount,
-                                sqlCount = sqlCount
-                            })
-                        end
-                    end
-
-                    table.sort(backfillQueue, function(a, b)
-                        return tostring(a.sid) < tostring(b.sid)
-                    end)
-
-                    if #backfillQueue == 0 then
-                        charStorageInitRunning = false
-                        CharLog("Character aus SQL geladen")
-                        return
-                    end
-
-                    CharLog("Starte Character-Backfill aus Legacy JSON: " .. tostring(#backfillQueue) .. " SteamIDs")
-
-                    local function backfillNext(index)
-                        local item = backfillQueue[index]
-                        if not item then
-                            charStorageInitRunning = false
-                            CharLog("Character-Backfill abgeschlossen")
-                            return
-                        end
-
-                        SaveSteamCharsToSQLWithTimeout(item.sid, item.chars, function(okSave)
-                            if okSave then
-                                charCache[item.sid] = table.Copy(item.chars)
-                            else
-                                CharLog("Backfill fehlgeschlagen fuer " .. tostring(item.sid))
-                            end
-
-                            if index % 25 == 0 then
-                                CharLog("Backfill Fortschritt: " .. tostring(index) .. "/" .. tostring(#backfillQueue))
-                            end
-
-                            backfillNext(index + 1)
-                        end)
-                    end
-
-                    backfillNext(1)
-                end)
-                return
-            end
-
-            local migratedAny = false
-            for sid, chars in pairs(charCache) do
-                if HasCharEntries(chars) then
-                    migratedAny = true
-                    break
+            for sid in pairs(pending) do
+                if storage.cache[sid] then
+                    all[sid] = table.Copy(storage.cache[sid])
+                    resave[sid] = true
                 end
             end
 
-            if not migratedAny then
-                charStorageReady = true
-                charStorageInitRunning = false
-                CharLog("Keine Legacy-Character zur Migration gefunden")
-                return
-            end
+            local firstLoad = not storage.ready
 
-            local migrationQueue = {}
-            for sid, chars in pairs(charCache) do
-                if HasCharEntries(chars) then
-                    table.insert(migrationQueue, {
-                        sid = sid,
-                        chars = chars
-                    })
-                end
-            end
+            storage.cache = all
+            storage.ready = true
 
-            table.sort(migrationQueue, function(a, b)
-                return tostring(a.sid) < tostring(b.sid)
-            end)
-
-            local function migrateNext(index)
-                local item = migrationQueue[index]
-                if not item then
-                    charStorageReady = true
-                    charStorageInitRunning = false
-                    CharLog("Character JSON -> SQL Migration abgeschlossen")
-                    return
-                end
-
-                SaveSteamCharsToSQLWithTimeout(item.sid, item.chars, function(okSave)
-                    if not okSave then
-                        SaveLegacyCharFile(item.sid, item.chars)
-                        CharLog("Character Migration fehlgeschlagen fuer " .. tostring(item.sid))
+            for sid in pairs(resave) do
+                SaveSteamCharsToSQL(sid, all[sid], function(saved)
+                    if not saved then
+                        CharLog("Nachschreiben fehlgeschlagen fuer " .. sid)
                     end
-
-                    if index % 25 == 0 then
-                        CharLog("Migration Fortschritt: " .. tostring(index) .. "/" .. tostring(#migrationQueue))
-                    end
-
-                    migrateNext(index + 1)
                 end)
             end
 
-            migrateNext(1)
+            local count = table.Count(all)
+            CharLog(count .. " Spieler mit Charakteren aus der Datenbank geladen")
+
+            FinishReload(token, true, count)
+            hook.Run("PD.Char.StorageLoaded", firstLoad)
         end)
     end)
+end
+
+function PD.Char:IsStorageReady()
+    return storage.ready == true
+end
+
+function PD.Char:InitStorage()
+    if storage.ready then return end
+
+    PD.Char:ReloadFromSQL()
 end
 
 function PD.Char:SaveChar(plyid, tbl)
@@ -593,18 +484,32 @@ function PD.Char:SaveChar(plyid, tbl)
     if sid == "" then return end
 
     tbl = istable(tbl) and tbl or {}
-    charCache[sid] = table.Copy(tbl)
+    storage.cache[sid] = table.Copy(tbl)
 
-    if charStorageReady then
-        SaveSteamCharsToSQL(sid, charCache[sid], function(ok)
-            if not ok then
-                SaveLegacyCharFile(sid, charCache[sid])
-            end
-        end)
+    -- Laeuft gerade ein Laden, wuerde es diesen Stand gleich wieder mit dem
+    -- aelteren aus der Datenbank ueberschreiben.
+    if storage.loading or not storage.ready then
+        storage.pending[sid] = true
+    end
+
+    if not storage.ready then
+        -- Wird nach dem Laden nachgeschrieben (ReloadFromSQL).
         return
     end
 
-    SaveLegacyCharFile(sid, charCache[sid])
+    -- Laeuft fuer diesen Spieler gerade eine ID-Umbenennung, wuerde ein
+    -- Speichern mit der alten ID die Zeile neu anlegen. Danach nachholen.
+    if storage.renaming[sid] then
+        storage.renaming[sid] = "dirty"
+        return
+    end
+
+    SaveSteamCharsToSQL(sid, storage.cache[sid], function(ok)
+        if not ok then
+            storage.pending[sid] = true
+            CharLog("Speichern fehlgeschlagen fuer " .. sid .. " - wird beim naechsten Laden erneut geschrieben")
+        end
+    end)
 end
 
 function PD.Char:LoadChar(plyid, wo)
@@ -613,30 +518,175 @@ function PD.Char:LoadChar(plyid, wo)
         return nil
     end
 
-    if charCache[sid] then
-        return table.Copy(charCache[sid])
+    if storage.cache[sid] then
+        return table.Copy(storage.cache[sid])
     end
 
-    local legacy = ReadLegacyCharFile(sid)
-    if legacy then
-        charCache[sid] = legacy
-        return table.Copy(legacy)
-    end
-
-    print("Char Daten nicht gefunden (" .. tostring(sid) .. " | " .. tostring(wo) .. ")")
     return nil
 end
 
 function PD.Char:LoadAllChars()
-    if next(charCache) == nil then
-        charCache = LoadAllLegacyChars()
+    return table.Copy(storage.cache)
+end
+
+--[[
+    Charakter-ID aendern (Admin-Menue).
+
+    Die ID steht ausser in pd_characters auch in den Fortbildungstabellen und
+    in pd_forced_models (Web-Panel). Alles wird in einer Transaktion
+    umgeschrieben; erst wenn sie gelingt, werden Speicher, Fraktionsbaum,
+    Fortbildungen und der Name des Spielers nachgezogen.
+
+    callback(ok, fehlertext)
+]]
+local RENAME_TABLES = {
+    {tbl = "pd_characters", col = "char_id"},
+    {tbl = "pd_fb_granted", col = "char_id"},
+    {tbl = "pd_fb_participants", col = "char_id"},
+    {tbl = "pd_fb_sessions", col = "instructor_char"},
+    {tbl = "pd_forced_models", col = "char_id"},
+}
+
+local CHAR_ID_MAX = 32
+
+function PD.Char:IsValidCharID(id)
+    id = tostring(id or "")
+    return #id >= 1 and #id <= CHAR_ID_MAX and string.match(id, "^[%w%-_]+$") ~= nil
+end
+
+-- Vergleich ohne Gross-/Kleinschreibung: die Datenbank-Kollation
+-- unterscheidet sie ebenfalls nicht.
+function PD.Char:IsCharIDTaken(id, exceptID)
+    local wanted = string.lower(tostring(id))
+    local except = exceptID and string.lower(tostring(exceptID))
+
+    for _, chars in pairs(storage.cache) do
+        for _, char in pairs(chars or {}) do
+            local cid = string.lower(tostring(char.id or ""))
+            if cid == wanted and cid ~= except then
+                return true
+            end
+        end
     end
 
-    return table.Copy(charCache)
+    return false
+end
+
+function PD.Char:RenameCharID(steamid, oldID, newID, callback)
+    callback = isfunction(callback) and callback or function() end
+
+    local sid = tostring(steamid or "")
+    oldID = tostring(oldID or "")
+    newID = string.Trim(tostring(newID or ""))
+
+    if oldID == newID then return callback(true) end
+    if not storage.ready then return callback(false, "Charaktere werden noch geladen.") end
+    if not PD.Char:IsValidCharID(newID) then
+        return callback(false, "Ungültige ID: 1-" .. CHAR_ID_MAX .. " Zeichen, nur Buchstaben, Ziffern, - und _.")
+    end
+    if PD.Char:IsCharIDTaken(newID, oldID) then return callback(false, "Die ID " .. newID .. " ist bereits vergeben.") end
+    if storage.renaming[sid] then return callback(false, "Für diesen Spieler läuft bereits eine Änderung.") end
+
+    local chars = storage.cache[sid]
+    local index = chars and PD.Char:GetCharIndexByID(chars, oldID)
+    if not index then return callback(false, "Charakter " .. oldID .. " nicht gefunden.") end
+
+    local names = {}
+    for _, entry in ipairs(RENAME_TABLES) do
+        names[#names + 1] = SQLEscape(entry.tbl)
+    end
+
+    storage.renaming[sid] = true
+
+    local function finish(ok, err)
+        local dirty = storage.renaming[sid] == "dirty"
+        storage.renaming[sid] = nil
+
+        -- Waehrend der Umbenennung aufgelaufene Aenderungen nachschreiben.
+        if dirty and storage.cache[sid] then
+            PD.Char:SaveChar(sid, storage.cache[sid])
+        end
+
+        callback(ok, err)
+    end
+
+    -- Nur Tabellen anfassen, die es gibt: pd_forced_models legt das Web-Panel an.
+    SQLFetchAll("SELECT `table_name` AS `t` FROM information_schema.tables WHERE `table_schema` = DATABASE() AND `table_name` IN ("
+        .. table.concat(names, ", ") .. ")", function(rows)
+        local existing = {}
+        for _, row in ipairs(rows or {}) do
+            existing[row.t] = true
+        end
+
+        local addQuery = PD.SQL.Begin()
+        if not isfunction(addQuery) then
+            return finish(false, "Keine Datenbankverbindung.")
+        end
+
+        for _, entry in ipairs(RENAME_TABLES) do
+            if existing[entry.tbl] then
+                addQuery("UPDATE `" .. entry.tbl .. "` SET `" .. entry.col .. "` = " .. SQLEscape(newID)
+                    .. " WHERE `" .. entry.col .. "` = " .. SQLEscape(oldID))
+            end
+        end
+
+        PD.SQL.Commit(function()
+            -- Speicher: Charakter
+            local current = storage.cache[sid]
+            local i = current and PD.Char:GetCharIndexByID(current, oldID)
+            if i then
+                current[i].id = newID
+            end
+
+            -- Speicher: Fortbildungen
+            if PD.FB and PD.FB.Granted and PD.FB.Granted[oldID] then
+                PD.FB.Granted[newID] = PD.FB.Granted[oldID]
+                PD.FB.Granted[oldID] = nil
+
+                for _, grant in pairs(PD.FB.Granted[newID]) do
+                    grant.char_id = newID
+                end
+            end
+
+            -- Spieler online mit diesem Charakter
+            local ply = player.GetBySteamID64(sid)
+            if IsValid(ply) then
+                if PD.Char:GetCharacterID(ply) == oldID then
+                    ply.CharID = newID
+                    ply:SetNWString("character_id", newID)
+                    ply:SetNWString("rpname", PD.Char.BuildRPName(newID, i and current[i].name or ""))
+                end
+
+                PD.Char:SyncChar(ply, "RenameCharID")
+            end
+
+            if PD.List and PD.List.LoadFactions then
+                PD.List:LoadFactions()
+                PD.List:SyncAll()
+            end
+
+            if PD.FB and PD.FB.Ready then
+                if IsValid(ply) and PD.FB.SyncPlayer then PD.FB.SyncPlayer(ply) end
+                if PD.FB.SyncPublicBadges then PD.FB.SyncPublicBadges() end
+            end
+
+            finish(true)
+        end, function(err)
+            CharLog("Umbenennen " .. oldID .. " -> " .. newID .. " fehlgeschlagen: " .. tostring(err))
+            finish(false, "Datenbankfehler: " .. tostring(err))
+        end)
+    end)
 end
 
 hook.Add("PostPDLoaded", "PD.Char.InitStorage", function()
     PD.Char:InitStorage()
+end)
+
+-- Beim Start kann die Datenbank noch nicht verbunden sein - dann nachholen.
+hook.Add("PD.Gamemode.DatabaseConnected", "PD.Char.LoadOnConnect", function()
+    if not storage.ready then
+        PD.Char:ReloadFromSQL()
+    end
 end)
 
 PD.Char:InitStorage()
@@ -835,7 +885,7 @@ function PD.Char:PlayerSetChar(ply, charIndex)
 
     ply.CharID = charData.id
     ply:SetNWString("character_id", charData.id)
-    ply:SetNWString("rpname", charData.id .. " " .. charData.name)
+    ply:SetNWString("rpname", PD.Char.BuildRPName(charData.id, charData.name))
 
     PD.Char:SaveChar(ply:SteamID64(), chars)
     PD.Char:StartTimer(ply:SteamID64())
@@ -879,7 +929,235 @@ function PD.Char:PlayerActiveChar(ply)
     return tbl[charIndex]
 end
 
+--[[
+    Aenderungen von aussen (Web-Panel, pd_reload chars) auf verbundene Spieler
+    anwenden: Name, Zuordnung und geloeschte Charaktere.
+]]
+function PD.Char:ApplyStoredToOnlinePlayers()
+    for _, ply in ipairs(player.GetAll()) do
+        local charID = PD.Char:GetCharacterID(ply)
+
+        if charID then
+            local chars = PD.Char:LoadChar(ply:SteamID64(), "ApplyStored") or {}
+            local index = PD.Char:GetCharIndexByID(chars, charID)
+            local char = index and chars[index]
+
+            if not char then
+                -- Der aktive Charakter wurde geloescht.
+                PD.Char:StopTimer(ply:SteamID64())
+                ply.CharID = nil
+                ply:SetNWString("character_id", "9999")
+                ply:SetNWString("rpname", "")
+
+                PD.Char:SyncChar(ply, "ApplyStored")
+
+                net.Start("OpenCharbyDelete")
+                net.Send(ply)
+            else
+                ply:SetNWString("rpname", PD.Char.BuildRPName(char.id, char.name))
+                PD.Char:SyncChar(ply, "ApplyStored")
+
+                local faction = char.faction or {}
+
+                if faction.job and faction.job ~= "" and faction.job ~= ply.JobID
+                    and PD.List and PD.List.SetPlayerFaction then
+                    PD.List:SetPlayerFaction(ply, faction.unit, faction.subunit, faction.job)
+                end
+            end
+        end
+    end
+end
+
+--[[
+    Nach dem Nachladen der Jobs (Web-Panel, Job-Editor) zeigen verbundene
+    Spieler noch auf die alten Job-Tabellen: neue Waffen- und Modellisten
+    griffen erst nach einem Jobwechsel. Hier auf die frischen Tabellen
+    umhaengen.
+]]
+function PD.Char:RefreshJobTables()
+    for _, ply in ipairs(player.GetAll()) do
+        local jobID = ply.JobID
+
+        if jobID and jobID ~= "" then
+            local fresh
+
+            for _, unitData in pairs(GetJobsTable()) do
+                for _, subData in pairs(unitData.subunits or {}) do
+                    if subData.jobs and subData.jobs[jobID] then
+                        fresh = subData.jobs[jobID]
+                        break
+                    end
+                end
+
+                if fresh then break end
+            end
+
+            if fresh and fresh ~= ply.JobTbl then
+                local changed = util.TableToJSON(ply.JobTbl or {}) ~= util.TableToJSON(fresh)
+
+                ply:SetJob(jobID, fresh)
+
+                if changed then
+                    net.Start("PD.Char.JobChange")
+                    net.WriteEntity(ply)
+                    net.WriteString(jobID)
+                    net.WriteTable(fresh)
+                    net.WriteTable(GetAllPlayerJobs and GetAllPlayerJobs() or {})
+                    net.Broadcast()
+                end
+            end
+        end
+    end
+end
+
+-- Anzeigenamen verbundener Spieler neu setzen, damit ein geaendertes Format
+-- (z. B. das CT-Praefix) ohne Charakterwechsel greift.
+timer.Simple(0, function()
+    for _, ply in ipairs(player.GetAll()) do
+        local char = PD.Char:GetPlayerCharTBL(ply)
+
+        if char then
+            ply:SetNWString("rpname", PD.Char.BuildRPName(char.id, char.name))
+        end
+    end
+end)
+
+hook.Add("PD.JOBS.Loaded", "PD.Char.RefreshJobTables", function()
+    PD.Char:RefreshJobTables()
+end)
+
 local PLAYER = FindMetaTable("Player")
+
+--------------------------------------------------------------------------------
+-- Bewegungsgeschwindigkeit
+--------------------------------------------------------------------------------
+
+--[[
+    Grundgeschwindigkeit. Diese Werte standen bisher dreimal fest im Code -
+    beim Jobwechsel und in beiden Respawn-Wegen.
+
+    Beim Spawn setzt die Spielerklasse ihre eigenen Werte und ueberschreibt
+    damit alles, was vorher gesetzt war. Aktiv ist player_sandbox mit
+    WalkSpeed 200, RunSpeed 400 und SlowWalkSpeed 100 - Sandbox weist sie in
+    GM:PlayerSpawn jedem Spieler zu. Die eigene Klasse player_pdgm wird zwar
+    registriert, aber nirgends zugewiesen und greift deshalb nie.
+]]
+PD.Char.BaseWalkSpeed = 175
+PD.Char.BaseRunSpeed = 250
+
+-- Geschwindigkeit beim langsamen Gehen (+walk). Entspricht dem Wert der
+-- aktiven Sandbox-Klasse und darf angepasst werden.
+PD.Char.BaseSlowWalkSpeed = 100
+
+--[[
+    Die Geschwindigkeit eines Spielers setzen.
+
+    Der Job skaliert sie ueber sein Feld 'speed': 100 bedeutet unveraendert,
+    120 ein Fuenftel schneller. Das Feld gibt es im Job-Editor und in der
+    Datenbank seit jeher - angewendet hat es bisher niemand.
+
+    Ein ueber PD.Char.SetSpeed gesetzter Wert geht vor und uebersteht Respawn
+    und Jobwechsel, weil er am Spieler haengt und nicht am Ablauf.
+]]
+function PD.Char.ApplySpeed(ply)
+    if not IsValid(ply) then return end
+
+    local walk, run = PD.Char.BaseWalkSpeed, PD.Char.BaseRunSpeed
+    local slow = PD.Char.BaseSlowWalkSpeed
+    local fest = ply.PD_Speed
+
+    if istable(fest) then
+        walk = tonumber(fest.walk) or walk
+        run = tonumber(fest.run) or run
+        slow = tonumber(fest.slow) or slow
+    else
+        local _, jobTable = ply:GetJob()
+        local faktor = (tonumber(istable(jobTable) and jobTable.speed or nil) or 100) / 100
+
+        -- Ein Job mit 0 oder einem Unsinnswert soll niemanden festnageln.
+        if faktor <= 0 then faktor = 1 end
+
+        walk = math.Round(walk * faktor)
+        run = math.Round(run * faktor)
+        slow = math.Round(slow * faktor)
+    end
+
+    -- Damit andere Module nachjustieren koennen, etwa fuer eine Verletzung
+    -- oder getragene Last, ohne diese Funktion anfassen zu muessen.
+    local a, b = hook.Run("PD_Speed_Applied", ply, walk, run)
+
+    if isnumber(a) then walk = a end
+    if isnumber(b) then run = b end
+
+    ply:SetWalkSpeed(walk)
+    ply:SetRunSpeed(run)
+
+    -- Heisst SetSlowWalkSpeed. Ein blosses SlowWalkSpeed gibt es auf dem
+    -- Spieler nicht - der Aufruf bricht mit "attempt to call method" ab und
+    -- reisst alles mit, was in derselben Funktion danach kaeme.
+    ply:SetSlowWalkSpeed(slow)
+
+    return walk, run, slow
+end
+
+--[[
+    Eine feste Geschwindigkeit setzen, die Respawn und Jobwechsel uebersteht.
+    Ohne Werte faellt der Spieler auf die Geschwindigkeit seines Jobs zurueck.
+]]
+function PD.Char.SetSpeed(ply, walk, run, slow)
+    if not IsValid(ply) then return end
+
+    if walk or run or slow then
+        ply.PD_Speed = {
+            walk = tonumber(walk) or PD.Char.BaseWalkSpeed,
+            run = tonumber(run) or tonumber(walk) or PD.Char.BaseRunSpeed,
+            slow = tonumber(slow) or PD.Char.BaseSlowWalkSpeed
+        }
+    else
+        ply.PD_Speed = nil
+    end
+
+    return PD.Char.ApplySpeed(ply)
+end
+
+function PD.Char.ClearSpeed(ply)
+    return PD.Char.SetSpeed(ply, nil, nil, nil)
+end
+
+--[[
+    Nachsehen, was gerade gilt und woher es kommt.
+]]
+concommand.Add("pd_speed_info", function(caller, _, args)
+    if IsValid(caller) and not caller:IsAdmin() then return end
+
+    local ply = caller
+
+    if args[1] then
+        ply = player.GetBySteamID(args[1]) or caller
+    end
+
+    if not IsValid(ply) then
+        print("[Tempo] Kein Spieler. Aufruf: pd_speed_info <SteamID>")
+        return
+    end
+
+    local jobID, jobTable = ply:GetJob()
+
+    local function say(text)
+        if IsValid(caller) then caller:PrintMessage(HUD_PRINTCONSOLE, text) else print(text) end
+    end
+
+    say("[Tempo] " .. ply:Nick() .. ", Job " .. tostring(jobID))
+    say("[Tempo] Grundwerte: gehen " .. PD.Char.BaseWalkSpeed
+        .. ", rennen " .. PD.Char.BaseRunSpeed
+        .. ", langsam " .. PD.Char.BaseSlowWalkSpeed)
+    say("[Tempo] Job-Faktor: " .. tostring(istable(jobTable) and jobTable.speed or "-") .. " %")
+    say("[Tempo] Fester Wert am Spieler: "
+        .. (istable(ply.PD_Speed) and "ja" or "nein"))
+    say("[Tempo] Gesetzt: gehen " .. ply:GetWalkSpeed()
+        .. ", rennen " .. ply:GetRunSpeed()
+        .. ", langsam " .. ply:GetSlowWalkSpeed())
+end)
 
 function PLAYER:changeTeam(jobindexTable, force)
     if not jobindexTable then return end
@@ -898,6 +1176,11 @@ function PLAYER:changeTeam(jobindexTable, force)
     self:StripWeapons()
     self:UnSpectate()
 
+    -- Den Job VOR dem Spawn setzen: der PlayerSpawn-Hook sucht den Spawnpunkt
+    -- ueber GetJob. Stand dort noch der alte Job, landete man beim Jobwechsel
+    -- am Spawnpunkt der alten Einheit.
+    self:SetJob(jobindex, jobTable)
+
     if force then
         self:KillSilent()
         self:Spawn()
@@ -907,9 +1190,7 @@ function PLAYER:changeTeam(jobindexTable, force)
     self:SetArmor(jobTable.startarmor or 0)
     self:SetMaxHealth(jobTable.maxhealth or 100)
     self:SetMaxArmor(jobTable.maxarmor or 100)
-    self:SetWalkSpeed(175)
-    self:SetRunSpeed(250)
-    self:SetJob(jobindex, jobTable)
+    PD.Char.ApplySpeed(self)
 
     if PD.Admin and (self:IsAdmin() or (PD.Admin.Ranks and PD.Admin.Ranks[self:GetUserGroup()])) then
         for _, v in SortedPairs(PD.Admin.Equip or {}) do
@@ -917,23 +1198,34 @@ function PLAYER:changeTeam(jobindexTable, force)
         end
     end
 
-    for _, v in SortedPairs(jobTable.equip or {}) do
-        self:Give(v)
+    --[[
+        Auch beim Jobwechsel nur die permanente Ausruestung, genau wie beim
+        Spawn. Die Listen aus Job und Untereinheit werden nicht mehr vergeben -
+        Waffen holt man sich an der Kiste.
+
+        Der Aufruf ist hier keine Doppelung, sondern noetig: ganz oben steht ein
+        StripWeapons, und ohne 'force' folgt kein Spawn. Der Spawn-Hook, der die
+        permanente Ausruestung sonst nachreicht, laeuft dann gar nicht - der
+        Spieler stuende ohne Haende und ohne Erkennungsmarke da.
+    ]]
+    if PD.WB and isfunction(PD.WB.GiveAlways) then
+        PD.WB.GiveAlways(self)
     end
 
-    local jobs = GetJobsTable()
-    local subunit = jobs[jobindexTable.jobunitIndex]
-        and jobs[jobindexTable.jobunitIndex].subunits
-        and jobs[jobindexTable.jobunitIndex].subunits[jobindexTable.jobsubunitIndex]
-
-    for _, v in SortedPairs(subunit and subunit.equip or {}) do
-        self:Give(v)
-    end
+    -- Jobwechsel setzt das gemerkte Model zurück: es gehörte zum alten Job, und
+    -- Bodygroup-Indizes bedeuten je Model etwas anderes.
+    self.PD_Model = nil
+    self.PD_Bodygroups = nil
 
     local mdl = GetFirstModel(jobTable)
+
     if mdl then
         self:SetModel(mdl)
     end
+
+    -- Nach dem Job- und Subunit-Loadout: Module wie Fortbildungen hängen sich hier
+    -- ein, um zusätzliche Ausrüstung zu geben.
+    hook.Run("PD_Loadout_Applied", self, jobTable)
 
     hook.Run("PlayerChangedChar", self)
 end
@@ -959,6 +1251,14 @@ local function SetPlayerPhaseModel(ply)
     local _, jobTable = ply:GetJob()
     local mdl = GetFirstModel(jobTable) or CONFIG.BackModel
 
+    -- Der Spieler behält das Model, das er vorher getragen hat. Bewusst OHNE
+    -- Prüfung gegen die Job-Freigabe: bei Events bekommen Charaktere Models, die
+    -- in keinem Job hinterlegt sind, und die sollen einen Respawn überstehen.
+    -- Beim Jobwechsel wird der Wert geleert, dann greift wieder das Job-Model.
+    if ply.PD_Model and ply.PD_Model ~= "" then
+        mdl = ply.PD_Model
+    end
+
     if mdl then
         ply:SetModel(mdl)
     end
@@ -973,9 +1273,52 @@ local function SetPlayerPhaseModel(ply)
             ply:SetBodygroup(id, val)
         end
     end
+
+    -- Zuletzt, damit Abzeichen (Fortbildungen) eine widersprüchliche
+    -- Umkleide-Auswahl überschreiben statt umgekehrt.
+    hook.Run("PD_Model_Applied", ply)
 end
 
+--[[
+    Die Standardausruestung von Sandbox abschalten.
+
+    Sandbox weist in GM:PlayerSpawn jedem Spieler die Klasse player_sandbox zu,
+    und deren Loadout gibt ohne Bedingung gmod_tool, gmod_camera und
+    weapon_physgun aus - an jeden Spieler, nicht nur an Admins. sbox_weapons 0
+    in der server.cfg sperrt nur die HL2-Waffen, diese drei nicht.
+
+    Das Ganze laeuft in GM:PlayerSpawn und damit nach allen PlayerSpawn-Hooks.
+    Das StripWeapons unten kam also zu frueh, und Kamera, Physgun und Toolgun
+    waren danach wieder da.
+
+    Gibt der Hook true zurueck, wird GM:PlayerLoadout gar nicht erst
+    aufgerufen. Adminwerkzeug und permanente Ausruestung verteilt weiterhin
+    SetModelOnSpawn - das haengt nicht am Sandbox-Loadout.
+]]
+hook.Add("PlayerLoadout", "PD.Char.NoSandboxLoadout", function(ply)
+    return true
+end)
+
 hook.Add("PlayerSpawn", "PD.Char.SetModelOnSpawn", function(ply)
+    -- Das aktuelle Model festhalten, BEVOR es hier überschrieben wird. Damit
+    -- übersteht auch ein Model einen Respawn, das von außen gesetzt wurde -
+    -- etwa für einen Event-Charakter. Beim Jobwechsel wird der Wert geleert.
+    -- Immer übernehmen, nicht nur beim ersten Mal: sonst würde ein später von
+    -- außen gesetztes Model nie nachgezogen und der Respawn brächte den alten
+    -- Stand zurück.
+    local ent = ply:GetNW2Entity("PD.DM.Ragdoll")
+
+        if IsValid(ent) then
+            ent:Remove()
+            ply:SetViewEntity(ply)
+        end
+
+    local current = ply:GetModel()
+
+    if current and current ~= "" then
+        ply.PD_Model = current
+    end
+
     local _, jobTable = ply:GetJob()
 
     local mdl = GetFirstModel(jobTable)
@@ -984,28 +1327,50 @@ hook.Add("PlayerSpawn", "PD.Char.SetModelOnSpawn", function(ply)
     end
 
     ply:StripWeapons()
+    
 
+    -- Adminwerkzeug bleibt: Physgun und Toolgun sind Dienstausruestung, kein
+    -- Loadout. Der Waffenkisten-Hook versucht dasselbe, laeuft dabei aber mit
+    -- ipairs ueber PD.Admin.Equip - und das ist eine Map, ueber die ipairs
+    -- nichts findet. Ohne diese Schleife hier haetten Admins gar nichts.
     if PD.Admin and (ply:IsAdmin() or (PD.Admin.Ranks and PD.Admin.Ranks[ply:GetUserGroup()])) then
         for _, v in SortedPairs(PD.Admin.Equip or {}) do
             ply:Give(v)
         end
     end
 
-    for _, v in SortedPairs(jobTable and jobTable.equip or {}) do
-        ply:Give(v)
+    --[[
+        Gespawnt wird nur mit der permanenten Ausruestung.
+
+        Das ist PD.WB.Always aus dem Waffenkisten-Modul, derzeit Haende und
+        Erkennungsmarke: was man immer traegt, was nichts wiegt und was sich
+        nicht ablegen laesst. Waffen holt man sich an der Kiste - die Listen aus
+        Job und Untereinheit werden beim Spawn bewusst nicht mehr ausgegeben.
+
+        GiveAlways wird hier aufgerufen, obwohl das Waffenkisten-Modul es
+        ebenfalls tut: die Reihenfolge zweier PlayerSpawn-Hooks liegt nicht
+        fest, und diese Funktion soll fuer sich genommen stimmen. Der Aufruf
+        prueft je Klasse auf HasWeapon, ein zweites Mal kostet also nichts.
+    ]]
+    if PD.WB and isfunction(PD.WB.GiveAlways) then
+        PD.WB.GiveAlways(ply)
     end
 
-    local jobs = GetJobsTable()
-    local subunit = jobs[jobTable and jobTable.unit]
-        and jobs[jobTable.unit].subunits
-        and jobs[jobTable.unit].subunits[jobTable.unit]
+    -- Bleibt bestehen, auch wenn hier kein Loadout mehr vergeben wird: das
+    -- Ereignis markiert den Punkt, an dem die Spawn-Ausruestung steht.
+    hook.Run("PD_Loadout_Applied", ply, jobTable)
 
-    for _, v in SortedPairs(subunit and subunit.equip or {}) do
-        ply:Give(v)
-    end
-
+    --[[
+        Erst im naechsten Frame, und das ist der Kern des Ganzen: die
+        Spielerklasse setzt ihre eigenen WalkSpeed/RunSpeed in GM:PlayerSpawn -
+        also nach allen ueber hook.Add angemeldeten PlayerSpawn-Hooks. Wer die
+        Geschwindigkeit hier direkt setzt, sieht sie einen Wimpernschlag spaeter
+        wieder ueberschrieben.
+    ]]
     timer.Simple(0, function()
         if not IsValid(ply) then return end
+
         SetPlayerPhaseModel(ply)
+        PD.Char.ApplySpeed(ply)
     end)
 end)

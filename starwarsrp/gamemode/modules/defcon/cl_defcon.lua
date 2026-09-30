@@ -28,8 +28,8 @@ net.Receive("ChangeDefcon",function()
         })
     end
     
-    chat.AddText(CONFIG:GetConfig("textcolor"),LANG.DEFCON_UI_CHANGED_First..name..LANG.DEFCON_UI_CHANGED_Second..DEFCON.Active.nr..LANG.DEFCON_UI_CHANGED_Third .. "!")
-    if text != "" then Deftext = text chat.AddText(Color(255,0,0),LANG.DEFCON_UI_COMMANDS..": ",CONFIG:GetConfig("textcolor"),text) end
+    chat.AddText(CONFIG:GetConfig("textcolor"),"DEFCON Stufe wurde von "..name.." auf "..DEFCON.Active.nr.." gesetzt" .. "!")
+    if text != "" then Deftext = text chat.AddText(Color(255,0,0),"Befehle"..": ",CONFIG:GetConfig("textcolor"),text) end
 end)
 
 net.Receive("SyncDefcon",function()

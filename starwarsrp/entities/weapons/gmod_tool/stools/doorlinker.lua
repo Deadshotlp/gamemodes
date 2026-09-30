@@ -1,3 +1,5 @@
+AddCSLuaFile()
+print("TOOL LOADED", CLIENT, SERVER)
 TOOL.Name = "#tool.doorlinktool.name"
 TOOL.Category = "P & D"
 TOOL.Command = nil
@@ -23,10 +25,14 @@ end
 
 -- Türen auswählen oder abwählen
 function TOOL:LeftClick(trace)
+    print("LEFT", CLIENT, SERVER, IsFirstTimePredicted())
     if CLIENT then return true end
+    -- if not IsFirstTimePredicted() then return false end
 
     local ent = trace.Entity
-    if not IsValid(ent) or ent:IsPlayer() then return false end
+    if not IsValid(ent) or ent:IsPlayer() then
+        return false
+    end
 
     local ply = self:GetOwner()
     self.SelectedDoors[ply] = self.SelectedDoors[ply] or {}
@@ -40,7 +46,6 @@ function TOOL:LeftClick(trace)
         ply:ChatPrint("Tür hinzugefügt: " .. tostring(ent))
     end
 
-    -- Sync an Client
     net.Start("doorlinktool_update")
         net.WriteUInt(#doors, 8)
         for _, door in ipairs(doors) do
@@ -86,7 +91,11 @@ function TOOL:RightClick(trace)
     ent.SecurityLevel = level
 
     -- Verlinke Türen
-    ent:AddDoors(doors, level)
+    for _, door in ipairs(doors) do
+        if IsValid(door) then
+            ent:AddDoor(door)
+        end
+    end
 
     ply:ChatPrint("ID-Card-Linker gespawnt – " .. #doors .. " Tür(en), Level: " .. level)
 

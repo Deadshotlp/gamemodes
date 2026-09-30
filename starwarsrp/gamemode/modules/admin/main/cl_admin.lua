@@ -3,6 +3,40 @@
 PD.Admin = PD.Admin or {}
 PD.Admin.Job_Edit_Whitelist = PD.Admin.Job_Edit_Whitelist or {"superadmin", "Developer", "Projektleitung", "Projektleitung", "Teamverwaltung"}
 
+-- Registry für die Tabs im Adminmenü. Module tragen sich hier selbst ein, statt
+-- dass die Tabliste in PD.Admin:Menu() von Hand gepflegt werden muss.
+PD.Admin.Tabs = PD.Admin.Tabs or {}
+
+-- id        eindeutiger Schlüssel, auch für den aktiven Tab
+-- name      Beschriftung im Tabreiter
+-- func      func(base) - baut den Inhalt in das übergebene Panel
+-- whitelist optional, Liste erlaubter Usergroups. Ohne Angabe sieht jeder den Tab,
+--           der das Adminmenü öffnen darf.
+-- order     Sortierung, kleinere Werte stehen weiter links
+function PD.Admin:AddTab(id, name, func, whitelist, order)
+    PD.Admin.Tabs[id] = {
+        id = id,
+        name = name,
+        func = func,
+        whitelist = whitelist,
+        order = order or ((table.Count(PD.Admin.Tabs) + 1) * 10)
+    }
+end
+
+function PD.Admin:CanSeeTab(tab)
+    if not tab.whitelist then return true end
+
+    local group = LocalPlayer():GetUserGroup()
+
+    for _, allowed in pairs(tab.whitelist) do
+        if group == allowed then
+            return true
+        end
+    end
+
+    return false
+end
+
 -- Hilfsfunktion: Text-Animation
 local function TextFunctionPanel(panel, str, speed, callback)
     if not IsValid(panel) then return end
@@ -54,7 +88,7 @@ local function PlayerAdminInteract(data, panel)
         surface.DrawRect(PD.W(4), h - 1, w - PD.W(4), 1)
         
         -- Titel
-        draw.DrawText(LANG.ADMIN_MENU_CHAR, "MLIB.18", PD.W(20), h / 2 - PD.H(9), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+        draw.DrawText("Charakter", "MLIB.18", PD.W(20), h / 2 - PD.H(9), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
         
         -- Anzahl
         draw.DrawText(#charadminData .. " Charaktere", "MLIB.12", w - PD.W(15), h / 2 - PD.H(6), PD.Theme.Colors.TextDim, TEXT_ALIGN_RIGHT)
@@ -62,7 +96,7 @@ local function PlayerAdminInteract(data, panel)
 
     -- Charakter-Liste
     for _, char in ipairs(charadminData) do
-        local charBtn = PD.Button(char.name .. " (ID: " .. char.id .. ")", scroll, function()
+        local charBtn = PD.Button(char.name .. " (ID: " .. PD.Char.FormatID(char.id) .. ")", scroll, function()
             -- Detail-Panel für diesen Charakter
             panel:Clear()
             
@@ -77,7 +111,7 @@ local function PlayerAdminInteract(data, panel)
                 surface.DrawRect(0, 0, w, PD.H(3))
                 
                 draw.DrawText("CHARAKTER BEARBEITEN", "MLIB.12", PD.W(15), PD.H(12), PD.Theme.Colors.AccentGray, TEXT_ALIGN_LEFT)
-                draw.DrawText(char.name .. " (ID: " .. char.id .. ")", "MLIB.20", PD.W(15), PD.H(30), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+                draw.DrawText(char.name .. " (ID: " .. PD.Char.FormatID(char.id) .. ")", "MLIB.20", PD.W(15), PD.H(30), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
             end
 
             local detailScroll = PD.Scroll(panel)
@@ -119,14 +153,19 @@ local function PlayerAdminInteract(data, panel)
             idLabel:DockMargin(PD.W(5), PD.H(10), 0, 0)
 
             -- Eingabefelder
+            -- Die ID ist aenderbar: der Server benennt sie in allen Tabellen
+            -- um (PD.Char:RenameCharID). originalid geht beim Speichern mit,
+            -- damit er den Charakter unter seiner bisherigen ID findet.
+            char.originalid = char.originalid or char.id
+
             local idEntry = PD.TextEntry(detailScroll, "ID", char.id, function(val)
-                char.id = val
+                char.id = string.Trim(val or "")
             end)
             idEntry:DockMargin(0, 0, 0, PD.H(5))
             
             local nameLabel = vgui.Create("DLabel", detailScroll)
             nameLabel:Dock(TOP)
-            nameLabel:SetText(LANG.CHAR_UI_NAME)
+            nameLabel:SetText("Name")
             nameLabel:SetFont("MLIB.12")
             nameLabel:SetTextColor(PD.Theme.Colors.TextDim)
             nameLabel:DockMargin(PD.W(5), PD.H(10), 0, 0)
@@ -138,7 +177,7 @@ local function PlayerAdminInteract(data, panel)
             
             local moneyLabel = vgui.Create("DLabel", detailScroll)
             moneyLabel:Dock(TOP)
-            moneyLabel:SetText(LANG.ADMIN_MENU_CREDITS)
+            moneyLabel:SetText("Credits")
             moneyLabel:SetFont("MLIB.12")
             moneyLabel:SetTextColor(PD.Theme.Colors.TextDim)
             moneyLabel:DockMargin(PD.W(5), PD.H(10), 0, 0)
@@ -149,7 +188,7 @@ local function PlayerAdminInteract(data, panel)
             moneyEntry:DockMargin(0, 0, 0, PD.H(15))
 
             -- Aktions-Buttons
-            local saveBtn = PD.Button(LANG.GENERIC_SAVE, detailScroll, function()
+            local saveBtn = PD.Button("Speichern", detailScroll, function()
                 net.Start("PD.Char.Admin")
                 net.WriteString("save")
                 net.WriteString(data.steamid)
@@ -162,7 +201,7 @@ local function PlayerAdminInteract(data, panel)
             saveBtn:SetTall(PD.H(45))
             saveBtn:SetAccentColor(PD.Theme.Colors.StatusActive)
 
-            local setBtn = PD.Button(LANG.ADMIN_MENU_SET, detailScroll, function()
+            local setBtn = PD.Button("Setzen", detailScroll, function()
                 net.Start("PD.Char.Admin")
                 net.WriteString("set")
                 net.WriteString(data.steamid)
@@ -174,7 +213,7 @@ local function PlayerAdminInteract(data, panel)
             setBtn:Dock(TOP)
             setBtn:SetTall(PD.H(45))
 
-            local deleteBtn = PD.Button(LANG.GENERIC_DELETE, detailScroll, function()
+            local deleteBtn = PD.Button("Löschen", detailScroll, function()
                 net.Start("PD.Char.Admin")
                 net.WriteString("delete")
                 net.WriteString(data.steamid)
@@ -206,7 +245,7 @@ local function PlayerAdminInteract(data, panel)
                 surface.SetDrawColor(PD.Theme.Colors.AccentGray)
                 surface.DrawRect(PD.W(4), 0, w - PD.W(4), 1)
                 surface.DrawRect(PD.W(4), h - 1, w - PD.W(4), 1)
-                draw.DrawText(LANG.CHAR_UI_UNIT, "MLIB.18", PD.W(20), h / 2 - PD.H(9), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+                draw.DrawText("Einheit", "MLIB.18", PD.W(20), h / 2 - PD.H(9), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
             end
 
             -- Aktuelle Fraktion Info
@@ -329,7 +368,7 @@ local function PlayerAdminInteract(data, panel)
                 if unit and subunit and job then
                     net.Start("PD.List.AdminChange")
                     net.WriteString(data.steamid)
-                    net.WriteString(char.id)
+                    net.WriteString(char.originalid or char.id)
                     net.WriteString(unit)
                     net.WriteString(subunit)
                     net.WriteString(job)
@@ -373,7 +412,7 @@ function PD.Admin:Menu(wo)
     end
 
     -- Frame erstellen mit neuem Theme
-    AdminmainFrame = PD.Frame("IMPERIAL ADMINISTRATION", PD.W(1100), PD.H(750), true, {
+    AdminmainFrame = PD.Frame("REPUBLIC ADMINISTRATION", PD.W(1100), PD.H(750), true, {
         accent = PD.Theme.Colors.AccentRed,
         grid = true
     })
@@ -386,7 +425,7 @@ function PD.Admin:Menu(wo)
     headerPanel:SetTall(PD.H(60))
     headerPanel:DockMargin(0, 0, 0, PD.H(15))
     
-    local welcomeText = LANG.ADMIN_MENU_WELCOME .. LocalPlayer():Nick() .. "!"
+    local welcomeText = "Willkommen, " .. LocalPlayer():Nick() .. "!"
     local welcomeIndex = 0
     local welcomeDisplayed = ""
     
@@ -499,97 +538,112 @@ function PD.Admin:Menu(wo)
         return tabBtn
     end
 
-    -- Tabs erstellen
-    CreateTab(LANG.ADMIN_MENU_PLAYER_MANAGEMENT, "admin", function(base)
-        -- Header
-        local listHeader = vgui.Create("DPanel", base)
-        listHeader:Dock(TOP)
-        listHeader:SetTall(PD.H(40))
-        listHeader:DockMargin(0, 0, 0, PD.H(10))
-        listHeader.Paint = function(s, w, h)
-            draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.BackgroundDark)
-            surface.SetDrawColor(PD.Theme.Colors.AccentGray)
-            surface.DrawRect(0, 0, w, 1)
-            surface.DrawRect(0, h - 1, w, 1)
-            
-            draw.DrawText("SPIELER DATENBANK", "MLIB.14", PD.W(15), h / 2 - PD.H(7), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
-            draw.DrawText(table.Count(PD.Char.AdminData) .. " Einträge", "MLIB.12", w - PD.W(15), h / 2 - PD.H(6), PD.Theme.Colors.TextDim, TEXT_ALIGN_RIGHT)
-        end
+    -- Tabs aus der Registry erstellen (Registrierungen siehe Dateiende)
+    local sortedTabs = {}
 
-        local plySearch = PD.TextEntry(base, "Spieler suchen...", "")
-        plySearch:Dock(TOP)
-
-        local scroll = PD.Scroll(base)
-
-        net.Start("PD.Char.RequestPlayers")
-        net.SendToServer()
-
-
-        local function listPLayers()
-            local searchString = plySearch:GetValue()
-
-            scroll:GetCanvas():Clear()
-
-            for k, v in pairs(PD.Char.AdminData) do
-                local ply = FindPlayerbyID(v)
-                local isOnline = IsValid(ply)
-                steamworks.RequestPlayerInfo( v )
-                local name = isOnline and (ply:Nick() .. " | Online") or (steamworks.GetPlayerName(v) .. " (Steam) | Offline")
-
-                if string.len(searchString) == 0 or string.find(string.lower(name), string.lower(searchString)) then
-                    local btn = PD.Button(name, scroll, function()
-                        net.Start("PD.Char.RequestPlayerData")
-                        net.WriteString(v)
-                        net.SendToServer()
-
-                        net.Receive("PD.Char.RequestPlayerData", function()
-                            local charData = net.ReadTable()
-
-                            charData.steamid = v
-                            PlayerAdminInteract(charData, rightPanel)
-                        end)
-                    end)
-                    btn:Dock(TOP)
-                    btn:SetTall(PD.H(45))
-                    btn:SetAccentColor(isOnline and PD.Theme.Colors.StatusActive or PD.Theme.Colors.StatusInactive)
-                end
-            end
-        end
-
-        net.Receive("PD.Char.RequestPlayers", function()
-            local tbl = net.ReadTable()
-            PD.Char.AdminData = tbl
-
-            listPLayers()
-        end)
-
-        plySearch.OnChange = function(self)
-            listPLayers()
-        end
-    end)
-
-    for k, v in pairs(PD.Admin.Job_Edit_Whitelist) do
-        if LocalPlayer():GetUserGroup() == v then
-            CreateTab("Jobs", "jobs", function(base)
-                PD.JOBS.AdminMenu(base)
-            end)
-            break
+    for _, tab in pairs(PD.Admin.Tabs) do
+        if PD.Admin:CanSeeTab(tab) then
+            table.insert(sortedTabs, tab)
         end
     end
 
-    CreateTab("Logs", "logs", function(base)
-        PD.LOGS:Menu(base)
-    end)
+    table.sort(sortedTabs, function(a, b) return a.order < b.order end)
 
-    CreateTab("Playerspawns", "spawns", function(base)
-        PlayerSpawnMenu(base)
-    end)
+    for _, tab in ipairs(sortedTabs) do
+        CreateTab(tab.name, tab.id, tab.func)
+    end
 
-    -- Ersten Tab aktivieren
-    if tabs["admin"] then
-        tabs["admin"]:DoClick()
+    -- Ersten verfügbaren Tab aktivieren
+    local firstTab = sortedTabs[1]
+
+    if firstTab and tabs[firstTab.id] then
+        tabs[firstTab.id]:DoClick()
     end
 end
+
+PD.Admin:AddTab("admin", "Spieler-Verwaltung", function(base)
+    -- Header
+    local listHeader = vgui.Create("DPanel", base)
+    listHeader:Dock(TOP)
+    listHeader:SetTall(PD.H(40))
+    listHeader:DockMargin(0, 0, 0, PD.H(10))
+    listHeader.Paint = function(s, w, h)
+        draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.BackgroundDark)
+        surface.SetDrawColor(PD.Theme.Colors.AccentGray)
+        surface.DrawRect(0, 0, w, 1)
+        surface.DrawRect(0, h - 1, w, 1)
+
+        draw.DrawText("SPIELER DATENBANK", "MLIB.14", PD.W(15), h / 2 - PD.H(7), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+        draw.DrawText(table.Count(PD.Char.AdminData) .. " Einträge", "MLIB.12", w - PD.W(15), h / 2 - PD.H(6), PD.Theme.Colors.TextDim, TEXT_ALIGN_RIGHT)
+    end
+
+    local plySearch = PD.TextEntry(base, "Spieler suchen...", "")
+    plySearch:Dock(TOP)
+
+    local scroll = PD.Scroll(base)
+
+    net.Start("PD.Char.RequestPlayers")
+    net.SendToServer()
+
+
+    local function listPLayers()
+        local searchString = plySearch:GetValue()
+
+        scroll:GetCanvas():Clear()
+
+        for k, v in pairs(PD.Char.AdminData) do
+            local ply = FindPlayerbyID(v)
+            local isOnline = IsValid(ply)
+            steamworks.RequestPlayerInfo( v )
+            local name = isOnline and (ply:Nick() .. " | Online") or (steamworks.GetPlayerName(v) .. " (Steam) | Offline")
+
+            if string.len(searchString) == 0 or string.find(string.lower(name), string.lower(searchString)) then
+                local btn = PD.Button(name, scroll, function()
+                    net.Start("PD.Char.RequestPlayerData")
+                    net.WriteString(v)
+                    net.SendToServer()
+
+                    net.Receive("PD.Char.RequestPlayerData", function()
+                        local charData = net.ReadTable()
+
+                        charData.steamid = v
+                        PlayerAdminInteract(charData, base)
+                    end)
+                end)
+                btn:Dock(TOP)
+                btn:SetTall(PD.H(45))
+                btn:SetAccentColor(isOnline and PD.Theme.Colors.StatusActive or PD.Theme.Colors.StatusInactive)
+            end
+        end
+    end
+
+    net.Receive("PD.Char.RequestPlayers", function()
+        local tbl = net.ReadTable()
+        PD.Char.AdminData = tbl
+
+        listPLayers()
+    end)
+
+    plySearch.OnChange = function(self)
+        listPLayers()
+    end
+end, nil, 10)
+
+PD.Admin:AddTab("jobs", "Jobs", function(base)
+    PD.JOBS.AdminMenu(base)
+end, PD.Admin.Job_Edit_Whitelist, 20)
+
+PD.Admin:AddTab("logs", "Logs", function(base)
+    PD.LOGS:Menu(base)
+end, nil, 30)
+
+PD.Admin:AddTab("spawns", "Playerspawns", function(base)
+    PlayerSpawnMenu(base)
+end, nil, 40)
+
+PD.Admin:AddTab("armor", "Armor System ", function(base)
+    PD.Armor:Menu(base)
+end, nil, 50)
 
 concommand.Add("pd_admin_print_data", function()
     PrintTable(PD.Char.AdminData[Entity(1):SteamID64()])

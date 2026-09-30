@@ -17,6 +17,28 @@ PD.Char.UserGroupChar = {
     ["superadmin"] = 5
 }
 
+--[[
+    Anzeige der Charakter-ID: immer mit "CT-" davor. Gespeichert wird die ID
+    ohne Praefix - nur Anzeigen (RP-Name, Menues, ID-Karte) gehen hier durch.
+]]
+PD.Char.IDPrefix = "CT-"
+
+function PD.Char.FormatID(id)
+    id = tostring(id or "")
+    if id == "" then return id end
+
+    if string.upper(string.sub(id, 1, #PD.Char.IDPrefix)) == PD.Char.IDPrefix then
+        return id
+    end
+
+    return PD.Char.IDPrefix .. id
+end
+
+-- Anzeigename "CT-95-3404 Name" - so steht er im NW-String rpname.
+function PD.Char.BuildRPName(id, name)
+    return PD.Char.FormatID(id) .. " " .. tostring(name or "")
+end
+
 PD.Char.OpenMenuBind = KEY_F6 -- Charaktermenü öffnen
 PD.Char.OpenAdminMenuBind = KEY_F7 -- Adminmenü öffnen
 

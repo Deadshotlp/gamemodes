@@ -6,6 +6,7 @@ end
 hook.Add("CanPlayerSuicide", "BlockSuicide", BlockSuicide)
 
 util.AddNetworkString("PD.Notify")
+util.AddNetworkString("PD.Announce")
 util.AddNetworkString("PD.OpenYoutube")
 
 hook.Add("PlayerInitialSpawn", "PD.Notify", function(ply)

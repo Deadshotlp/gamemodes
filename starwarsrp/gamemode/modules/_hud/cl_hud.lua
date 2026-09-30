@@ -5,7 +5,7 @@ local wh = 0
 local weaponsTbl = {
     ["weapon_physgun"] = true,
     ["gmod_tool"] = true,
-    ["gmod_camera"] = true,
+    ["gmod_camera"] = false,
     ["datapad"] = true,
     ["mhands"] = true,
     ["hackingtool"] = true,
@@ -39,7 +39,7 @@ end
 local lastEyeAngles = Angle(0, 0, 0)
 
 -- Base HUD - Star Wars Andor Imperial Style (Zentral über PD.Theme)
-AddSmoothElement(PD.W(20), ScrH() - PD.H(125), PD.W(350), PD.H(105), function(smoothX, smoothY)
+AddSmoothElement(PD.W(20), ScrH() - PD.H(125), PD.W(500), PD.H(105), function(smoothX, smoothY)
     if PD.FOV.thirdPerson then return end
     
     local ply = LocalPlayer()
@@ -53,9 +53,10 @@ AddSmoothElement(PD.W(20), ScrH() - PD.H(125), PD.W(350), PD.H(105), function(sm
 
     -- Id Entfernen, wenn showid true ist
     if jobTbl and jobTbl.showid then
-        -- es werden die ersten 7 zeichen entfernt 00-0000
-        local name = string.sub(rpName, 8)
-        rpName = name
+        -- Die ID ist das erste Wort ("CT-95-3404 Name"). Frueher wurden fest
+        -- 7 Zeichen abgeschnitten - bei anderen ID-Laengen und mit dem
+        -- CT-Praefix stimmte das nicht.
+        rpName = string.match(rpName, "^%S+%s+(.+)$") or rpName
     end
 
     -- Text-Breiten berechnen
@@ -66,7 +67,7 @@ AddSmoothElement(PD.W(20), ScrH() - PD.H(125), PD.W(350), PD.H(105), function(sm
     surface.SetFont("MLIB.14")
     local unitW, unitH = surface.GetTextSize(unitName)
 
-    local panelW = math.max(nameW, jobW, unitW) + PD.W(50)
+    local panelW = math.max(nameW, jobW + unitW) + PD.W(50)
     local panelH = PD.H(105)
 
     -- Panel mit zentralem Theme zeichnen
@@ -110,7 +111,7 @@ AddSmoothElement(PD.W(20), ScrH() - PD.H(125), PD.W(350), PD.H(105), function(sm
 
     -- Einheit (wenn vorhanden)
     if unitName and unitName ~= "" then
-        draw.DrawText(unitName, "MLIB.14", smoothX + PD.W(15), smoothY + PD.H(70), PD.Theme.Colors.AccentGray, TEXT_ALIGN_LEFT)
+        draw.DrawText(unitName, "MLIB.14", smoothX + jobW + PD.W(20), smoothY + PD.H(50), PD.Theme.Colors.AccentGray, TEXT_ALIGN_LEFT)
     end
 
     -- Imperial Ecken-Dekor (oben rechts)
@@ -124,7 +125,13 @@ AddSmoothElement(PD.W(20), ScrH() - PD.H(125), PD.W(350), PD.H(105), function(sm
     surface.DrawLine(smoothX + panelW - 1, smoothY + panelH - cornerSize, smoothX + panelW - 1, smoothY + panelH)
 
     -- Status-Indikator Punkt
-    PD.DrawStatusIndicator(smoothX + panelW - PD.W(18), smoothY + PD.H(12), PD.W(8), PD.Theme.Colors.AccentRed, false)
+    PD.DrawStatusIndicator(smoothX + panelW - PD.W(18), smoothY + PD.H(17), PD.W(8), PD.Theme.Colors.AccentRed, false)
+
+    surface.SetDrawColor(PD.Theme.Colors.AccentGreen)
+    surface.DrawRect(smoothX + PD.W(16), smoothY + PD.H(71), (panelW - PD.W(32)) * math.Clamp(LocalPlayer():Health() / LocalPlayer():GetMaxHealth(), 0, 1), PD.H(23))
+
+    surface.SetDrawColor(PD.Theme.Colors.AccentGray)
+    surface.DrawOutlinedRect(smoothX + PD.W(15), smoothY + PD.H(70), panelW - PD.W(30), PD.H(25), PD.H(2))
 end)
 
 -- EyeTrace Player HUD - Star Wars Andor Imperial Style (Zentral über PD.Theme)
@@ -135,9 +142,25 @@ AddSmoothElement(PD.W(20), ScrH() - PD.H(200), PD.W(280), PD.H(55), function(smo
     local trace = ply:GetEyeTrace()
     local ent = trace.Entity
     if not IsValid(ent) or ent == ply then return end
-    if not ent:IsPlayer() then return end
-    
-    local name = PD.HUD.GetKnownPlayers(ent:SteamID64())
+
+    --[[
+        Spieler oder die Leiche eines Spielers. Vorher stand hier
+        'not ent:GetClass() == "prop_ragdoll"' - das ist immer false, der
+        Leichen-Zweig war damit tot. In einer frueheren Fassung lief er und
+        brach bei Leichen ohne (gueltigen) Besitzer mit :Nick() auf NULL ab.
+    ]]
+    if ent:GetClass() == "prop_ragdoll" then
+        local owner = ent:GetNW2Entity("PD.DM.RagdollOwner")
+        if not IsValid(owner) or not owner:IsPlayer() then return end
+
+        ent = owner
+    elseif not ent:IsPlayer() then
+        return
+    end
+
+    local name = ent:Nick()
+
+    --local name = --PD.HUD.GetKnownPlayers(ent:SteamID())
     
     -- Target Job holen (wenn bekannt)
     local targetJobID, targetJobTbl = ent:GetJob()
@@ -193,7 +216,7 @@ AddSmoothElement(ScrW() / 2 - PD.W(250), ScrH() - PD.H(110), PD.W(500), PD.H(90)
     local compassY = smoothY + PD.H(20)
     local curveDepth = PD.H(25)
     local scale = 5
-    local directions = {"N","NE","E","SE","S","SW","W","NW"}
+    local directions = {"N","NW","W","SW","S","SE","E","NE"}
 
     for i = -180, 180, 5 do
         local rel = math.AngleDifference(i, yaw)
@@ -205,21 +228,21 @@ AddSmoothElement(ScrW() / 2 - PD.W(250), ScrH() - PD.H(110), PD.W(500), PD.H(90)
             local isMajor = i % 45 == 0
 
             surface.SetDrawColor(255, 255, 255, alpha)
-            surface.DrawRect(x, compassY + PD.H(25) + offsetY, PD.W(1), isMajor and PD.H(15) or PD.H(8))
+            surface.DrawRect(x, compassY + PD.H(25) + offsetY, PD.W(2.5), isMajor and PD.H(15) or PD.H(8))
 
             if isMajor then
                 local ang = math.NormalizeAngle(i - 90)
                 local idx = math.floor((ang + 180) / 45) + 1
                 local dir = directions[idx]
                 if dir then
-                    draw.SimpleText(dir, "MLIB.20", x, compassY + offsetY, Color(255, 255, 255, alpha), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+                    draw.SimpleText(dir, "MLIB.25", x, compassY + offsetY, Color(255, 255, 255, alpha), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
                 end
             end
         end
     end
 
     surface.SetDrawColor(DEFCON:GetColor())
-    surface.DrawLine(compassX + compassWidth / 2, compassY + PD.H(10), compassX + compassWidth / 2, compassY + PD.H(60))
+    surface.DrawRect(compassX + compassWidth / 2, compassY + PD.H(10), PD.W(2.5), PD.H(50))
 end)
 
 -- Waffen HUD - Star Wars Andor Imperial Style (Zentral über PD.Theme)
@@ -233,7 +256,16 @@ AddSmoothElement(ScrW() - PD.W(20), ScrH() - PD.H(95), PD.W(0), PD.H(75), functi
         local clip = wep:Clip1()
         local ammo = ply:GetAmmoCount(wep:GetPrimaryAmmoType())
 
-        if not wep:GetMaxClip1() or wep:GetMaxClip1() <= 0 then
+        -- ArcCW-Unterlaufwerfer (UGL): eigenes Magazin (Clip2) und eigener
+        -- Munitionstyp, wie ArcCWs eigenes HUD es anzeigt.
+        local inUBGL = wep.ArcCW and wep.GetInUBGL and wep:GetInUBGL()
+
+        if inUBGL then
+            clip = wep:Clip2()
+
+            local ubglAmmo = wep:GetBuff_Override("UBGL_Ammo")
+            ammo = ubglAmmo and ply:GetAmmoCount(ubglAmmo) or 0
+        elseif not wep:GetMaxClip1() or wep:GetMaxClip1() <= 0 then
             return
         end
 
@@ -246,7 +278,52 @@ AddSmoothElement(ScrW() - PD.W(20), ScrH() - PD.H(95), PD.W(0), PD.H(75), functi
         surface.SetFont("MLIB.25")
         local ammoW, ammoH = surface.GetTextSize("/" .. ammo)
 
-        local totalW = clipW + ammoW + PD.W(35)
+        surface.SetFont("MLIB.12")
+
+        local firemode = ""
+        local firemodes = wep.Firemodes or nil
+
+        if wep and wep.GetFireMode then
+            firemode = wep:GetFireMode()
+        end
+
+        local firetext = "EINZELFEUER"
+
+        -- Nicht jede Waffe mit Firemodes-Tabelle hat einen Eintrag fuer den
+        -- aktuellen Index (oder GetFireMode ueberhaupt).
+        local fm = istable(firemodes) and firemodes[firemode] or nil
+
+        if istable(fm) then
+            if fm.Mode == 0 then
+                firetext = "GESICHERT"
+            elseif fm.Mode == 1 then
+                firetext = "EINZELFEUER"
+            elseif fm.Mode == 2 then
+                firetext = "DAUERFEUER"
+            elseif fm.Mode == -3 then
+                firetext = "BURSTFEUER"
+            end
+
+            if fm.PrintName then
+                firetext = firetext .. " (" .. tostring(fm.PrintName) .. ")"
+            end
+        end
+
+        if inUBGL then
+            local ubglName = wep:GetBuff_Override("UBGL_PrintName")
+            firetext = "UNTERLAUF" .. (ubglName and (" (" .. tostring(ubglName) .. ")") or "")
+        end
+
+        local firetextW, firetextH = surface.GetTextSize(firetext)
+        local w_modifier = 0
+
+        if ammoW + clipW > firetextW then
+            w_modifier = ammoW + clipW
+        else
+            w_modifier = firetextW
+        end
+
+        local totalW = w_modifier + PD.W(35)
         local panelH = PD.H(75)
         smoothX = smoothX - totalW
 
@@ -285,23 +362,42 @@ AddSmoothElement(ScrW() - PD.W(20), ScrH() - PD.H(95), PD.W(0), PD.H(75), functi
         -- Reserve Munition (kleinere Zahl mit Trennstrich)
         draw.DrawText("/" .. ammo, "MLIB.25", smoothX + PD.W(12) + clipW + PD.W(5), smoothY + PD.H(30), PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
 
-        local firemode = ""
+        -- local firemode = ""
+        -- local firemodes = wep.Firemodes or {}
 
-        if wep and wep.GetFireMode then
-            firemode = wep:GetFireMode()
-        end
+        -- if wep and wep.GetFireMode then
+        --     PrintTable(wep.Firemodes)
 
-        local firetext = ""
+        --     print(wep:GetFireMode())
 
-        if firemode == 1 then
-            firetext = "DAUERFEUER"
-        elseif firemode == 2 then
-            firetext = "BURSTFEUER"
-        elseif firemode == 3 then
-            firetext = "EINZELFEUER"
-        elseif firemode == 4 then
-            firetext = "GESICHERT"
-        end
+        --     firemode = wep:GetFireMode()
+        -- end
+
+        -- local firetext = ""
+
+        -- if firemodes[firemode].Mode == 0 then
+        --     firetext = "GESICHERT"
+        -- elseif firemodes[firemode].Mode == 1 then
+        --     firetext = "EINZELFEUER"
+        -- elseif firemodes[firemode].Mode == 2 then
+        --     firetext = "DAUERFEUER"
+        -- elseif firemodes[firemode].Mode == 3 then
+        --     firetext = "BURSTFEUER"
+        -- end
+
+        -- if firemodes[firemode].PrintName then
+        --     firetext = firetext .. " (" .. firemodes[firemode].PrintName .. ")"
+        -- end
+
+        -- if firemode == 1 then
+        --     firetext = "DAUERFEUER"
+        -- elseif firemode == 2 then
+        --     firetext = "BURSTFEUER"
+        -- elseif firemode == 3 then
+        --     firetext = "EINZELFEUER"
+        -- elseif firemode == 4 then
+        --     firetext = "GESICHERT"
+        -- end
 
         -- "AMMO" Label
         PD.DrawLabel(firetext, "MLIB.12", smoothX + PD.W(12), smoothY + panelH - PD.H(18))
@@ -352,9 +448,9 @@ hook.Add("HUDPaint", "PD.GamemodeHUD", function()
     end
 
     -- Mittelpunkt
-    -- if PD.HUD.ShowPoint then
-    --     draw.RoundedBox(100, ScrW() / 2 - PD.W(1), ScrH() / 2 - PD.H(1), PD.W(2), PD.H(2), Color(255, 255, 255))
-    -- end
+    if PD.HUD.ShowPoint then
+        draw.RoundedBox(100, ScrW() / 2 - PD.W(1), ScrH() / 2 - PD.H(1), PD.W(2), PD.H(2), Color(255, 255, 255))
+    end
     -- Letzte EyeAngles merken
     lastEyeAngles = eyeAngles
 end)
@@ -363,7 +459,13 @@ local dis = {
     ["CHudHealth"]              = true,
     ["CHudBattery"]             = true,
     ["CHudAmmo"]                = true,
-    ["CHudSecondaryAmmo"]       = true
+    ["CHudSecondaryAmmo"]       = true,
+
+    -- Die Waffenauswahl der Engine. Der eigene Selector in
+    -- cl_weaponselector.lua blockiert ihre Tasten bereits; das hier sorgt
+    -- dafuer, dass sie auch dann nicht auftaucht, wenn sie doch einmal
+    -- ausgeloest wird.
+    ["CHudWeaponSelection"]     = true
 }
 
 local function Disabled(r)

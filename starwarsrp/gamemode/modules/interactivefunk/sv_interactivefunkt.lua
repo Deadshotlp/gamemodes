@@ -81,7 +81,10 @@ net.Receive("PD.Funk:RequestOpenMenu", function(_, ply)
     net.Send(ply)
 end)
 
-concommand.Add("pd_funk_print", function()
+-- Serverbefehle kann jeder Client ausfuehren: nur Konsole und Superadmins.
+concommand.Add("pd_funk_print", function(ply)
+    if IsValid(ply) and not ply:IsSuperAdmin() then return end
+
     PrintTable(ChatStore)
 end)
 

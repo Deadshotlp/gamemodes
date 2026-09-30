@@ -3,6 +3,7 @@ AddCSLuaFile("shared.lua")
 include('shared.lua')
 
 util.AddNetworkString("PD.VD:OpenMenu")
+util.AddNetworkString("PD.VD:Sync")
 
 function ENT:Initialize()
 	self.Entity:SetModel("models/reizer_props/srsp/sci_fi/console_03/console_03.mdl")

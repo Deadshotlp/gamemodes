@@ -67,7 +67,7 @@ PD.SQUAD.Interactions = {
     ["player"] = {
         [1] = {
             id = "invite_to_squad",
-            name = LANG.SQUAD_INTERACTION_INVITE,
+            name = "In Einheit einladen",
             icon = nil,
             func = function(ply1, ply2)
                 net.Start("PD.SQUAD.UpdateSquad")
@@ -79,7 +79,7 @@ PD.SQUAD.Interactions = {
         },
         [2] = {
             id = "remove_from_squad",
-            name = LANG.SQUAD_INTERACTION_REMOVE,
+            name = "Aus Einheit entfernen",
             icon = nil,
             func = function(ply1, ply2)
                 net.Start("PD.SQUAD.UpdateSquad")
@@ -92,7 +92,7 @@ PD.SQUAD.Interactions = {
         },
         [3] = {
             id = "squad_create",
-            name = LANG.SQUAD_INTERACTION_CREATE,
+            name = "Einheit erstellen",
             icon = nil,
             func = function(ply1, ply2)
                 PD.SQUAD.OpenInterface()
@@ -201,14 +201,14 @@ net.Receive("PD.SQUAD.UpdateSquad", function()
     end
 end)
 
-AddSmoothElement(PD.W(20), ScrH() / 2 - PD.H(250) / 2, PD.W(280), PD.H(350), function(smoothX, smoothY)
+AddSmoothElement(PD.W(20), ScrH() / 2 - PD.H(250) / 2, PD.W(200), PD.H(350), function(smoothX, smoothY)
     if PD.FOV.thirdPerson then return end
     if not squad.show_in_hud then return end
 
     local ply = LocalPlayer()
     surface.SetFont("MLIB.24")
     local nameW, nameH = surface.GetTextSize(squad.name)
-    local panelW = PD.W(280)
+    local panelW = PD.W(200)
     local panelH = PD.H(350)
 
     -- Hintergrund Panel

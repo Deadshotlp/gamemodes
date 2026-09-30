@@ -1,4 +1,7 @@
 include("shared.lua")
+PD = PD or {}
+PD.VD = PD.VD or {}
+
 local imgui = include("library/cl_imgui.lua")
 
 local SpawnPos = {}

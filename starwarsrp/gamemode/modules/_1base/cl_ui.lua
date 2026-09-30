@@ -31,7 +31,7 @@ PD.Theme.Colors = {
     
     -- Akzentfarben (Imperial)
     AccentGray = Color(120, 120, 130, 200),
-    AccentRed = Color(178, 30, 30, 255),
+    AccentRed = Color(30, 90, 178, 255),
     AccentGreen = Color(45, 140, 50, 255),
     AccentBlue = Color(60, 100, 160, 255),
     AccentOrange = Color(255, 165, 0, 255),
@@ -45,7 +45,7 @@ PD.Theme.Colors = {
     
     -- Status
     StatusActive = Color(45, 140, 50, 255),
-    StatusInactive = Color(178, 30, 30, 255),
+    StatusInactive = Color(30, 90, 178, 255),
     StatusWarning = Color(255, 165, 0, 255),
     StatusCritical = Color(200, 0, 0, 255),
     
@@ -290,6 +290,30 @@ end
     local content = frame:GetContentPanel()
     -- Füge Elemente zum content hinzu
 ]]
+--[[
+    PD.ClearFrame - Inhalt eines DFrame leeren.
+
+    Ersatz fuer frame:Clear(). Clear entfernt auch die internen Kinder des
+    DFrame (Schliessen-, Min- und Max-Button, Titel); beim naechsten Layout
+    greift dframe.lua:246 dann auf ein NULL Panel zu.
+]]
+function PD.ClearFrame(frame)
+    if not IsValid(frame) then return end
+
+    local keep = {
+        [frame.btnClose or false] = true,
+        [frame.btnMaxim or false] = true,
+        [frame.btnMinim or false] = true,
+        [frame.lblTitle or false] = true,
+    }
+
+    for _, child in ipairs(frame:GetChildren()) do
+        if not keep[child] then
+            child:Remove()
+        end
+    end
+end
+
 function PD.Frame(title, w, h, showClose, config)
     config = config or {}
     
@@ -451,9 +475,11 @@ function PD.Button(text, parent, onClick, config)
     btn._font = config.font or "MLIB.16"
     btn._hideBox = config.hideBox or false
     btn._arrow = config.arrow or false
+    btn._bgdeactivate = config.bgDeactivate or false
     
     btn.Paint = function(self, w, h)
         if self._hideBox then return end
+        if self._bgdeactivate then return end
 
         local hover = self:IsHovered() and not self._disabled
         self._hover = Lerp(FrameTime() * 12, self._hover, (hover or self._active) and 1 or 0)
@@ -463,15 +489,18 @@ function PD.Button(text, parent, onClick, config)
         if self._disabled then
             bgColor = Color(30, 30, 35, 200)
         end
-        draw.RoundedBox(0, 0, 0, w, h, bgColor)
-        
+
+        if !self._bgdeactivate then
+            draw.RoundedBox(0, 0, 0, w, h, bgColor)
+        end
+    
         -- Linke Akzentlinie (erscheint bei Hover)
         local accentW = PD.W(3) * self._hover
         if accentW > 0.5 then
             surface.SetDrawColor(self._accentColor)
             surface.DrawRect(0, 0, accentW, h)
         end
-        
+    
         -- Untere Linie
         surface.SetDrawColor(PD.Theme.Colors.AccentGray.r, PD.Theme.Colors.AccentGray.g, PD.Theme.Colors.AccentGray.b, 50 + self._hover * 100)
         surface.DrawRect(0, h - 1, w, 1)
@@ -481,7 +510,7 @@ function PD.Button(text, parent, onClick, config)
         if self._icon then
             textX = PD.W(40)
         end
-        
+    
         local textColor = self._disabled and PD.Theme.Colors.TextMuted or PD.LerpColor(PD.Theme.Colors.TextDim, PD.Theme.Colors.Text, self._hover)
         draw.DrawText(self._text, self._font, textX, h / 2 - PD.H(8), textColor, TEXT_ALIGN_LEFT)
         
@@ -1482,6 +1511,247 @@ net.Receive("PD.Notify", function()
 end)
 
 -- ============================================
+-- SERVER ANNOUNCEMENTS
+-- ============================================
+--[[
+    Grosse Durchsage in der Bildschirmmitte, leicht nach oben versetzt.
+
+    Aufgerufen wird sie ueber PD.Announce (sh_ui.lua) - von Server und Client
+    gleich. Hier liegt nur die Darstellung.
+
+        PD.Announce("Titel", "Inhalt")
+        PD.Announce("Titel", "Inhalt", Color(200, 60, 60), 12)
+        PD.Announce({
+            title    = "ALARMSTUFE ROT",
+            text     = "Alle Einheiten sammeln sich am Hangar.",
+            color    = Color(200, 60, 60),      -- Farbe des Randes
+            duration = 12,                      -- Anzeigedauer in Sekunden
+            sound    = "buttons/button17.wav",  -- optional
+            pulse    = true,                    -- optional, pulsierender Rand
+        })
+
+    Mehrere Durchsagen stapeln sich untereinander, die aelteste oben. Mehr als
+    ANN_MAX gleichzeitig gibt es nicht - die aelteste weicht der neuen.
+]]
+
+local announcements = {}
+
+local ANN_MAX       = 3      -- gleichzeitig sichtbare Durchsagen
+local ANN_ANCHOR    = 0.20   -- Mittelpunkt des Stapels, Anteil von ScrH
+local ANN_SLIDE_IN  = 0.35
+local ANN_SLIDE_OUT = 0.45
+local ANN_MAXWIDTH  = 560    -- in 1920er-Referenz, siehe PD.W
+
+local ANN_FONT_TITLE = "MLIB.26"
+local ANN_FONT_TEXT  = "MLIB.19"
+
+local function annFade(col, alpha)
+    return Color(col.r, col.g, col.b, (col.a or 255) * alpha)
+end
+
+-- Zeilenumbruch und Groesse. Wird nur neu berechnet, wenn sich die Aufloesung
+-- geaendert hat - HUDPaint laeuft jeden Frame.
+local function annBuild(a)
+    if a.builtW == ScrW() and a.builtH == ScrH() then return end
+    a.builtW, a.builtH = ScrW(), ScrH()
+
+    local maxW = PD.W(ANN_MAXWIDTH)
+    local inner = maxW - PD.W(40)
+
+    a.lines = {}
+    for _, para in ipairs(string.Explode("\n", a.text or "")) do
+        if para == "" then
+            table.insert(a.lines, "")
+            continue
+        end
+
+        for _, line in ipairs(PD.WrapText(para, inner, ANN_FONT_TEXT)) do
+            table.insert(a.lines, line)
+        end
+    end
+
+    -- Breite an den laengsten Text anpassen, aber nie ueber maxW
+    local widest = 0
+    if a.title ~= "" then
+        surface.SetFont(ANN_FONT_TITLE)
+        widest = (surface.GetTextSize(a.title))
+    end
+
+    surface.SetFont(ANN_FONT_TEXT)
+    for _, line in ipairs(a.lines) do
+        widest = math.max(widest, (surface.GetTextSize(line)))
+    end
+
+    a.w = math.Clamp(widest + PD.W(50), PD.W(280), maxW)
+
+    a.padY  = PD.H(16)
+    a.barH  = PD.H(4)
+    a.accH  = PD.H(3)
+    a.lineH = PD.H(24)
+
+    a.h = a.accH + a.padY + (#a.lines * a.lineH) + a.padY + a.barH
+    if a.title ~= "" then
+        a.h = a.h + PD.H(32) + PD.H(10)
+    end
+end
+
+local function annDraw(a, y, now)
+    local elapsed   = now - a.start
+    local remaining = a.duration - elapsed
+
+    -- Rein von unten, raus nach oben - beides mit Ausblenden
+    local alpha, offset = 1, 0
+    if elapsed < ANN_SLIDE_IN then
+        local p = elapsed / ANN_SLIDE_IN
+        p = 1 - math.pow(1 - p, 3)
+        alpha  = p
+        offset = (1 - p) * PD.H(30)
+    elseif remaining < ANN_SLIDE_OUT then
+        local p = math.Clamp(remaining / ANN_SLIDE_OUT, 0, 1)
+        alpha  = p
+        offset = (1 - p) * -PD.H(20)
+    end
+
+    local accent = a.color
+    if a.pulse then
+        local pulse = math.sin(now * 6) * 0.25 + 0.75
+        accent = Color(
+            math.Clamp(accent.r * pulse + 40, 0, 255),
+            math.Clamp(accent.g * pulse, 0, 255),
+            math.Clamp(accent.b * pulse, 0, 255),
+            accent.a or 255
+        )
+    end
+
+    local x = (ScrW() - a.w) / 2
+    y = y + offset
+
+    local w, h = a.w, a.h
+
+    -- Hintergrund
+    draw.RoundedBox(0, x, y, w, h, annFade(PD.Theme.Colors.Background, alpha))
+
+    -- Rand in der uebergebenen Farbe
+    surface.SetDrawColor(annFade(accent, alpha))
+    surface.DrawRect(x, y, w, a.accH)                      -- Akzentlinie oben
+    surface.DrawOutlinedRect(x, y, w, h, PD.BorderWidth.Normal)
+
+    -- Imperial Ecken-Dekor
+    PD.DrawCorners(x, y, w, h, annFade(PD.Theme.Colors.AccentGray, alpha * 0.8))
+
+    local ty = y + a.accH + a.padY
+
+    if a.title ~= "" then
+        draw.DrawText(a.title, ANN_FONT_TITLE, x + w / 2, ty,
+            annFade(PD.Theme.Colors.TextHighlight, alpha), TEXT_ALIGN_CENTER)
+        ty = ty + PD.H(32)
+
+        -- Trennlinie unter dem Titel
+        surface.SetDrawColor(annFade(accent, alpha * 0.5))
+        surface.DrawRect(x + PD.W(25), ty, w - PD.W(50), 1)
+        ty = ty + PD.H(10)
+    end
+
+    for _, line in ipairs(a.lines) do
+        if line ~= "" then
+            draw.DrawText(line, ANN_FONT_TEXT, x + w / 2, ty,
+                annFade(PD.Theme.Colors.Text, alpha), TEXT_ALIGN_CENTER)
+        end
+        ty = ty + a.lineH
+    end
+
+    -- Restlaufzeit als Balken am unteren Rand
+    local left = math.Clamp(remaining / a.duration, 0, 1)
+    surface.SetDrawColor(annFade(accent, alpha))
+    surface.DrawRect(x, y + h - a.barH, w * left, a.barH)
+end
+
+--[[
+    PD.ShowAnnouncement - stellt eine Durchsage dar (nur Client).
+
+    Normalerweise nicht direkt aufrufen, sondern PD.Announce nutzen: das geht
+    von beiden Realms und landet clientseitig hier.
+]]
+function PD.ShowAnnouncement(cfg)
+    cfg = cfg or {}
+
+    local a = {
+        title    = tostring(cfg.title or ""),
+        text     = tostring(cfg.text or cfg.content or ""),
+        color    = IsColor(cfg.color) and cfg.color or PD.Theme.Colors.AccentRed,
+        duration = math.Clamp(tonumber(cfg.duration) or 8, 2, 120),
+        pulse    = cfg.pulse and true or false,
+        start    = CurTime(),
+    }
+
+    if cfg.sound and cfg.sound ~= "" then
+        surface.PlaySound(cfg.sound)
+    end
+
+    table.insert(announcements, a)
+    while #announcements > ANN_MAX do
+        table.remove(announcements, 1)
+    end
+
+    return a
+end
+
+-- Alle laufenden Durchsagen sofort ausblenden
+function PD.ClearAnnouncements()
+    announcements = {}
+end
+
+hook.Add("HUDPaint", "PD.Announce.Draw", function()
+    if #announcements == 0 then return end
+    if not PD.Theme then return end
+
+    local now = CurTime()
+
+    for i = #announcements, 1, -1 do
+        if now - announcements[i].start > announcements[i].duration then
+            table.remove(announcements, i)
+        end
+    end
+
+    if #announcements == 0 then return end
+
+    -- Der Stapel wird um den Ankerpunkt herum zentriert, damit er beim
+    -- Hinzukommen einer zweiten Durchsage nicht nach unten wegwaechst.
+    local gap, total = PD.H(10), 0
+    for _, a in ipairs(announcements) do
+        annBuild(a)
+        total = total + a.h + gap
+    end
+    total = total - gap
+
+    local y = ScrH() * ANN_ANCHOR - total / 2
+    for _, a in ipairs(announcements) do
+        annDraw(a, y, now)
+        y = y + a.h + gap
+    end
+end)
+
+net.Receive("PD.Announce", function()
+    PD.ShowAnnouncement({
+        title    = net.ReadString(),
+        text     = net.ReadString(),
+        color    = net.ReadColor(),
+        duration = net.ReadFloat(),
+        sound    = net.ReadString(),
+        pulse    = net.ReadBool(),
+    })
+end)
+
+concommand.Add("pd_test_announce", function(_, _, args)
+    PD.Announce({
+        title    = args[1] or "TESTDURCHSAGE",
+        text     = args[2] or "Dies ist eine Testdurchsage ueber mehrere Zeilen, damit der Umbruch sichtbar wird.\n\nZweiter Absatz.",
+        color    = PD.Theme.Colors.AccentRed,
+        duration = tonumber(args[3]) or 8,
+    })
+end)
+
+-- ============================================
 -- PRESET CONFIGS
 -- ============================================
 PD.Presets = {}
@@ -1639,3 +1909,77 @@ concommand.Add("pd_hackmenu", function()
 end)
 
 -- PD.HackMenu("Hacking Menu", 800, 400, true, nil, false)
+
+local cameraPos = Vector(0, 0, 0)
+local cameraAng = Angle(0, 0, 0)
+
+net.Receive("PD.CameraViewUpdate", function()
+    cameraPos = net.ReadVector()
+    cameraAng = net.ReadAngle()
+end)
+
+local rt = GetRenderTarget("PD.CameraView", 1024, 1024)
+local mat = CreateMaterial("PD.CameraView", "UnlitGeneric", {
+    ["$basetexture"] = rt:GetName(),
+    ["$vertexcolor"] = 1,
+    ["$vertexalpha"] = 1
+})
+
+function PD.CameraPanel(parent, x, y, w, h)
+    local panel = vgui.Create("DPanel", parent)
+    panel:SetPos(x, y)
+    panel:SetSize(w, h)
+
+    function panel:Paint(pw, ph)
+        render.PushRenderTarget(rt)
+
+        render.Clear(0, 0, 0, 255, true, true)
+
+        cam.Start3D(cameraPos, cameraAng, 90, 0, 0, pw, ph)
+            render.RenderView({
+                origin = cameraPos,
+                angles = cameraAng,
+                fov = 90,
+                x = 0,
+                y = 0,
+                w = 1024,
+                h = 1024,
+                drawhud = false,
+                drawviewmodel = false,
+                drawmonitors = true
+            })
+        cam.End3D()
+
+        render.PopRenderTarget()
+
+        surface.SetMaterial(mat)
+        surface.SetDrawColor(255, 255, 255, 255)
+        surface.DrawTexturedRect(0, 0, pw, ph)
+    end
+
+    return panel
+end
+
+concommand.Add("pd_camera", function()
+    timer.Create("PD.CameraView.Update", 2, 0, function()
+        net.Start("PD.CameraView.Request")
+        net.SendToServer()
+    end)
+
+    net.Start("PD.CameraView.Request")
+    net.SendToServer()
+end)
+
+concommand.Add("pd_test_monitor", function()
+    timer.Create("PD.CameraViewUpdateTimer", 1, 0, function()
+        net.Start("PD.CameraView.Request")
+        net.SendToServer()
+    end)
+
+    net.Start("PD.CameraView.Request")
+    net.SendToServer()
+
+    local frame = PD.Frame("Player Monitor Test", 400, 300, true, {draggable = true, noPopup = true})
+    local monitor = PD.CameraPanel(frame, 0, 0, 400, 300)
+    monitor:Dock(FILL)
+end)

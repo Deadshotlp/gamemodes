@@ -36,7 +36,7 @@ net.Receive("PD.Funk:ReceiveMsgCL", function()
             msg = msg,
             time = ts
         })
-        localChats.recent[LANG.CHAR_UI_UNIT .. ": " .. key] = true
+        localChats.recent["Einheit" .. ": " .. key] = true
     end
 
     if IsValid(mainFrame) and currentTarget.type == ttype and currentTarget.id == tid and IsValid(mainFrame.chatScroll) then
@@ -67,13 +67,13 @@ local function openConversation(ttype, tid)
 
     currentTarget.type = ttype
     currentTarget.id = tid
-    mainFrame:Clear()
+    PD.ClearFrame(mainFrame)
 
     local topBar = PD.Panel(mainFrame)
     topBar:Dock(TOP)
     topBar:SetTall(PD.H(40))
 
-    local backBtn = PD.Button(LANG.GENERIC_BACK, topBar, function()
+    local backBtn = PD.Button("Zurück", topBar, function()
         local choices = mainFrame._choices
         mainFrame:Remove()
         PD.Funk:Menu(choices)
@@ -82,7 +82,7 @@ local function openConversation(ttype, tid)
     backBtn:SetWide(PD.W(100))
 
     local title =
-        PD.Label((ttype == "dm" and "Chat mit " or (LANG.CHAR_UI_UNIT .. " ")) .. tid, topBar)
+        PD.Label((ttype == "dm" and "Chat mit " or ("Einheit" .. " ")) .. tid, topBar)
     title:Dock(FILL)
     title:SetContentAlignment(5)
 
@@ -176,7 +176,7 @@ local function New_Conversation()
 
     -- if mainFrame._choices and mainFrame._choices.units then
     --     for _, u in ipairs(mainFrame._choices.units) do
-    --         targetSelect:AddOption("[" .. LANG.CHAR_UI_UNIT .. "] " .. u, {
+    --         targetSelect:AddOption("[" .. "Einheit" .. "] " .. u, {
     --             type = "unit",
     --             id = u
     --         })
@@ -216,7 +216,7 @@ function PD.Funk:Menu(choices)
     mainFrame._choices = choices
 
     local newConversation = PD.Button("Neue Unterhaltung", mainFrame, function()
-        mainFrame:Clear()
+        PD.ClearFrame(mainFrame)
         New_Conversation()
     end)
     newConversation:Dock(TOP)
@@ -234,7 +234,7 @@ function PD.Funk:Menu(choices)
         local ttype, tid = string.match(key, "^(%w+):(.+)$")
         if ttype and tid then
             local btn = PD.Button(
-                (ttype == "dm" and "[Direkt] " or "[" .. LANG.CHAR_UI_UNIT .. "] ") .. tid,
+                (ttype == "dm" and "[Direkt] " or "[" .. "Einheit" .. "] ") .. tid,
                 recScroll, function()
                     openConversation(ttype, tid)
                 end)

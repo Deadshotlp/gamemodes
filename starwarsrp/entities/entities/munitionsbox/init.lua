@@ -41,7 +41,9 @@ function ENT:Think()
   if self:GetLK() then
     if self:GetTime() < CurTime() then 
       self:SetAmount(self.DefaultAmount)
-      self:SetLK(true)
+      -- Nachfuellen abgeschlossen. Stand hier true, blieb die Kiste dauerhaft
+      -- im Nachfuell-Zustand.
+      self:SetLK(false)
     end
   end
   self:NextThink(CurTime()+1)

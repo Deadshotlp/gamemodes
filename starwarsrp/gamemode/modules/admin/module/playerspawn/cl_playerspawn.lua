@@ -4,6 +4,9 @@ local Spawns = {}
 local showSpawns = false
 
 function PlayerSpawnMenu(base)
+    net.Start("PDSyncPlayerSpawns")
+    net.SendToServer()
+
     if not IsValid(base) then return end
     base:Clear()
 
@@ -51,6 +54,7 @@ function PlayerSpawnMenu(base)
     local scroll = PD.Scroll(base)
 
     local Units = PD.JOBS.GetUnit(false, true)
+    local Sub_Units = PD.JOBS.GetSubUnit(false, true)
     local unitTbl = {}
 
     -- Units-Header
@@ -60,9 +64,9 @@ function PlayerSpawnMenu(base)
     unitsHeader:DockMargin(0, 0, 0, PD.H(5))
     unitsHeader.Paint = function(s, w, h)
         draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.BackgroundDark)
-        surface.SetDrawColor(PD.Theme.Colors.AccentGray)
+        surface.SetDrawColor(PD.Theme.Colors.AccentGray) 
         surface.DrawRect(0, h - 1, w, 1)
-        draw.DrawText("VERFÜGBARE UNITS", "MLIB.12", PD.W(10), h / 2 - PD.H(6), PD.Theme.Colors.AccentGray, TEXT_ALIGN_LEFT)
+        draw.DrawText("Verfügbare Einheiten", "MLIB.12", PD.W(10), h / 2 - PD.H(6), PD.Theme.Colors.AccentGray, TEXT_ALIGN_LEFT)
     end
 
     for k, v in SortedPairs(Units) do
@@ -114,6 +118,8 @@ function PlayerSpawnMenu(base)
             
             if isSelected then
                 unitTbl[k] = {
+                    unit = k,
+                    sub_unit = "",
                     pos = LocalPlayer():GetPos(),
                     ang = LocalPlayer():GetAngles()
                 }
@@ -125,6 +131,72 @@ function PlayerSpawnMenu(base)
         unitPanel.OnCursorEntered = function()
             surface.PlaySound("UI/buttonrollover.wav")
         end
+
+        for k2, v2 in SortedPairs(v.subunits) do
+            local unitColor = v.color or PD.Theme.Colors.AccentGray
+            local isSelected = false
+            
+            local unitPanel = vgui.Create("DPanel", scroll)
+            unitPanel:Dock(TOP)
+            unitPanel:SetTall(PD.H(45))
+            unitPanel:DockMargin(PD.W(50), 0, 0, PD.H(3))
+            unitPanel:SetCursor("hand")
+            
+            unitPanel.Paint = function(s, w, h)
+                -- Hintergrund
+                local bgColor = isSelected and PD.ColorAlpha(PD.Theme.Colors.StatusActive, 0.2) or PD.Theme.Colors.BackgroundLight
+                draw.RoundedBox(0, 0, 0, w, h, bgColor)
+                
+                -- Linke Farbmarkierung
+                surface.SetDrawColor(unitColor)
+                surface.DrawRect(0, 0, PD.W(4), h)
+                
+                -- Rahmen bei Auswahl
+                if isSelected then
+                    surface.SetDrawColor(PD.Theme.Colors.StatusActive)
+                    surface.DrawOutlinedRect(0, 0, w, h, 1)
+                end
+                
+                -- Unit Name
+                draw.DrawText(v2.name, "MLIB.16", PD.W(20), h / 2 - PD.H(8), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+                
+                -- Checkbox Indikator
+                local checkSize = PD.H(20)
+                local checkX = w - checkSize - PD.W(15)
+                local checkY = h / 2 - checkSize / 2
+                
+                draw.RoundedBox(0, checkX, checkY, checkSize, checkSize, PD.Theme.Colors.BackgroundDark)
+                surface.SetDrawColor(isSelected and PD.Theme.Colors.StatusActive or PD.Theme.Colors.AccentGray)
+                surface.DrawOutlinedRect(checkX, checkY, checkSize, checkSize, 1)
+                
+                if isSelected then
+                    -- Häkchen
+                    draw.DrawText("✓", "MLIB.14", checkX + checkSize / 2, checkY + PD.H(2), PD.Theme.Colors.StatusActive, TEXT_ALIGN_CENTER)
+                end
+            end
+            
+            unitPanel.OnMousePressed = function()
+                isSelected = not isSelected
+                surface.PlaySound("UI/buttonclick.wav")
+                
+                local key = k .. "|" .. k2
+
+                if isSelected then
+                    unitTbl[key] = {
+                        unit = k,
+                        sub_unit = k2,
+                        pos = LocalPlayer():GetPos(),
+                        ang = LocalPlayer():GetAngles()
+                    }
+                else
+                    unitTbl[key] = nil
+                end
+            end
+            
+            unitPanel.OnCursorEntered = function()
+                surface.PlaySound("UI/buttonrollover.wav")
+            end
+        end
     end
 
     -- Button Container
@@ -135,7 +207,7 @@ function PlayerSpawnMenu(base)
     buttonContainer.Paint = function() end
 
     -- Setzen Button
-    local setBtn = PD.Button(LANG.SPAWN_MENU_SET or "Spawns setzen", buttonContainer, function()
+    local setBtn = PD.Button("Spawns setzen", buttonContainer, function()
         net.Start("PDPlayerSpawnSet")
         net.WriteTable(unitTbl)
         net.SendToServer()
@@ -148,7 +220,7 @@ function PlayerSpawnMenu(base)
     setBtn:SetAccentColor(PD.Theme.Colors.StatusActive)
 
     -- Anzeigen Button
-    local showBtn = PD.Button(LANG.SPAWN_MENU_SHOW or "Spawns anzeigen", buttonContainer, function()
+    local showBtn = PD.Button("Spawns anzeigen", buttonContainer, function()
         showSpawns = not showSpawns
         surface.PlaySound("UI/buttonclick.wav")
     end)
@@ -157,10 +229,10 @@ function PlayerSpawnMenu(base)
     showBtn:SetAccentColor(PD.Theme.Colors.AccentBlue)
 
     -- Löschen Button
-    local deleteBtn = PD.Button(LANG.SPAWN_MENU_DELETE or "Alle Spawns löschen", buttonContainer, function()
+    local deleteBtn = PD.Button("Alle Spawns löschen", buttonContainer, function()
         unitTbl = {}
         
-        net.Start("PDDeltePlayerSpawns")
+        net.Start("PDDeletePlayerSpawns")
         net.SendToServer()
         
         PD.Popup("Alle Spawn-Positionen wurden gelöscht!", PD.Theme.Colors.StatusCritical)
@@ -177,15 +249,33 @@ hook.Add("HUDPaint", "PlayerSpawnShow", function()
     if not LocalPlayer():IsAdmin() then return end
     if not PD.Theme then return end
 
+    local units = PD.JOBS.GetUnit(false, true)
+    local spawn_name
+
     for k, v in pairs(Spawns) do
-        print(5)
+        spawn_name = v.unit or "Unbekannte Einheit"
+        for unitKey, unitData in pairs(units) do
+            if v.unit == unitKey then
+                if v.sub_unit and v.sub_unit ~= "" then
+                    local subUnitData = unitData.subunits[v.sub_unit]
+                    if subUnitData then
+                        spawn_name = unitData.name .. " | " .. subUnitData.name
+                    else
+                        spawn_name = unitData.name .. " | Unbekannte Untereinheit"
+                    end
+                else
+                    spawn_name = unitData.name
+                end
+            end
+        end
+
         local pos = v.pos
         if not pos then continue end
         
         local screenPos = pos:ToScreen()
         if not screenPos.visible then continue end
         
-        local text = (LANG.SPAWN_MENU_SPAWN or "Spawn") .. ": " .. k
+        local text = ("Spawn") .. ": " .. spawn_name
         surface.SetFont("MLIB.16")
         local w, h = surface.GetTextSize(text)
         

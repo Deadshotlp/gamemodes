@@ -22,16 +22,13 @@ function PD.IDCards:CheckID()
         draw.RoundedBox(10, 0, 0, w, h, Color(255, 0, 0))
     end
 
+    local card
+
     local function dropCard()
         card = PD.Button("", PD.IDCards.Menu, function(self)
         end, function(self, w, h)
-            PD.DrawImgur(0, 0, w, h, "N9FDPCL")
-
-            local jobID, jobName = LocalPlayer():GetJob()
-            draw.SimpleText(LocalPlayer():Nick(), "MLIB.15", w / 2 - PD.W(30), h / 2 - PD.H(5), Color(255, 255, 255),
-                TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-            draw.SimpleText(jobName.unit .. " | " .. jobID, "MLIB.15", w / 2 - PD.W(30), h / 2 + PD.H(50),
-                Color(255, 255, 255), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+            -- Derselbe Ausweis wie im HUD, gezeichnet in entities/weapons/idcard.lua.
+            PD.IDCards.DrawCard(0, 0, w, h, LocalPlayer())
         end)
 
         card:SetSize(PD.W(300), PD.H(150))
@@ -79,7 +76,7 @@ function PD.IDCards:CheckID()
                     PD.IDCards.Menu:Remove()
                 end)
 
-                PD.Notify(LANG.ID_CARD_CHECK_SUCCESS, Color(0, 255, 0))
+                PD.Notify("ID Karte erfolgreich überprüft!", Color(0, 255, 0))
             else
                 checkZone.Paint = function(self, w, h)
                     draw.RoundedBox(10, 0, 0, w, h, Color(255, 0, 0))
@@ -88,7 +85,7 @@ function PD.IDCards:CheckID()
         end
     end
 
-    local createCard = PD.Button(LANG.ID_CARD_TAKE, self.Menu, function(self)
+    local createCard = PD.Button("ID Card raus holen", self.Menu, function(self)
         self:Remove()
         dropCard()
     end)
@@ -102,7 +99,11 @@ function PD.IDCards:CheckID()
         end
         dropCard()
     end, function(self, w, h)
-        PD.DrawImgur(0, 0, w, h, "gLHfh59")
+        -- War ein Imgur-Bild. Jetzt gezeichnet, damit nichts mehr fehlen kann.
+        surface.SetDrawColor(PD.Theme.Colors.AccentGray)
+        surface.DrawOutlinedRect(0, 0, w, h, 1)
+        draw.SimpleText("NEU", "MLIB.14", w / 2, h / 2, PD.Theme.Colors.Text,
+            TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
     end)
     refresh:SetSize(PD.W(50), PD.H(50))
     refresh:SetPos(PD.W(10), PD.IDCards.Menu:GetTall() - createCard:GetTall() - PD.H(10))
@@ -118,23 +119,29 @@ net.Receive("PD.IDCards:CheckID", function()
 
     showEntity = target
 
+    -- Auf genau diesen Ausweis pruefen: sonst raeumt der alte Timer einen
+    -- inzwischen neu vorgezeigten gleich mit weg.
     timer.Simple(3, function()
-        if IsValid(showEntity) then
+        if showEntity == target then
             showEntity = nil
         end
     end)
 end)
 
+-- Der vorgezeigte Ausweis sitzt hoeher als der eigene aus dem SWEP, damit sich
+-- beide nicht ueberdecken.
+local FOREIGN_ANCHOR = 0.48
+
 hook.Add("HUDPaint", "IDCard", function()
-    if IsValid(showEntity) then
-        PD.DrawImgur(ScrW() - PD.W(310), ScrH() / 2 - PD.H(75), PD.W(300), PD.H(150), "N9FDPCL")
+    if not IsValid(showEntity) then return end
 
-        local jobName, jobTable = showEntity:GetJob()
-        draw.SimpleText(showEntity:Nick(), "MLIB.17", ScrW() - PD.W(190), ScrH() / 2 - PD.H(5), getColor("Text"),
-            TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-        draw.SimpleText(jobTable.unit .. " | " .. jobName, "MLIB.17", ScrW() - PD.W(190), ScrH() / 2 + PD.H(50),
-            getColor("Text"), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    -- Die Zeichenfunktion kommt aus entities/weapons/idcard.lua. Frueher stand
+    -- hier PD.DrawImgur und getColor - beides gibt es im Gamemode nicht, das
+    -- Einblenden endete also jedes Mal im Fehler.
+    if not isfunction(PD.IDCards.DrawCard) then return end
 
-    end
+    local w, h = PD.W(300), PD.H(170)
+
+    PD.IDCards.DrawCard(ScrW() - w - PD.W(20), ScrH() * FOREIGN_ANCHOR - h / 2, w, h, showEntity)
 end)
 
