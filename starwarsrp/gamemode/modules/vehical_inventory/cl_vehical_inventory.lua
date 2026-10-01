@@ -1,15 +1,14 @@
 PD.VehicalInventory = PD.VehicalInventory or {}
 
-PD.VehicalInventory.VehicleNames = {
-    ["lvs_sw_transport"] = "Transporter",
-    ["lvs_fakehover_iftx"] = "TX-130",
-    ["lvs_mixy_atte_rep"] = "AT-TE Front",
-    ["lvs_mixy_atte_rear_rep"] = "AT-TE Back"
+--[[
+    Fahrzeuge (Name, Interaktions-Bones) schickt der Server aus der
+    Datenbank - gepflegt im Web-Panel. Frueher hier fest eingetragen.
+]]
+PD.VehicalInventory.VehicleNames = PD.VehicalInventory.VehicleNames or {}
+PD.VehicalInventory.Interactions = PD.VehicalInventory.Interactions or {}
 
-}
-
-PD.VehicalInventory.Interactions = {
-    ["lvs_sw_transport"] = {
+local function OpenAction(bones)
+    return {
         [1] = {
             id = "open_inventory",
             name = "Öffne Fahrzeug Inventar",
@@ -17,43 +16,23 @@ PD.VehicalInventory.Interactions = {
             func = function(ply, ent, bone)
                 PD.VehicalInventory.OpenInventory(ent)
             end,
-            ad = {"static_prop"}
-        }
-    },
-    ["lvs_fakehover_iftx"] = {
-        [1] = {
-            id = "open_inventory",
-            name = "Öffne Fahrzeug Inventar",
-            icon = nil,
-            func = function(ply, ent, bone)
-                PD.VehicalInventory.OpenInventory(ent)
-            end,
-            ad = {"root"}
-        }
-    },
-    ["lvs_mixy_atte_rep"] = {
-        [1] = {
-            id = "open_inventory",
-            name = "Öffne Fahrzeug Inventar",
-            icon = nil,
-            func = function(ply, ent, bone)
-                PD.VehicalInventory.OpenInventory(ent)
-            end,
-            ad = {"root_front"}
-        }
-    },
-    ["lvs_mixy_atte_rear_rep"] = {
-        [1] = {
-            id = "open_inventory",
-            name = "Öffne Fahrzeug Inventar",
-            icon = nil,
-            func = function(ply, ent, bone)
-                PD.VehicalInventory.OpenInventory(ent)
-            end,
-            ad = {"root_rear"}
+            ad = bones
         }
     }
-}
+end
+
+net.Receive("PD.VehicalInventory.Config", function()
+    local vehicles = net.ReadTable()
+    local names, interactions = {}, {}
+
+    for class, cfg in pairs(vehicles) do
+        names[class] = cfg.name
+        interactions[class] = OpenAction(istable(cfg.bones) and cfg.bones or {})
+    end
+
+    PD.VehicalInventory.VehicleNames = names
+    PD.VehicalInventory.Interactions = interactions
+end)
 
 local function GetVehicleName(vehicle)
     return PD.VehicalInventory.VehicleNames[vehicle:GetClass()] or vehicle:GetClass()
@@ -223,5 +202,8 @@ net.Receive("PD.VehicalInventory.ForceClose", function()
 end)
 
 hook.Add("PD.Interaction.Requested", "PD.VehicalInventory.Interaction.Answer", function(ent_class)
-    PD.IA.AddEntityActions(PD.VehicalInventory.Interactions[ent_class], "Fahrzeug Inventar")
+    local actions = PD.VehicalInventory.Interactions[ent_class]
+    if not actions then return end
+
+    PD.IA.AddEntityActions(actions, "Fahrzeug Inventar")
 end)

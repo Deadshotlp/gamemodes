@@ -133,26 +133,36 @@ function PD.Comlink:Menu()
             createNameTextEntry:Dock(TOP)
             local createColorPicker = vgui.Create("DColorMixer", createFrame)
             createColorPicker:Dock(TOP)
+            createColorPicker:SetAlphaBar(false)
+            createColorPicker:SetColor(createChannelTBL.color)
             createColorPicker.ValueChanged = function(s, col)
                 createChannelTBL.color = col
             end
-            local passkeyTextEntry
-            local encryptedCheck = PD.Checkbox(createFrame, "Ist Verschlüsselt", false, function(v) 
-                createChannelTBL.encrypted = v 
-                if v then
-                    passkeyTextEntry = PD.TextEntry(createFrame, "Channel Password: z.B. 1234")
-                    createColorPicker:Dock(TOP)
-                elseif IsValid(passkeyTextEntry) then
-                    passkeyTextEntry:Remove()
-                end
+
+            -- Das Schluesselfeld gibt es immer, es wird nur ein- und
+            -- ausgeblendet. Der Schluessel geht als passkey an den Server
+            -- (frueher landete er in "encrypted").
+            local encryptedCheck = PD.Checkbox(createFrame, "Ist Verschlüsselt", false, function(v)
+                createChannelTBL.encrypted = v == true
             end)
             encryptedCheck:Dock(TOP)
 
+            local passkeyTextEntry = PD.TextEntry(createFrame, "Schlüssel: z.B. 1234")
+            passkeyTextEntry:Dock(TOP)
+            passkeyTextEntry:SetVisible(false)
+
+            encryptedCheck.Think = function()
+                local show = createChannelTBL.encrypted == true
+                if passkeyTextEntry:IsVisible() ~= show then
+                    passkeyTextEntry:SetVisible(show)
+                    createFrame:InvalidateLayout()
+                end
+            end
+
             local createSaveButton = PD.Button("Channel erstellen", createFrame, function()
                 createChannelTBL.name = createNameTextEntry:GetValue()
-                if createChannelTBL.encrypted then
-                    createChannelTBL.encrypted = passkeyTextEntry:GetValue()
-                end 
+                createChannelTBL.passkey = createChannelTBL.encrypted and passkeyTextEntry:GetValue() or ""
+
                 net.Start("PD.Comlink.RequestCreateCustomChannel")
                 net.WriteTable(createChannelTBL)
                 net.SendToServer()
@@ -283,7 +293,7 @@ function PD.Comlink:Menu()
             local isActive = (ply.Extra1 == k) or (ply.Extra2 == k) or (ply.Extra3 == k)
             
             pnl.Paint = function(s, w, h)
-                text = v.name
+                text = v.encrypted and ("[privat] " .. v.name) or v.name
                 if #text > 40 then
                     text = string.sub(text, 1, 38) .. "..."
                 end
@@ -310,10 +320,11 @@ function PD.Comlink:Menu()
                 draw.RoundedBox(100, PD.W(250), h / 2 - PD.H(4), PD.H(8), PD.H(8), statusCol)
             end
 
-            -- Slot-Buttons (5 Slots)
-            if v.encrypted then
+            -- Gesperrter verschluesselter Kanal: nur Entschluesseln anbieten.
+            -- Den Schluessel prueft der Server, danach kommt die Liste neu.
+            if v.locked then
                 local decryptButton = PD.Button("Entschlüsseln", pnl, function()
-                    local decryptChannelTBL = {name = v.name}
+                    local decryptChannelTBL = {index = k}
                     local decryptFrame = PD.Frame("Channel Entschlüsseln", PD.W(300), PD.H(175), true)
 
                     local passkeyTextEntry = PD.TextEntry(decryptFrame, "Channel Passkey: 1234")
@@ -332,7 +343,34 @@ function PD.Comlink:Menu()
                 decryptButton:SetSize(ComlinkFrame:GetWide() / 3.5, 0)
                 decryptButton:DockMargin( 0, 10, 0, 10 )
 
-                continue 
+                continue
+            end
+
+            -- Eigene Kanaele kann der Besitzer loeschen.
+            if v.own then
+                local deleteBtn = vgui.Create("DButton", pnl)
+                deleteBtn:SetText("")
+                deleteBtn:Dock(RIGHT)
+                deleteBtn:SetWide(PD.W(30))
+                deleteBtn:DockMargin(PD.W(2), PD.H(10), PD.W(2), PD.H(10))
+                deleteBtn:SetTooltip("Kanal löschen")
+
+                deleteBtn.Paint = function(s, w, h)
+                    local bgCol = s:IsHovered() and PD.Theme.Colors.AccentRed or PD.Theme.Colors.BackgroundLight
+                    draw.RoundedBox(0, 0, 0, w, h, bgCol)
+                    surface.SetDrawColor(PD.Theme.Colors.AccentGray)
+                    surface.DrawOutlinedRect(0, 0, w, h, 1)
+                    draw.DrawText("X", "MLIB.12", w / 2, h / 2 - PD.H(6), PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
+                end
+
+                deleteBtn.DoClick = function()
+                    surface.PlaySound("UI/buttonclick.wav")
+                    Derma_Query("Kanal \"" .. v.name .. "\" löschen?", "Comlink", "Löschen", function()
+                        net.Start("PD.Comlink.RequestDeleteCustomChannel")
+                            net.WriteUInt(k, 8)
+                        net.SendToServer()
+                    end, "Abbrechen")
+                end
             end
 
             for i = 3, 1, -1 do
@@ -400,22 +438,48 @@ function PD.Comlink:Menu()
 
     populateFrame()
 
-    net.Receive("PD.Comlink.SendComlinkChannel", function()
-        PD.Comlink.Table = net.ReadTable()
+    PD.Comlink.RefreshMenu = function()
         if not ClearFrame() then return end
         populateFrame()
-    end)
-
-    net.Receive("PD.Comlink.SendNewCustomChannel", function()
-        local tbl = net.ReadTable()
-
-        -- Unter dem Server-Index ablegen, siehe RequestComlinkChannel.
-        PD.Comlink.Table[tbl.index or (#PD.Comlink.Table + 1)] = tbl
-
-        if not ClearFrame() then return end
-        populateFrame()
-    end)
+    end
 end
+
+--[[
+    Die Kanalliste schickt der Server bei jeder Aenderung (neuer, geloeschter
+    oder entschluesselter Kanal) - auch bei geschlossenem Menue. Frueher hingen
+    die Empfaenger am Menue und wurden erst beim ersten Oeffnen angelegt.
+]]
+net.Receivers["pd.comlink.sendnewcustomchannel"] = nil
+
+-- Slots auf Kanaele, die es nicht mehr gibt (oder die gesperrt sind), leeren.
+local function sanitizeSlots()
+    local ply = LocalPlayer()
+    if not IsValid(ply) then return end
+
+    for i = 1, 3 do
+        local ch = ply["Extra" .. i]
+        local entry = ch and PD.Comlink.Table[ch]
+
+        if ch and (not entry or entry.locked) then
+            ply["Extra" .. i] = false
+        end
+    end
+
+    local active = ply.ActiveChannel
+    if active and (not PD.Comlink.Table[active] or PD.Comlink.Table[active].locked) then
+        ply.ActiveChannel = false
+        comlinkChannelAktive = {}
+    end
+end
+
+net.Receive("PD.Comlink.SendComlinkChannel", function()
+    PD.Comlink.Table = net.ReadTable()
+    sanitizeSlots()
+
+    if IsValid(ComlinkFrame) and PD.Comlink.RefreshMenu then
+        PD.Comlink.RefreshMenu()
+    end
+end)
 
 -- Comlink HUD - Star Wars Andor Imperial Style (Zentral über PD.Theme)
 AddSmoothElement(ScrW() - PD.W(240), PD.H(20), PD.W(220), PD.H(130), function(smoothX, smoothY)

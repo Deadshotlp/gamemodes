@@ -119,7 +119,14 @@ local function SpawnStoredProp(content)
     end
 
     local newEnt = ents.Create(content.Class)
-    if IsValid(newEnt) then
+    if not IsValid(newEnt) then
+        print("[PermaProps] Unbekannte Klasse: " .. tostring(content.Class) .. " für Prop ID: " .. tostring(content.id))
+        return
+    end
+
+    -- Fehler in Spawn/Initialize der Klasse: halb erstelltes Entity wieder
+    -- entfernen und den Fehler an den Aufrufer weitergeben.
+    local success, err = pcall(function()
         newEnt:SetPos(content.Pos)
         newEnt:SetAngles(content.Angle)
         newEnt:SetModel(content.Model)
@@ -144,6 +151,12 @@ local function SpawnStoredProp(content)
         end
 
         newEnt.id = content.id
+        newEnt.PD_PermaProp = true
+    end)
+
+    if not success then
+        if IsValid(newEnt) then newEnt:Remove() end
+        error(err, 0)
     end
 end
 
@@ -229,12 +242,82 @@ if SERVER then
         )
     ]])
 
+    --[[
+        Alle Props einer Map (bis ~1300) wurden in einem einzigen Tick
+        gespawnt. Ein Lua-Fehler in einem einzigen Entity (Initialize/Spawn
+        einer Klasse) brach die ganze Schleife ab - alle folgenden Props
+        fehlten dann. Jetzt: jeder Prop einzeln abgesichert, in Paketen pro
+        Tick, und am Ende eine Zusammenfassung in der Konsole.
+    ]]
+    local SPAWN_BATCH = 50
+    local loadRun = 0
+
+    local function SpawnAllProps(rows, reason)
+        loadRun = loadRun + 1
+        local run = loadRun
+        local total, ok, failed = #rows, 0, {}
+        local i = 0
+        local timerName = "PD.PermaProps.Spawn"
+
+        timer.Remove(timerName)
+
+        local function step()
+            -- Ein neuerer Ladevorgang (Reload/Cleanup) hat diesen abgeloest.
+            if run ~= loadRun then return end
+
+            for _ = 1, SPAWN_BATCH do
+                i = i + 1
+                local row = rows[i]
+
+                if not row then
+                    timer.Remove(timerName)
+
+                    print(("[PermaProps] %s: %d von %d Props gespawnt%s"):format(
+                        reason, ok, total, #failed > 0 and (", Fehler bei IDs " .. table.concat(failed, ", ")) or ""))
+                    return
+                end
+
+                local success, err = pcall(function()
+                    SpawnStoredProp(RowToContent(row))
+                end)
+
+                if success then
+                    ok = ok + 1
+                else
+                    failed[#failed + 1] = tostring(row.id)
+                    print(("[PermaProps] Fehler bei Prop ID %s (%s): %s"):format(tostring(row.id), tostring(row.class), tostring(err)))
+                end
+            end
+        end
+
+        timer.Create(timerName, 0, 0, step)
+        step()
+    end
+
+    PD.PermaProps = PD.PermaProps or {}
+
+    function PD.PermaProps.Reload(reason)
+        for _, ent in ipairs(ents.GetAll()) do
+            if IsValid(ent) and ent.id then
+                ent:Remove()
+            end
+        end
+
+        LoadProps(function(rows)
+            SpawnAllProps(rows, reason or "Neu geladen")
+        end)
+    end
+
     hook.Add("InitPostEntity", "SpawnPermaProps", function()
         LoadProps(function(rows)
-            for _, row in ipairs(rows) do
-                SpawnStoredProp(RowToContent(row))
-            end
+            SpawnAllProps(rows, "Serverstart")
         end)
+    end)
+
+    -- Ein Map-Cleanup (Admin-Menue, game.CleanUpMap) entfernt auch die
+    -- Perma-Props - danach neu spawnen.
+    hook.Add("PostCleanupMap", "SpawnPermaProps", function()
+        PD.PermaProps.Reload("Nach Map-Cleanup")
     end)
 end
 
@@ -321,17 +404,9 @@ function TOOL:Reload(trace)
     if CLIENT then return true end
     if not IsFirstTimePredicted() then return false end
 
-    for _, ent in ipairs(ents.GetAll()) do
-        if IsValid(ent) and ent.id then
-            ent:Remove()
-        end
-    end
+    PD.PermaProps.Reload("Manuell neu geladen")
 
-    LoadProps(function(rows)
-        for _, row in ipairs(rows) do
-            SpawnStoredProp(RowToContent(row))
-        end
-    end)
+    return true
 end
 
 if CLIENT then

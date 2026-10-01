@@ -8,6 +8,11 @@
     er in Wirklichkeit 35 macht.
 ]]
 
+-- cl_arccw laedt vor sh_arccw (alphabetisch), PD.ACW gibt es hier also beim
+-- Serverstart noch nicht. Ohne diese Zeile brach die Datei bei Zeile 118 ab
+-- (Grapple-Hinweis, Seil, Use-Taste fehlten nach jedem Neustart).
+PD.ACW = PD.ACW or {}
+
 net.Receive("PD.ACW:Sync", function()
     local weapons_ = net.ReadTable()
     local atts = net.ReadTable()

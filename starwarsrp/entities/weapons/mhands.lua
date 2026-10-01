@@ -195,52 +195,68 @@ local anima = {
     ["ValveBiped.Bip01_R_Hand"] = Angle(0, 0, 20),
     ["ValveBiped.Bip01_L_Hand"] = Angle(0, 0, -20),
     },
-    -- ["kneel"] = {
-    -- ["Animation.ZOffset"] = -17,
+    ["kneel"] = {
+        ["Animation.ZOffset"] = -17,
 
-    -- ["ValveBiped.Bip01_L_Forearm"] = Angle(0, 0, 0),
-    -- ["ValveBiped.Bip01_R_Forearm"] = Angle(-90, -30, -70),
-    -- ["ValveBiped.Bip01_L_UpperArm"] = Angle(0, 0, 0),
-    -- ["ValveBiped.Bip01_R_UpperArm"] = Angle(50, -20, 40),
-    -- ["ValveBiped.Bip01_Pelvis"] = Angle(0, 0, 0),
-    -- ["ValveBiped.Bip01_Spine"] = Angle(0, 0, 0),
-    -- ["ValveBiped.Bip01_Spine4"] = Angle(0, 0, 0),
-    -- ["ValveBiped.Bip01_R_Calf"] = Angle(0, 90, 0),
-    -- ["ValveBiped.Bip01_L_Calf"] = Angle(0, 80, 0),
-    -- ["ValveBiped.Bip01_R_Foot"] = Angle(0, 0, 0),
-    -- ["ValveBiped.Bip01_L_Foot"] = Angle(0, 48.5, 0),
-    -- ["ValveBiped.Bip01_R_Thigh"] = Angle(0, -90, 0),
-    -- ["ValveBiped.Bip01_L_Thigh"] = Angle(0, 0, 0),
-    -- ["ValveBiped.Bip01_R_Hand"] = Angle(0, 0, 0),
-    -- ["ValveBiped.Bip01_L_Hand"] = Angle(0, 0, 0),
-    -- ["ValveBiped.Bip01_L_Finger2"] = Angle(0, 0, 0),
-    -- ["ValveBiped.Bip01_L_Finger11"] = Angle(0, 0, 0),
-    -- ["ValveBiped.Bip01_Head1"] = Angle(0, -15, 0)
-    -- },
-    -- ["Seitlich liegen"] = {
-    --     ["Animation.ZOffset"] = -30,
+        ["ValveBiped.Bip01_L_Forearm"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_R_Forearm"] = Angle(-90, -30, -70),
+        ["ValveBiped.Bip01_L_UpperArm"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_R_UpperArm"] = Angle(50, -20, 40),
+        ["ValveBiped.Bip01_Pelvis"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_Spine"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_Spine4"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_R_Calf"] = Angle(0, 90, 0),
+        ["ValveBiped.Bip01_L_Calf"] = Angle(0, 80, 0),
+        ["ValveBiped.Bip01_R_Foot"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_L_Foot"] = Angle(0, 48.5, 0),
+        ["ValveBiped.Bip01_R_Thigh"] = Angle(0, -90, 0),
+        ["ValveBiped.Bip01_L_Thigh"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_R_Hand"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_L_Hand"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_L_Finger2"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_L_Finger11"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_Head1"] = Angle(0, -15, 0)
+    },
+    ["Seitlich liegen"] = {
+        ["Animation.ZOffset"] = -30,
 
-    --     ["ValveBiped.Bip01_Pelvis"] = Angle(0, 0, -90),
-    --     ["ValveBiped.Bip01_Spine"] = Angle(0, 0, 0),
-    --     ["ValveBiped.Bip01_Spine1"] = Angle(0, 0, 0),
-    --     ["ValveBiped.Bip01_Spine2"] = Angle(0, 0, 0),
-    --     ["ValveBiped.Bip01_Spine4"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_Pelvis"] = Angle(0, 0, -90),
+        ["ValveBiped.Bip01_Spine"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_Spine1"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_Spine2"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_Spine4"] = Angle(0, 0, 0),
 
-    --     ["ValveBiped.Bip01_Head1"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_Head1"] = Angle(0, 0, 0),
 
-    --     ["ValveBiped.Bip01_L_UpperArm"] = Angle(0, 0, 0),
-    --     ["ValveBiped.Bip01_R_UpperArm"] = Angle(0, 0, 0),
-    --     ["ValveBiped.Bip01_L_Forearm"] = Angle(0, 0, 0),
-    --     ["ValveBiped.Bip01_R_Forearm"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_L_UpperArm"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_R_UpperArm"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_L_Forearm"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_R_Forearm"] = Angle(0, 0, 0),
 
-    --     ["ValveBiped.Bip01_L_Thigh"] = Angle(0, 0, 0),
-    --     ["ValveBiped.Bip01_R_Thigh"] = Angle(0, 0, 0),
-    --     ["ValveBiped.Bip01_L_Calf"] = Angle(0, 0, 0),
-    --     ["ValveBiped.Bip01_R_Calf"] = Angle(0, 0, 0),
-    --     ["ValveBiped.Bip01_L_Foot"] = Angle(0, 0, 0),
-    --     ["ValveBiped.Bip01_R_Foot"] = Angle(0, 0, 0)
-    -- }
+        ["ValveBiped.Bip01_L_Thigh"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_R_Thigh"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_L_Calf"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_R_Calf"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_L_Foot"] = Angle(0, 0, 0),
+        ["ValveBiped.Bip01_R_Foot"] = Angle(0, 0, 0)
+    }
 }
+
+--[[
+    Ganzkoerper-Posen (mit Animation.ZOffset) senken das ganze Modell ab -
+    berechnet fuer eine stehende Figur. Im Sitz (Sit Anywhere, Fahrzeuge),
+    geduckt oder in der Luft ist das Modell schon anders positioniert, dann
+    landete die Figur im Boden. Deshalb nur im Stehen erlaubt und beendet,
+    sobald der Spieler sich hinsetzt/duckt/den Boden verlaesst.
+]]
+local function IsFullBody(tbl)
+    return istable(tbl) and tbl["Animation.ZOffset"] ~= nil
+end
+
+local function CanFullBody(ply)
+    return IsValid(ply) and ply:Alive() and not ply:InVehicle() and ply:OnGround()
+        and not ply:Crouching() and ply:GetMoveType() == MOVETYPE_WALK
+end
 
 local isAnimating = false
 if SERVER then
@@ -251,9 +267,31 @@ if SERVER then
         local id = net.ReadString()
 
         if anima[id] then
+            if IsFullBody(anima[id]) and not CanFullBody(ply) then
+                ply:SetNWString("mhands_anim", "")
+                PD.Notify("Diese Animation geht nur im Stehen.", Color(255, 60, 60), false, ply)
+                return
+            end
+
             ply:SetNWString("mhands_anim", id)
         else
             ply:SetNWString("mhands_anim", "")
+        end
+    end)
+
+    local function StopFullBody(ply)
+        if IsFullBody(anima[ply:GetNWString("mhands_anim", "")]) then
+            ply:SetNWString("mhands_anim", "")
+        end
+    end
+
+    hook.Add("PlayerEnteredVehicle", "mhands_fullbody_stop", StopFullBody)
+
+    timer.Create("mhands_fullbody_check", 0.25, 0, function()
+        for _, ply in ipairs(player.GetAll()) do
+            if IsFullBody(anima[ply:GetNWString("mhands_anim", "")]) and not CanFullBody(ply) then
+                ply:SetNWString("mhands_anim", "")
+            end
         end
     end)
 
@@ -330,6 +368,13 @@ elseif CLIENT then
         local tbl = anima[id]
         if not tbl then return end
 
+        -- Bis der Server die Ganzkoerper-Pose beendet, nicht ins Sitzmodell
+        -- hinein absenken.
+        if IsFullBody(tbl) and ply:InVehicle() then
+            ply:ManipulateBonePosition(0, vector_origin)
+            return
+        end
+
         if ply.mhandsLastAnim ~= id then
             -- Restore previous mhands offsets before changing to a new hand animation.
             if ply.mhandsBaseAngles then StartSmoothRestore(ply) end
@@ -377,6 +422,10 @@ elseif CLIENT then
                 ply.mhandsWasAnimating = false
                 ply.mhandsLerp = 0
                 ply.mhandsLastAnim = nil
+
+                -- Vom Server beendet (z. B. hingesetzt): Rechtsklick oeffnet
+                -- wieder das Menue statt nur "beenden" zu senden.
+                if ply == LocalPlayer() then isAnimating = false end
             elseif id ~= "" then
                 ply.mhandsWasAnimating = true
             end

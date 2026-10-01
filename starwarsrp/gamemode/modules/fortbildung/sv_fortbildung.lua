@@ -664,7 +664,7 @@ local function writeSession(session)
     }, SESSION_FIELDS)
 
     if query then
-        PD.SQL.Query(string.gsub(query, "^INSERT INTO", "REPLACE INTO", 1))
+        PD.SQL.Query((string.gsub(query, "^INSERT INTO", "REPLACE INTO", 1)))
     end
 end
 
@@ -679,7 +679,7 @@ local function writeParticipant(sessionID, participant)
     }, PARTICIPANT_FIELDS)
 
     if query then
-        PD.SQL.Query(string.gsub(query, "^INSERT INTO", "REPLACE INTO", 1))
+        PD.SQL.Query((string.gsub(query, "^INSERT INTO", "REPLACE INTO", 1)))
     end
 end
 

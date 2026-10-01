@@ -231,6 +231,28 @@ PD.Remote.Reloaders["arccw"] = function(done)
     end)
 end
 
+PD.Remote.Reloaders["fahrzeuge"] = function(done)
+    if not PD.VehicalInventory or not PD.VehicalInventory.LoadConfig then
+        done("Fahrzeuginventar-Modul nicht geladen")
+        return
+    end
+
+    PD.VehicalInventory.LoadConfig(function(ok, vehicles, cargo)
+        done(tostring(vehicles) .. " Fahrzeuge, " .. tostring(cargo) .. " Frachtklassen geladen")
+    end)
+end
+
+PD.Remote.Reloaders["kisten"] = function(done)
+    if not PD.Kiste or not PD.Kiste.LoadConfig then
+        done("Transportkisten-Modul nicht geladen")
+        return
+    end
+
+    PD.Kiste.LoadConfig(function(ok, count)
+        done(tostring(count) .. " packbare Modelle geladen")
+    end)
+end
+
 PD.Remote.Reloaders["spawns"] = function(done)
     if not PD.PlayerSpawns or not PD.PlayerSpawns.Load then
         done("Spawn-Modul nicht geladen")
@@ -326,7 +348,7 @@ concommand.Add("pd_reload", function(ply, cmd, args)
     local area = string.lower(args[1] or "")
 
     if area == "" then
-        PD.RemoteLog("[Remote] Verwendung: pd_reload <jobs|fortbildung|waffen|arccw|fraktionen|armor|spawns|chars|all>")
+        PD.RemoteLog("[Remote] Verwendung: pd_reload <jobs|fortbildung|waffen|arccw|fraktionen|armor|spawns|chars|fahrzeuge|kisten|all>")
         return
     end
 

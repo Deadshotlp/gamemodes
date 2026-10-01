@@ -13,20 +13,47 @@ PD.VehicalInventory.vehicals = {}
 --     players_looking = { [steamid64] = true },
 -- }
 
--- Wie viele Cargo Slots ein Fahrzeug je nach Klasse hat. Fehlt ein Eintrag wird DEFAULT_CARGO_SLOTS genutzt.
-PD.VehicalInventory.VehicleConfig = {
-    ["lvs_sw_transport"] = {cargo_slots = 6},
-    ["lvs_fakehover_iftx"] = {cargo_slots = 5},
+--[[
+    Fahrzeuge und erlaubte Fracht kommen aus der Datenbank und sind im
+    Web-Panel (Seite "Fahrzeuge") pflegbar:
+
+      pd_vehinv_vehicles  class, name, cargo_slots, bones, position
+      pd_vehinv_cargo     class
+
+    bones: kommagetrennte Bone-Namen, an denen im Interaktionsmenue der Punkt
+    "Fahrzeug Inventar" erscheint (Bones eines Fahrzeugs listet List_bones in
+    der Konsole, waehrend man es ansieht).
+
+    Beim ersten Start werden die Tabellen mit den bisherigen festen Werten
+    befuellt. Neu laden: pd_reload fahrzeuge.
+]]
+local TBL_VEHICLES = "pd_vehinv_vehicles"
+local TBL_CARGO = "pd_vehinv_cargo"
+
+-- Startwerte = die bisher fest eingetragenen Fahrzeuge.
+local SEED_VEHICLES = {
+    {class = "lvs_sw_transport", name = "Transporter", cargo_slots = 6, bones = "static_prop"},
+    {class = "lvs_fakehover_iftx", name = "TX-130", cargo_slots = 5, bones = "root"},
+    {class = "lvs_mixy_atte_rep", name = "AT-TE Front", cargo_slots = 4, bones = "root_front"},
+    {class = "lvs_mixy_atte_rear_rep", name = "AT-TE Back", cargo_slots = 4, bones = "root_rear"},
 }
 
-PD.VehicalInventory.ValidCargo = {
-    "munitionsbox",
-    "prop_physics",
-    "prop_physics_multiplayer",
-    --"prop_ragdoll",
+local SEED_CARGO = {"munitionsbox", "prop_physics", "prop_physics_multiplayer"}
+
+-- class -> {name, cargo_slots, bones = {...}}
+PD.VehicalInventory.VehicleConfig = PD.VehicalInventory.VehicleConfig or {}
+-- class -> true. Fester Grundstock, bis die Datenbank geantwortet hat.
+PD.VehicalInventory.ValidCargo = PD.VehicalInventory.ValidCargo or {
+    munitionsbox = true,
+    prop_physics = true,
+    prop_physics_multiplayer = true,
 }
+
+-- Klassen, die andere Module immer als Fracht anmelden (z. B. Transportkisten).
+PD.VehicalInventory.ExtraCargo = PD.VehicalInventory.ExtraCargo or {}
 
 local DEFAULT_CARGO_SLOTS = 4
+local MAX_CARGO_SLOTS = 32
 local INTERACT_RANGE = 1000 -- Maximaler Abstand Spieler <-> Fahrzeug für jede Interaktion
 local SCAN_RADIUS = 250 -- ~2 Meter (1m =~ 39.37 units)
 
@@ -36,6 +63,145 @@ util.AddNetworkString("PD.VehicalInventory.UpdateRequestItems")
 util.AddNetworkString("PD.VehicalInventory.LoadEntity")
 util.AddNetworkString("PD.VehicalInventory.UnloadEntity")
 util.AddNetworkString("PD.VehicalInventory.ForceClose")
+util.AddNetworkString("PD.VehicalInventory.Config")
+
+local function SplitBones(text)
+    local bones = {}
+
+    for _, part in ipairs(string.Explode(",", tostring(text or ""))) do
+        local bone = string.Trim(part)
+        if bone ~= "" then bones[#bones + 1] = bone end
+    end
+
+    return bones
+end
+
+-- Name und Interaktions-Bones an Clients; die Slotzahl braucht nur der Server.
+function PD.VehicalInventory.SendConfig(target)
+    local vehicles = {}
+
+    for class, cfg in pairs(PD.VehicalInventory.VehicleConfig) do
+        vehicles[class] = {name = cfg.name, bones = cfg.bones}
+    end
+
+    net.Start("PD.VehicalInventory.Config")
+    net.WriteTable(vehicles)
+
+    if target then net.Send(target) else net.Broadcast() end
+end
+
+local function EnsureTables(callback)
+    local createVehicles = "CREATE TABLE IF NOT EXISTS `" .. TBL_VEHICLES .. "` ("
+        .. "`class` VARCHAR(128) NOT NULL,"
+        .. "`name` VARCHAR(64) NOT NULL DEFAULT '',"
+        .. "`cargo_slots` INT NOT NULL DEFAULT 4,"
+        .. "`bones` VARCHAR(255) NOT NULL DEFAULT '',"
+        .. "`position` INT NOT NULL DEFAULT 0,"
+        .. "PRIMARY KEY (`class`)"
+        .. ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+
+    local createCargo = "CREATE TABLE IF NOT EXISTS `" .. TBL_CARGO .. "` ("
+        .. "`class` VARCHAR(128) NOT NULL,"
+        .. "PRIMARY KEY (`class`)"
+        .. ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+
+    PD.SQL.Query(createVehicles, function()
+        PD.SQL.Query(createCargo, function()
+            callback()
+        end)
+    end)
+end
+
+-- Leere Tabellen einmalig mit den Startwerten fuellen.
+local function SeedIfEmpty(callback)
+    PD.SQL.FetchOne("SELECT (SELECT COUNT(*) FROM `" .. TBL_VEHICLES .. "`) AS v, (SELECT COUNT(*) FROM `" .. TBL_CARGO .. "`) AS c", function(row)
+        local pending = 0
+        local function finish()
+            pending = pending - 1
+            if pending <= 0 then callback() end
+        end
+
+        pending = 1
+
+        if row and tonumber(row.v) == 0 then
+            for index, v in ipairs(SEED_VEHICLES) do
+                pending = pending + 1
+                PD.SQL.Query("INSERT IGNORE INTO `" .. TBL_VEHICLES .. "` (`class`, `name`, `cargo_slots`, `bones`, `position`) VALUES ("
+                    .. PD.SQL.EscapeString(v.class) .. ", " .. PD.SQL.EscapeString(v.name) .. ", "
+                    .. v.cargo_slots .. ", " .. PD.SQL.EscapeString(v.bones) .. ", " .. index .. ")", finish)
+            end
+        end
+
+        if row and tonumber(row.c) == 0 then
+            for _, class in ipairs(SEED_CARGO) do
+                pending = pending + 1
+                PD.SQL.Query("INSERT IGNORE INTO `" .. TBL_CARGO .. "` (`class`) VALUES (" .. PD.SQL.EscapeString(class) .. ")", finish)
+            end
+        end
+
+        finish()
+    end)
+end
+
+function PD.VehicalInventory.LoadConfig(callback)
+    EnsureTables(function()
+        SeedIfEmpty(function()
+            PD.SQL.FetchAll("SELECT * FROM `" .. TBL_VEHICLES .. "` ORDER BY `position`, `class`", function(vehicles)
+                PD.SQL.FetchAll("SELECT * FROM `" .. TBL_CARGO .. "`", function(cargo)
+                    local config = {}
+
+                    for _, row in ipairs(vehicles or {}) do
+                        config[row.class] = {
+                            name = row.name ~= "" and row.name or row.class,
+                            cargo_slots = math.Clamp(tonumber(row.cargo_slots) or DEFAULT_CARGO_SLOTS, 1, MAX_CARGO_SLOTS),
+                            bones = SplitBones(row.bones),
+                        }
+                    end
+
+                    local valid = {}
+                    for _, row in ipairs(cargo or {}) do
+                        valid[row.class] = true
+                    end
+
+                    PD.VehicalInventory.VehicleConfig = config
+                    PD.VehicalInventory.ValidCargo = valid
+
+                    -- Slotzahl bestehender Inventare anpassen. Belegte Slots
+                    -- ueber der neuen Grenze bleiben bestehen, bis sie entladen
+                    -- werden - sonst verschwaende Fracht.
+                    for vehicle, data in pairs(PD.VehicalInventory.vehicals) do
+                        if IsValid(vehicle) then
+                            local slots = config[vehicle:GetClass()] and config[vehicle:GetClass()].cargo_slots or DEFAULT_CARGO_SLOTS
+                            local highest = 0
+
+                            for index in pairs(data.cargo_space) do
+                                highest = math.max(highest, index)
+                            end
+
+                            data.cargo_slots = math.max(slots, highest)
+                        end
+                    end
+
+                    PD.VehicalInventory.SendConfig()
+
+                    if callback then callback(true, table.Count(config), table.Count(valid)) end
+                end)
+            end)
+        end)
+    end)
+end
+
+hook.Add("PlayerInitialSpawn", "PD.VehicalInventory.Config", function(ply)
+    timer.Simple(5, function()
+        if IsValid(ply) then PD.VehicalInventory.SendConfig(ply) end
+    end)
+end)
+
+timer.Simple(3, function()
+    PD.VehicalInventory.LoadConfig(function(ok, vehicles, cargo)
+        print("[Fahrzeuginventar] " .. tostring(vehicles) .. " Fahrzeuge, " .. tostring(cargo) .. " Frachtklassen geladen")
+    end)
+end)
 
 local function GetCargoSlots(vehicle)
     local cfg = PD.VehicalInventory.VehicleConfig[vehicle:GetClass()]
@@ -67,6 +233,11 @@ local function GetDisplayName(ent)
         return "Unbekannte Leiche"
     end
 
+    -- Transportkiste: Inhalt statt Kistenmodell anzeigen.
+    if ent.GetContentName and ent:GetContentName() ~= "" then
+        return "Transportkiste: " .. ent:GetContentName()
+    end
+
     local fileName = string.StripExtension(string.GetFileFromFilename(ent:GetModel() or ""))
     if fileName and fileName ~= "" then
         return fileName
@@ -81,13 +252,7 @@ local function IsCargoableEntity(ent)
 
     local class = ent:GetClass()
 
-    for _, validClass in ipairs(PD.VehicalInventory.ValidCargo) do
-        if class == validClass then
-            return true
-        end
-    end
-
-    return false
+    return PD.VehicalInventory.ValidCargo[class] == true or PD.VehicalInventory.ExtraCargo[class] == true
 end
 
 local function IsEntityFrozen(ent)
@@ -161,8 +326,14 @@ local function BuildClientState(vehicle)
     }
 end
 
+-- Nur eingetragene Fahrzeuge haben ein Inventar. Vorher liess sich per
+-- Netzwerknachricht jedes beliebige Entity als "Fahrzeug" benutzen.
+-- Ein schon bestehendes Inventar bleibt erreichbar, auch wenn das Fahrzeug
+-- im Panel entfernt wurde - sonst saesse die Fracht fest.
 local function CanInteract(ply, vehicle)
-    return IsValid(ply) and IsValid(vehicle) and ply:GetPos():Distance(vehicle:GetPos()) <= INTERACT_RANGE
+    return IsValid(ply) and IsValid(vehicle)
+        and (PD.VehicalInventory.VehicleConfig[vehicle:GetClass()] ~= nil or PD.VehicalInventory.vehicals[vehicle] ~= nil)
+        and ply:GetPos():Distance(vehicle:GetPos()) <= INTERACT_RANGE
 end
 
 local function SendStateTo(vehicle, ply)
