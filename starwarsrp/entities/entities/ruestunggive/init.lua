@@ -31,6 +31,20 @@ function ENT:Think()
     return true
 end
 
+--[[
+    Diese Rüstungsausgabe wird derzeit nicht genutzt und ist abgeschaltet: der
+    Empfänger prüfte weder Entfernung noch Entity, jeder Client konnte sich
+    jederzeit volle Rüstung geben. Zum Wiederaktivieren auf true setzen -
+    vorher Entfernung zur Entity und einen Cooldown prüfen.
+]]
+local ENABLED = false
+
+if not ENABLED then
+    -- Ein Lua-Refresh entfernt den bereits registrierten Empfänger nicht.
+    net.Receivers[string.lower("PD.Armor:GiveArmorEnt")] = nil
+    return
+end
+
 net.Receive("PD.Armor:GiveArmorEnt", function(len, ply)
     local typ = net.ReadInt(8)
 

@@ -244,8 +244,8 @@ function PD.Scoreboard:Draw()
             {name = PD.Officer.Table.co, title = "Commanding Officer", color = PD.Theme.Colors.AccentRed},
             {name = PD.Officer.Table.eo, title = "Executive Officer", color = PD.Theme.Colors.AccentOrange},
             {name = PD.Officer.Table.mo, title = "Medical Officer", color = PD.Theme.Colors.AccentBlue},
-            {name = PD.Officer.Table.no, title = "Naval Officer", color = PD.Theme.Colors.AccentGray},
-            {name = PD.Officer.Table.so, title = "Security Officer", color = PD.Theme.Colors.AccentGray},
+            -- {name = PD.Officer.Table.no, title = "Naval Officer", color = PD.Theme.Colors.AccentGray},
+            -- {name = PD.Officer.Table.so, title = "Security Officer", color = PD.Theme.Colors.AccentGray},
             {name = PD.Officer.Table.to, title = "Technical Officer", color = PD.Theme.Colors.AccentGray}
         }
         
@@ -340,6 +340,23 @@ function PD.Scoreboard:Draw()
         draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.AccentGray)
     end
 
+    -- Spieler nach Rang: hoechste Job-Position oben (Captain), niedrigste
+    -- unten (Trooper), bei gleichem Rang alphabetisch.
+    local rankPos = {}
+    for _, p in ipairs(player.GetAll()) do
+        local ok, _, jobTbl = pcall(p.GetJob, p)
+        rankPos[p] = ok and istable(jobTbl) and tonumber(jobTbl.position) or 0
+    end
+
+    local sortedPlayers = table.GetKeys(rankPos)
+    table.sort(sortedPlayers, function(a, b)
+        if rankPos[a] ~= rankPos[b] then
+            return rankPos[a] > rankPos[b]
+        end
+
+        return a:Nick() < b:Nick()
+    end)
+
     for k, v in SortedPairs(LoadUnits()) do
         if not HasUnitPlayers(v.name) then continue end
 
@@ -414,7 +431,7 @@ function PD.Scoreboard:Draw()
                 draw.DrawText(count .. " Spieler", "MLIB.12", w - PD.W(15), h / 2 - PD.H(6), PD.Theme.Colors.TextDim, TEXT_ALIGN_RIGHT)
             end
 
-            for _, ply in pairs(player.GetAll()) do
+            for _, ply in ipairs(sortedPlayers) do
                 if not IsValid(ply) or not ply:IsPlayer() then continue end
 
                 local jobID, jobTable = "FEHLER", {
@@ -486,9 +503,19 @@ function PD.Scoreboard:Draw()
                     
                     -- Name (links)
                     draw.DrawText(name, "MLIB.16", PD.W(15), h / 2 - PD.H(8), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
-                    
+
+                    -- Fortbildungs-Abzeichen direkt hinter dem Namen
+                    if PD.FB and PD.FB.DrawBadges then
+                        surface.SetFont("MLIB.16")
+                        local nameWidth = surface.GetTextSize(name)
+
+                        PD.FB.DrawBadges(ply, PD.W(15) + nameWidth + PD.W(10), h / 2 - PD.H(5))
+                    end
+
                     -- Job (mittig)
                     draw.DrawText(jobTable.name, "MLIB.14", w / 2, h / 2 - PD.H(7), PD.Theme.Colors.TextDim, TEXT_ALIGN_CENTER)
+
+                    draw.DrawText(ply:GetUserGroup(), "MLIB.14", w / 6 * 5, h / 2 - PD.H(7), PD.Theme.Colors.TextDim, TEXT_ALIGN_CENTER)
                     
                     -- Ping (rechts)
                     draw.DrawText(ping .. " ms", "MLIB.14", w - PD.W(15), h / 2 - PD.H(7), pingColor, TEXT_ALIGN_RIGHT)
@@ -664,17 +691,17 @@ function Decode_Menu(vfunkstr)
     local DeCodelbl = PD.Label("Gesuchter Code: \n" .. rCode, panelRight)
 
     local times = 90
-    local time = PD.Label(LANG.COMMANDS_UI_DECODE_TIME .. ": " .. times, panelRight)
+    local time = PD.Label("Verbleibende Zeit: " .. ": " .. times, panelRight)
     time:SetFont("MLIB.40")
     time:SetTall(PD.H(50))
 
     timer.Create("DecodeTimer", 1, times, function()
         times = times - 1
-        time:SetText(LANG.COMMANDS_UI_DECODE_TIME .. ": " .. times)
+        time:SetText("Verbleibende Zeit: " .. ": " .. times)
 
         if times == 0 then
             timer.Remove("DecodeTimer")
-            chat.AddText(red, "[DECODE] ", white, LANG.COMMANDS_UI_DECODE_FAILED)
+            chat.AddText(red, "[DECODE] ", white, "Dekodierung fehlgeschlagen.")
             mainFrameDecode:Remove()
         end
     end)
@@ -729,7 +756,7 @@ function Decode_Menu(vfunkstr)
             Codelbl:Remove()
         end
 
-        Codelbl = PD.Label(LANG.COMMANDS_UI_DECODE_YOUR_CODE .. "\n" .. selfCode, panelRight)
+        Codelbl = PD.Label("Dein Code: " .. "\n" .. selfCode, panelRight)
         Codelbl:Dock(BOTTOM)
     end
 
@@ -737,13 +764,13 @@ function Decode_Menu(vfunkstr)
         if rCode == selfCode then
             timer.Remove("DecodeTimer")
 
-            chat.AddText(red, "[DECODE] ", white, LANG.COMMANDS_UI_DECODE_SUCCESS)
+            chat.AddText(red, "[DECODE] ", white, "Dekodierung erfolgreich!")
             net.Start("CMD_Decode")
             net.WriteString(vfunkstr)
             net.SendToServer()
             mainFrameDecode:Remove()
         else
-            chat.AddText(red, "[DECODE] ", white, LANG.COMMANDS_UI_DECODE_FAILED)
+            chat.AddText(red, "[DECODE] ", white, "Dekodierung fehlgeschlagen.")
         end
     end)
     btn:Dock(BOTTOM)

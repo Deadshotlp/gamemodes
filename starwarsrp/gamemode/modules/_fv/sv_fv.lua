@@ -20,7 +20,6 @@ net.Receive("PD.FV.RequestPlayerInfo", function(len, ply)
     if not IsValid(ply) or not ply:IsAdmin() then return end
 
     local str = string.Split(net.ReadString(), ",")
-    PrintTable(str)
     local unit, subunit, job = str[1], str[2], str[3]
     if unit == "" then
         sendTouser(ply, {})
@@ -81,7 +80,7 @@ net.Receive("PD.FV.RequestPlayerInfo", function(len, ply)
             if j.faction.unit == unit and (subunit == "" or j.faction.subunit == subunit) and (job == "" or j.faction.job == job) then
                 local newTBL = {}
                 newTBL.faction = j.faction.unit .. "," .. j.faction.subunit .. "," .. j.faction.job
-                newTBL.name = j.id .. " " .. j.name
+                newTBL.name = PD.Char.BuildRPName(j.id, j.name)
                 newTBL.lastplaytime = j.lastplaytime
                 table.insert(charsTabel, newTBL)
             end

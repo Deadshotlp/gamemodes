@@ -113,15 +113,16 @@ local function GetPlayerCharID(ply)
     return PD.Char and PD.Char.GetCharacterID and PD.Char:GetCharacterID(ply) or ply:GetNWString("character_id", "9999")
 end
 
+--[[
+    Baut den Fraktionsbaum aus dem aktuellen Jobstand und den Charakteren.
+
+    Frueher stiess diese Funktion jedes Mal PD.JOBS.LoadJobs an - vier
+    Datenbankabfragen, die erst nach dem Neuaufbau zurueckkamen, der Baum
+    entstand also trotzdem aus dem alten Stand. Stattdessen baut der Hook
+    PD.JOBS.Loaded (unten) den Baum neu, sobald frische Jobs da sind.
+]]
 function PD.List:LoadFactions()
     PD.List.Tbl = {}
-
-    if PD.JOBS and PD.JOBS.LoadJobs then
-        PD.JOBS.LoadJobs()
-    end
-
-    local allplayers = PD.JSON and PD.JSON.Read and PD.JSON.Read("factions/players.json") or {}
-    allplayers = istable(allplayers) and allplayers or {}
 
     for unitIndex, unitData in SortedPairs(GetJobsTable()) do
         PD.List.Tbl[unitIndex] = {
@@ -164,53 +165,45 @@ function PD.List:LoadFactions()
         end
     end
 
-    for charID, data in pairs(allplayers) do
-        local unitIndex, subIndex, jobIndex = GetFactionPath(data.unit, data.subunit, data.job)
+    --[[
+        Mitgliedschaften kommen aus den Charakteren (pd_characters). Die
+        fruehere Datei data/factions/players.json wird nicht mehr gelesen:
+        sie war eine zweite Kopie derselben Zuordnung und lief auseinander,
+        sobald eine Seite ohne die andere geaendert wurde.
+    ]]
+    local allChars = PD.Char and PD.Char.LoadAllChars and PD.Char:LoadAllChars() or {}
 
-        local jobNode = GetJobNode(unitIndex, subIndex, jobIndex)
-        if jobNode then
-            data.unit = unitIndex
-            data.subunit = subIndex
-            data.job = jobIndex
-            jobNode.players[charID] = {
-                name = data.name or charID,
-                steamid = data.steamid or "",
-                unit = unitIndex,
-                subunit = subIndex,
-                job = jobIndex,
-                join = data.join or os.date("%d.%m.%Y %H:%M:%S", os.time()),
-                lastplay = data.lastplay or os.date("%d.%m.%Y %H:%M:%S", os.time()),
-                playtime = tonumber(data.playtime) or 0
-            }
-        end
-    end
-end
+    for steamid, chars in pairs(allChars) do
+        for _, char in pairs(chars or {}) do
+            local faction = istable(char) and char.faction
 
-function PD.List.Save()
-    local players = {}
+            if istable(faction) and char.id and char.id ~= "" then
+                local unitIndex, subIndex, jobIndex = GetFactionPath(faction.unit, faction.subunit, faction.job)
+                local jobNode = GetJobNode(unitIndex, subIndex, jobIndex)
 
-    for _, unit in pairs(PD.List.Tbl or {}) do
-        for _, subunit in pairs(unit.subunits or {}) do
-            for _, job in pairs(subunit.jobs or {}) do
-                for charID, data in pairs(job.players or {}) do
-                    players[charID] = {
-                        name = data.name,
-                        steamid = data.steamid,
-                        unit = data.unit,
-                        subunit = data.subunit,
-                        job = data.job,
-                        join = data.join,
-                        lastplay = data.lastplay,
-                        playtime = tonumber(data.playtime) or 0
+                if jobNode then
+                    local now = os.date("%d.%m.%Y %H:%M:%S", os.time())
+
+                    jobNode.players[char.id] = {
+                        name = PD.Char.BuildRPName(char.id, char.name),
+                        steamid = tostring(steamid),
+                        unit = unitIndex,
+                        subunit = subIndex,
+                        job = jobIndex,
+                        join = (char.cratedate and char.cratedate ~= "") and char.cratedate or now,
+                        lastplay = (char.lastplaytime and char.lastplaytime ~= "") and char.lastplaytime or now,
+                        playtime = tonumber(char.playtime) or 0
                     }
                 end
             end
         end
     end
+end
 
-    if PD.JSON and PD.JSON.Write then
-        PD.JSON.Write("factions/players.json", players)
-    end
+-- Die Zuordnung wird mit dem Charakter gespeichert (PD_Faction_Change ->
+-- PD.Char:UpdateStoredCharJobData). Die fruehere players.json entfaellt, die
+-- Funktion bleibt fuer bestehende Aufrufer erhalten.
+function PD.List.Save()
 end
 
 function PD.List:Sync(ply)
@@ -444,12 +437,6 @@ function PD.List:SetPlayerDefaultFaction(ply)
     return unitIndex, subIndex, jobIndex
 end
 
-if PD.JSON and PD.JSON.Create then
-    timer.Simple(1, function()
-        PD.JSON.Create("factions")
-    end)
-end
-
 local PLAYER = FindMetaTable("Player")
 
 function PLAYER:GetCharacterID()
@@ -461,6 +448,12 @@ hook.Add("PostPDLoaded", "PD.List.LoadFactions.Core", function()
 end)
 
 hook.Add("PD.JOBS.SaveJob", "PD.List.ReloadFactions.OnJobSave", function()
+    PD.List:LoadFactions()
+    PD.List:SyncAll()
+end)
+
+-- Neue Jobs aus der Datenbank (Start, Job-Editor, pd_reload jobs).
+hook.Add("PD.JOBS.Loaded", "PD.List.ReloadFactions.OnJobsLoaded", function()
     PD.List:LoadFactions()
     PD.List:SyncAll()
 end)
@@ -503,4 +496,11 @@ hook.Add("ShutDown", "PD.List.ShutDown.Core", function()
     end
 
     PD.List.Save()
+end)
+
+-- Sobald die Charaktere aus der Datenbank da sind (Start, pd_reload chars),
+-- den Baum daraus neu aufbauen.
+hook.Add("PD.Char.StorageLoaded", "PD.List.LoadFactions.FromChars", function()
+    PD.List:LoadFactions()
+    PD.List:SyncAll()
 end)

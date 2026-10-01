@@ -124,8 +124,8 @@ function PD.Char:Menu(close)
         surface.SetDrawColor(PD.Theme.Colors.AccentRed)
         surface.DrawRect(0, PD.H(77), w, PD.H(3))
 
-        draw.DrawText("IMPERIAL PERSONNEL SYSTEM", "MLIB.28", w / 2, PD.H(25), PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
-        draw.DrawText("CHARACTER SELECTION", "MLIB.14", w / 2, PD.H(55), PD.Theme.Colors.AccentGray, TEXT_ALIGN_CENTER)
+        draw.DrawText("Republic Personnel System", "MLIB.28", w / 2, PD.H(25), PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
+        draw.DrawText("Character Selection", "MLIB.14", w / 2, PD.H(55), PD.Theme.Colors.AccentGray, TEXT_ALIGN_CENTER)
 
         draw.RoundedBox(0, 0, h - PD.H(100), w, PD.H(100), PD.Theme.Colors.BackgroundDark)
         surface.SetDrawColor(PD.Theme.Colors.AccentGray)
@@ -193,13 +193,13 @@ function PD.Char:Menu(close)
         local yPos = PD.H(30)
         local lineHeight = PD.H(25)
 
-        draw.DrawText((LANG.CHAR_UI_UNIT or "Unit") .. ":", "MLIB.12", PD.W(15), yPos, PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+        draw.DrawText(("Einheit") .. ":", "MLIB.12", PD.W(15), yPos, PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
         draw.DrawText(unitTable.name or "N/A", "MLIB.14", PD.W(100), yPos - PD.H(2), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
 
-        draw.DrawText((LANG.CHAR_UI_SUBUNIT or "SubUnit") .. ":", "MLIB.12", PD.W(15), yPos + lineHeight, PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+        draw.DrawText(("Untereinheit") .. ":", "MLIB.12", PD.W(15), yPos + lineHeight, PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
         draw.DrawText(subUnitTable.name or "N/A", "MLIB.14", PD.W(100), yPos + lineHeight - PD.H(2), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
 
-        draw.DrawText((LANG.CHAR_UI_JOB or "Job") .. ":", "MLIB.12", PD.W(15), yPos + lineHeight * 2, PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+        draw.DrawText(("Job") .. ":", "MLIB.12", PD.W(15), yPos + lineHeight * 2, PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
         draw.DrawText(jobTable.name or "N/A", "MLIB.14", PD.W(100), yPos + lineHeight * 2 - PD.H(2), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
     end
 
@@ -207,7 +207,7 @@ function PD.Char:Menu(close)
     actionButton:SetSize(PD.W(240), PD.H(55))
     actionButton:SetAccentColor(PD.Theme.Colors.StatusActive)
 
-    local deleteButton = PD.Button(LANG.CHAR_UI_DELETE_CHAR or "LÖSCHEN", CharBase, function()
+    local deleteButton = PD.Button("Charakter löschen", CharBase, function()
         local id = page
         if not PD.Char.Data[id] then
             ShowError("Kein Charakter zum Löschen vorhanden!", CharBase, 2)
@@ -260,7 +260,7 @@ function PD.Char:Menu(close)
     deleteButton:SetAccentColor(PD.Theme.Colors.StatusCritical)
 
     local function OpenCreateUI(slot)
-        CharBase:Clear()
+        PD.ClearFrame(CharBase)
 
         local panel = vgui.Create("DPanel", CharBase)
         panel:SetSize(PD.W(600), PD.H(450))
@@ -281,7 +281,7 @@ function PD.Char:Menu(close)
         header:Dock(TOP)
         header:SetTall(PD.H(70))
         header.Paint = function(s, w, h)
-            draw.DrawText(LANG.CHAR_UI_CREATE_CHAR or "CREATE CHARACTER", "MLIB.28", w / 2, PD.H(15), PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
+            draw.DrawText("Charakter erstellen", "MLIB.28", w / 2, PD.H(15), PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
             draw.DrawText("SLOT " .. slot, "MLIB.14", w / 2, PD.H(45), PD.Theme.Colors.AccentGray, TEXT_ALIGN_CENTER)
         end
 
@@ -321,7 +321,7 @@ function PD.Char:Menu(close)
         btnContainer:DockMargin(PD.W(30), 0, PD.W(30), PD.H(20))
         btnContainer.Paint = function() end
 
-        local backBtn = PD.Button("‹ " .. (LANG.GENERIC_BACK or "ZURÜCK"), btnContainer, function()
+        local backBtn = PD.Button("‹ " .. ("Zurück"), btnContainer, function()
             if IsValid(CharBase) then
                 CharBase:Remove()
             end
@@ -330,7 +330,7 @@ function PD.Char:Menu(close)
         backBtn:Dock(LEFT)
         backBtn:SetWide(PD.W(180))
 
-        local createBtn = PD.Button((LANG.CHAR_UI_CREATE_CHAR or "ERSTELLEN") .. " ›", btnContainer, function()
+        local createBtn = PD.Button(("Charakter erstellen") .. " ›", btnContainer, function()
             local name = nameEntry:GetValue()
 
             if not name or name == "" then
@@ -340,6 +340,11 @@ function PD.Char:Menu(close)
 
             if #name < (PD.Char.MinName or 3) then
                 ShowError("Name zu kurz! (Min. " .. (PD.Char.MinName or 3) .. " Zeichen)", CharBase, 2)
+                return
+            end
+
+            if (utf8.len(name) or #name) > (PD.Char.MaxName or 20) then
+                ShowError("Name zu lang! (Max. " .. (PD.Char.MaxName or 20) .. " Zeichen)", CharBase, 2)
                 return
             end
 
@@ -394,18 +399,18 @@ function PD.Char:Menu(close)
         end
 
         local id = page
-        local nameText = LANG.CHAR_UI_AVAILABLE_CHAR_SLOT or "VERFÜGBARER SLOT"
+        local nameText = "Verfügbare Charakterplatz"
         if PD.Char.Data[id] then
-            nameText = (PD.Char.Data[id].id or "") .. " " .. (PD.Char.Data[id].name or "")
+            nameText = PD.Char.BuildRPName(PD.Char.Data[id].id, PD.Char.Data[id].name)
         end
         charIDLabel.labelText = nameText
         charIDLabel:SetPos(scrw / 2 - PD.W(250), PD.H(110))
 
-        local btnText = LANG.CHAR_UI_CREATE_CHAR or "ERSTELLEN"
+        local btnText = "Charakter erstellen"
         if PD.Char.Data[id] then
             local currentName = LocalPlayer():GetNWString("rpname", "")
-            local charName = (PD.Char.Data[id].id or "") .. " " .. (PD.Char.Data[id].name or "")
-            btnText = (currentName == charName) and (LANG.CHAR_UI_CONTINUE or "FORTSETZEN") or (LANG.CHAR_UI_PLAY or "SPIELEN")
+            local charName = PD.Char.BuildRPName(PD.Char.Data[id].id, PD.Char.Data[id].name)
+            btnText = (currentName == charName) and ("Fortsetzen") or ("Spielen")
         end
         actionButton:SetText(btnText)
         actionButton:SetPos(scrw / 2 - PD.W(120), scrh - PD.H(75))
@@ -420,6 +425,17 @@ function PD.Char:Menu(close)
 
             if not PD.Char.Data[id] then
                 OpenCreateUI(id)
+                surface.PlaySound("buttons/button14.wav")
+                return
+            end
+
+            -- Aktiver Charakter: nur schliessen. Ein erneutes Setzen wuerde den
+            -- Spieler neu spawnen.
+            if PD.Char.Data[id].id and LocalPlayer():GetNWString("character_id", "9999") == PD.Char.Data[id].id then
+                if IsValid(CharBase) then
+                    CharBase:Remove()
+                end
+
                 surface.PlaySound("buttons/button14.wav")
                 return
             end
@@ -521,7 +537,7 @@ function PD.Char:Menu(close)
                 surface.DrawRect(0, 0, w, PD.H(3))
 
                 draw.DrawText("+", "MLIB.80", w / 2, h / 2 - PD.H(80), isHovered and PD.Theme.Colors.AccentRed or PD.Theme.Colors.AccentGray, TEXT_ALIGN_CENTER)
-                draw.DrawText((LANG.CHAR_UI_CREATE_CHAR or "CHARAKTER ERSTELLEN"), "MLIB.20", w / 2, h / 2 + PD.H(20), PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
+                draw.DrawText(("Charakter erstellen"), "MLIB.20", w / 2, h / 2 + PD.H(20), PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
                 draw.DrawText("SLOT " .. i, "MLIB.14", w / 2, h / 2 + PD.H(50), PD.Theme.Colors.AccentGray, TEXT_ALIGN_CENTER)
             end
 
@@ -585,12 +601,12 @@ function PD.Char:Menu(close)
 
                 local _, _, jobTable = GetFactionTables(data)
 
-                local displayName = (data.id or "") .. " " .. (data.name or "")
+                local displayName = PD.Char.BuildRPName(data.id, data.name)
                 draw.DrawText(displayName, "MLIB.18", w / 2, h - PD.H(70), PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
                 draw.DrawText(jobTable.name or "FEHLER", "MLIB.14", w / 2, h - PD.H(45), PD.Theme.Colors.AccentGray, TEXT_ALIGN_CENTER)
 
                 local currentName = LocalPlayer():GetNWString("rpname", "")
-                local charName = (data.id or "") .. " " .. (data.name or "")
+                local charName = PD.Char.BuildRPName(data.id, data.name)
                 if currentName == charName then
                     draw.RoundedBox(PD.H(5), w / 2 - PD.W(40), h - PD.H(25), PD.W(80), PD.H(18), PD.Theme.Colors.StatusActive)
                     draw.DrawText("AKTIV", "MLIB.15", w / 2, h - PD.H(24), PD.Theme.Colors.Text, TEXT_ALIGN_CENTER)
@@ -624,24 +640,24 @@ function PD.Char:Menu(close)
     socialContainer.Paint = function() end
 
     local discordBtn = PD.Button("DISCORD", socialContainer, function()
-        gui.OpenURL(PD.Char.Discord or "")
+        gui.OpenURL("https://discord.gg/4tWG8tkN7g")
     end)
     discordBtn:Dock(LEFT)
     discordBtn:SetWide(PD.W(85))
     discordBtn:SetAccentColor(Color(88, 101, 242))
 
     local collectionBtn = PD.Button("WORKSHOP", socialContainer, function()
-        gui.OpenURL(PD.Char.Kollektion or "")
+        gui.OpenURL("https://steamcommunity.com/sharedfiles/filedetails/?id=3778208842")
     end)
     collectionBtn:Dock(RIGHT)
-    collectionBtn:SetWide(PD.W(85))
+    collectionBtn:SetWide(PD.W(100))
     collectionBtn:SetAccentColor(PD.Theme.Colors.AccentBlue)
 
-    local leaveBtn = PD.Button("✕", CharBase, function()
+    local leaveBtn = PD.Button("DISCONNECT", CharBase, function()
         RunConsoleCommand("disconnect")
     end)
-    leaveBtn:SetSize(PD.W(45), PD.H(45))
-    leaveBtn:SetPos(scrw - PD.W(55), scrh - PD.H(75))
+    leaveBtn:SetSize(PD.W(150), PD.H(45))
+    leaveBtn:SetPos(PD.W(15), PD.H(15))
     leaveBtn:SetAccentColor(PD.Theme.Colors.StatusCritical)
 
     if close then

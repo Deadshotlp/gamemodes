@@ -30,56 +30,165 @@ net.Receive("PD.Char.RequestPlayerData", function(len, ply)
     net.Send(ply)
 end)
 
-net.Receive("PD.Char.Admin",function(len, ply)
+local function AdminNotify(ply, text, ok)
+    if PD.Notify then
+        PD.Notify(text, ok and Color(90, 200, 90) or Color(255, 60, 60), false, ply)
+    end
+end
+
+--[[
+    Charakter aus dem Admin-Menue speichern, loeschen oder setzen.
+
+    Die Charaktere eines Spielers sind eine Liste nach Slot (1, 2, ...).
+    Frueher wurde mit der Charakter-ID ("95-3404") als Schluessel geschrieben.
+    Das legte einen zweiten Eintrag mit derselben ID an, die Datenbank lehnte
+    das Speichern wegen des doppelten Schluessels ab, und der Name blieb der
+    alte. Loeschen und Setzen hatten denselben Fehler. Jetzt wird der Slot ueber
+    die ID gesucht.
+]]
+net.Receive("PD.Char.Admin", function(len, ply)
     if not ply:IsAdmin() then return end
 
     local typ = net.ReadString()
     local plyid = net.ReadString()
     local playerTable = net.ReadTable()
 
-    local tbl = PD.Char:LoadChar(plyid, "AdminSave")
+    local chars = PD.Char:LoadChar(plyid, "AdminSave")
 
-    if tbl then
-        if typ == "save" then
-            playerTable.admin = ply:SteamID64()
-            playerTable.lastupdateadin = os.date("%d.%m.%Y %H:%M:%S", os.time())
+    if not chars then
+        AdminNotify(ply, "Keine Charaktere zu " .. plyid .. " gefunden.")
+        return
+    end
 
-            tbl[playerTable.id] = playerTable
-            PD.Char:SaveChar(plyid, tbl)
+    -- Die ID ist im Menue gesperrt. originalid schickt der Client mit, damit
+    -- der Charakter sicher gefunden wird.
+    local charID = tostring(playerTable.originalid or playerTable.id or "")
+    local index = PD.Char:GetCharIndexByID(chars, charID)
 
-            PD.LOGS.Add("char", "Charakter mit der ID " .. playerTable.id .. " von Spieler " .. plyid .. " wurde von " .. ply:Nick() .. " gespeichert!", Color(0, 255, 0))
-        elseif typ == "delete" then
-            local charid = playerTable.id
-            table.remove(tbl, charid)
-            PD.Char:SaveChar(plyid, tbl)
+    if not index then
+        AdminNotify(ply, "Charakter " .. charID .. " nicht gefunden.")
+        return
+    end
 
-            if #tbl > 0 then
-                local charID = 0
+    local char = chars[index]
+    local target = FindPlayerbyID(plyid)
+    local isActive = IsValid(target) and PD.Char:GetCharacterID(target) == char.id
 
-                for k, v in pairs(tbl) do
-                    if v.id ~= charid then
-                        charID = k
-                        break
-                    end
-                end
+    if typ == "save" then
+        local name = string.Trim(tostring(playerTable.name or ""))
 
-                if charID == 0 then 
-                    net.Start("OpenCharbyDelete")
-                    net.Send(FindPlayerbyID(plyid))
-                    return 
-                end
-
-                PD.Char:PlayerSetChar(FindPlayerbyID(plyid), charID)
-
-                PD.LOGS.Add("char", "Charakter mit der ID " .. charid .. " von Spieler " .. plyid .. " wurde von " .. ply:Nick() .. " gelöscht!", Color(255, 0, 0))
-            end
-        elseif typ == "set" then
-            local charID = playerTable.id
-
-            PD.Char:PlayerSetChar(FindPlayerbyID(plyid), charID)
-
-            PD.LOGS.Add("char", "Charakter mit der ID " .. charID .. " von Spieler " .. plyid .. " wurde von " .. ply:Nick() .. " ausgewählt!", Color(0, 255, 0))
+        if name == "" then
+            AdminNotify(ply, "Der Name darf nicht leer sein.")
+            return
         end
+
+        -- Neue ID? Dann zuerst umbenennen (alle Tabellen), danach Name und
+        -- Credits mit dem frischen Stand speichern.
+        local newID = string.Trim(tostring(playerTable.id or charID))
+
+        if newID ~= charID then
+            PD.Char:RenameCharID(plyid, charID, newID, function(ok, err)
+                if not IsValid(ply) then return end
+
+                if not ok then
+                    AdminNotify(ply, "ID nicht geändert: " .. tostring(err))
+                    return
+                end
+
+                PD.LOGS.Add("char", "Charakter-ID " .. charID .. " von Spieler " .. plyid .. " wurde von " .. ply:Nick() .. " in " .. newID .. " geändert.", Color(0, 255, 0))
+
+                local fresh = PD.Char:LoadChar(plyid, "AdminSave") or {}
+                local freshIndex = PD.Char:GetCharIndexByID(fresh, newID)
+                if not freshIndex then return end
+
+                local freshChar = fresh[freshIndex]
+                local oldName = freshChar.name
+
+                freshChar.name = string.sub(name, 1, 64)
+                freshChar.money = math.max(0, math.floor(tonumber(playerTable.money) or tonumber(freshChar.money) or 0))
+
+                PD.Char:SaveChar(plyid, fresh)
+
+                if IsValid(target) and PD.Char:GetCharacterID(target) == newID then
+                    target:SetNWString("rpname", PD.Char.BuildRPName(newID, freshChar.name))
+                    PD.Char:SyncChar(target, "AdminSave")
+                end
+
+                if PD.List and PD.List.LoadFactions then
+                    PD.List:LoadFactions()
+                    PD.List:SyncAll()
+                end
+
+                -- Menue des Admins mit den neuen IDs neu aufbauen - sonst
+                -- zeigte ein zweites Speichern noch auf die alte ID.
+                net.Start("PD.Char.RequestPlayerData")
+                net.WriteTable(PD.Char:LoadChar(plyid, "AdminSave") or {})
+                net.Send(ply)
+
+                AdminNotify(ply, "Charakter " .. newID .. " gespeichert (vorher " .. charID .. ").", true)
+                PD.LOGS.Add("char", "Charakter " .. newID .. " von Spieler " .. plyid .. " wurde von " .. ply:Nick() .. " gespeichert (Name: " .. tostring(oldName) .. " -> " .. freshChar.name .. ").", Color(0, 255, 0))
+            end)
+
+            return
+        end
+
+        local oldName = char.name
+
+        char.name = string.sub(name, 1, 64)
+        char.money = math.max(0, math.floor(tonumber(playerTable.money) or tonumber(char.money) or 0))
+
+        PD.Char:SaveChar(plyid, chars)
+
+        if isActive then
+            target:SetNWString("rpname", PD.Char.BuildRPName(char.id, char.name))
+        end
+
+        if IsValid(target) then
+            PD.Char:SyncChar(target, "AdminSave")
+        end
+
+        -- Namen im Fraktionsbaum nachziehen.
+        if PD.List and PD.List.LoadFactions then
+            PD.List:LoadFactions()
+            PD.List:SyncAll()
+        end
+
+        AdminNotify(ply, "Charakter " .. char.id .. " gespeichert.", true)
+        PD.LOGS.Add("char", "Charakter " .. char.id .. " von Spieler " .. plyid .. " wurde von " .. ply:Nick() .. " gespeichert (Name: " .. tostring(oldName) .. " -> " .. char.name .. ").", Color(0, 255, 0))
+    elseif typ == "delete" then
+        hook.Run("PlayerDeleteCharacter", target, char)
+
+        table.remove(chars, index)
+        PD.Char:SaveChar(plyid, chars)
+
+        if isActive then
+            PD.Char:StopTimer(plyid)
+            target.CharID = nil
+            target:SetNWString("character_id", "9999")
+            target:SetNWString("rpname", "")
+        end
+
+        if IsValid(target) then
+            PD.Char:SyncChar(target, "AdminDelete")
+
+            if isActive then
+                net.Start("OpenCharbyDelete")
+                net.Send(target)
+            end
+        end
+
+        AdminNotify(ply, "Charakter " .. char.id .. " gelöscht.", true)
+        PD.LOGS.Add("char", "Charakter mit der ID " .. char.id .. " von Spieler " .. plyid .. " wurde von " .. ply:Nick() .. " gelöscht!", Color(255, 0, 0))
+    elseif typ == "set" then
+        if not IsValid(target) then
+            AdminNotify(ply, "Der Spieler ist nicht online.")
+            return
+        end
+
+        PD.Char:PlayerSetChar(target, index)
+
+        AdminNotify(ply, "Charakter " .. char.id .. " gesetzt.", true)
+        PD.LOGS.Add("char", "Charakter mit der ID " .. char.id .. " von Spieler " .. plyid .. " wurde von " .. ply:Nick() .. " ausgewählt!", Color(0, 255, 0))
     end
 end)
 

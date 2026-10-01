@@ -1,5 +1,5 @@
 PD.IA = PD.IA or {}
-PD.IA.LastEntity = nil
+PD.IA.LastEntity = {}
 PD.IA.CurrentBone = {
     index = 0,
     select_time = nil,
@@ -114,7 +114,7 @@ local function DrawSubMenu(tbl, x, y, scale)
         local widht, height = surface.GetTextSize(v.name)
 
         if v.selected and not table.IsEmpty(v.sub_menus) then
-            DrawSubMenu(v.sub_menus, curent_x + 300, curent_y, scale)
+            DrawSubMenu(v.sub_menus, curent_x + 150, curent_y, scale)
         end
 
         if mous_x >= x and mous_x <= curent_x + widht and mous_y >= curent_y and mous_y <= curent_y + height then
@@ -153,7 +153,7 @@ local function DrawOptions(x, y, index)
     end
 
     local scale = 25
-    local draw_x = x + 75
+    local draw_x = x + 40
     local draw_y = y
 
     DrawSubMenu(PD.IA.CurrentBone.sub_menus, draw_x, draw_y, scale)
@@ -176,64 +176,64 @@ function PD.IA.OtherInteraction()
     surface.SetFont("MLIB.25")
 
     local ply = LocalPlayer()
-        local trace = ply:GetEyeTrace()
-        local ent = trace.Entity
+    local trace = ply:GetEyeTrace()
+    local ent = trace.Entity
 
-        if not ent:IsValid() and not PD.IA.CurrentBone.looked_at then return end
+    if not ent:IsValid() and not PD.IA.CurrentBone.looked_at then return end
 
-        if ply:GetPos():Distance(ent:GetPos()) >= 100 and ply:GetPos():Distance(PD.IA.LastEntity.ent:GetPos()) >= 100 then return end
-    
-        RequestEntityInformation(ent, "other")
+    if ply:GetPos():Distance(ent:GetPos()) >= 200 or (PD.IA.LastEntity.ent and ply:GetPos():Distance(PD.IA.LastEntity.ent:GetPos()) >= 200) then return end
 
-        if PD.IA.LastEntity and PD.IA.LastEntity.bones and PD.IA.LastEntity.ent then
+    RequestEntityInformation(ent, "other")
 
-            for k, v in pairs(PD.IA.LastEntity.bones) do
-                if v == "self" then continue end
+    if PD.IA.LastEntity and PD.IA.LastEntity.bones and PD.IA.LastEntity.ent then
 
-                if PD.IA.LastEntity.ent:LookupBone(v) == nil then continue end
+        for k, v in pairs(PD.IA.LastEntity.bones) do
+            if v == "self" then continue end
 
-                local mouseX, mouseY = input.GetCursorPos()
-                local pos = PD.IA.LastEntity.ent:GetBonePosition(PD.IA.LastEntity.ent:LookupBone(v)):ToScreen()
-                local size_x, size_y = 25, 25
+            if PD.IA.LastEntity.ent:LookupBone(v) == nil then continue end
 
-                -- Berechne den Mittelpunkt des Bereichs
-                local centerX = pos.x
-                local centerY = pos.y
-                local radius = 25
-                local radiusSquared = radius * radius -- Quadrierter Radius für effizienteren Vergleich
-                
-                -- Berechne die quadrierte Distanz vom Mauszeiger zum Mittelpunkt
-                local distanceSquared = (mouseX - centerX)^2 + (mouseY - centerY)^2
+            local mouseX, mouseY = input.GetCursorPos()
+            local pos = PD.IA.LastEntity.ent:GetBonePosition(PD.IA.LastEntity.ent:LookupBone(v)):ToScreen()
+            local size_x, size_y = 25, 25
 
-                local rotation = 0
-                
-                -- Prüfe, ob die quadrierte Distanz kleiner oder gleich dem quadrierten Radius ist
-                if distanceSquared <= radiusSquared or (not PD.IA.CurrentBone.looked_at or PD.IA.CurrentBone.index == k) then
-                    if PD.IA.CurrentBone.index ~= k then
-                        PD.IA.CurrentBone.sub_menus = {}
-                    end
-                
-                    DrawOptions(centerX, centerY, v) -- Optionen am Mittelpunkt zeichnen
+            -- Berechne den Mittelpunkt des Bereichs
+            local centerX = pos.x
+            local centerY = pos.y
+            local radius = 25
+            local radiusSquared = radius * radius -- Quadrierter Radius für effizienteren Vergleich
+            
+            -- Berechne die quadrierte Distanz vom Mauszeiger zum Mittelpunkt
+            local distanceSquared = (mouseX - centerX)^2 + (mouseY - centerY)^2
 
-                    size_x, size_y = 50, 50
-                    surface.SetDrawColor(255, 0, 0, 255) -- Rot, wenn im Kreis
-                    rotation = (CurTime() * 50) % 360
-                
-                    PD.IA.CurrentBone.index = k
-                    PD.IA.CurrentBone.looked_at = true
-                else
-                    if PD.IA.CurrentBone.index == k then
-                        ResetBoneInfo()
-                    end
-                    surface.SetDrawColor(0, 255, 255, 255) -- Weiß, wenn außerhalb
+            local rotation = 0
+            
+            -- Prüfe, ob die quadrierte Distanz kleiner oder gleich dem quadrierten Radius ist
+            if distanceSquared <= radiusSquared or (not PD.IA.CurrentBone.looked_at or PD.IA.CurrentBone.index == k) then
+                if PD.IA.CurrentBone.index ~= k then
+                    PD.IA.CurrentBone.sub_menus = {}
                 end
-                
-                surface.SetMaterial(kreis)
-                surface.DrawTexturedRectRotated(centerX, centerY, size_x, size_y, rotation)
+            
+                DrawOptions(centerX, centerY, v) -- Optionen am Mittelpunkt zeichnen
+
+                size_x, size_y = 50, 50
+                surface.SetDrawColor(255, 0, 0, 255) -- Rot, wenn im Kreis
+                rotation = (CurTime() * 50) % 360
+            
+                PD.IA.CurrentBone.index = k
+                PD.IA.CurrentBone.looked_at = true
+            else
+                if PD.IA.CurrentBone.index == k then
+                    ResetBoneInfo()
+                end
+                surface.SetDrawColor(0, 255, 255, 255) -- Weiß, wenn außerhalb
             end
-        else
-            ResetBoneInfo()
+            
+            surface.SetMaterial(kreis)
+            surface.DrawTexturedRectRotated(centerX, centerY, size_x, size_y, rotation)
         end
+    else
+        ResetBoneInfo()
+    end
 end
 
 function PD.IA.CheckForInteraction()
@@ -248,7 +248,7 @@ function PD.IA.CheckForInteraction()
 
         ResetBoneInfo()
     elseif PD.IA.LastEntity ~= nil then
-        PD.IA.LastEntity = nil
+        PD.IA.LastEntity = {}
     end
 end
 
@@ -345,4 +345,17 @@ hook.Add("PostDrawHUD", "PD.IA.CheckForButton", function()
     end
 
 
+end)
+
+concommand.Add("List_bones", function()
+    local trace = LocalPlayer():GetEyeTrace()
+
+    local ent = trace.Entity
+
+    print(ent)
+    print("Entity class is: " .. ent:GetClass())
+
+    for i = 0, ent:GetBoneCount() - 1 do
+        print(i, ent:GetBoneName(i))
+    end
 end)

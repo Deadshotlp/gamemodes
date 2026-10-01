@@ -3,18 +3,41 @@
 PD.LOGS = PD.LOGS or {}
 
 local Logs = {}
+
+-- Voller Stand, nur auf Anfrage und nur fuer Admins (komprimiert).
 net.Receive("PD.LOGS.Add", function()
-    Logs = net.ReadTable()
+    local size = net.ReadUInt(32)
+    local tbl = util.JSONToTable(util.Decompress(net.ReadData(size)) or "")
+
+    Logs = istable(tbl) and tbl or {}
 end)
 
-timer.Simple(1, function()
+-- Einzelner neuer Eintrag.
+net.Receive("PD.LOGS.Append", function()
+    table.insert(Logs, {
+        typ = net.ReadString(),
+        text = net.ReadString(),
+        color = net.ReadColor(),
+        date = net.ReadString()
+    })
+end)
+
+local function RequestLogs()
+    if not LocalPlayer():IsAdmin() then return end
+
     net.Start("PD.LOGS.Sync")
     net.SendToServer()
-end)
+end
+
+hook.Add("InitPostEntity", "PD.LOGS.InitialSync", RequestLogs)
 
 function PD.LOGS:Menu(panel)
     if not IsValid(panel) then return end
     panel:Clear()
+
+    -- Stand auffrischen. Die Antwort kommt nach dem Aufbau an, sichtbar
+    -- wird sie beim naechsten Oeffnen oder bei einer Suche.
+    RequestLogs()
 
     -- Header
     local header = vgui.Create("DPanel", panel)

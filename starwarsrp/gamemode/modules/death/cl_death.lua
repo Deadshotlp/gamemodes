@@ -34,12 +34,83 @@ local function start_death_timer()
     end)
 end
 
+--[[
+    Chat oeffnen, waehrend man tot ist.
+
+    Der Sterbebildschirm ist ein bildschirmfuellendes Popup und haelt damit die
+    Tastatur. Binds loesen dann nicht mehr aus, also kommt weder messagemode
+    noch der PlayerBindPress-Hook der Chat-Module an - deshalb liess sich der
+    Chat im Tod nicht oeffnen.
+
+    Vorher stand hier ein OnKeyCodePressed am DeathFrame, das zwei Probleme
+    hatte: es verglich einen Tastennamen mit einem Bind-Namen statt Tastencodes,
+    und es rief chat.Open auf, also den Standard-Chat der Engine - der ist per
+    HUDShouldDraw ausgeblendet. Jetzt wird die Taste direkt abgefragt und der
+    eigene Chat geoeffnet.
+]]
+local chatKeys = {}
+local chatKeyDown = false
+
+local function refresh_chat_keys()
+    chatKeys = {}
+
+    for _, command in ipairs({"messagemode", "messagemode2"}) do
+        local name = input.LookupBinding(command)
+        local code = name and input.GetKeyCode(name)
+
+        if code and code > KEY_NONE then
+            chatKeys[code] = true
+        end
+    end
+
+    -- Ohne Belegung bleiben die Standardtasten. Sonst gaebe es im Tod gar
+    -- keinen Weg in den Chat.
+    if table.IsEmpty(chatKeys) then
+        chatKeys[KEY_Y] = true
+        chatKeys[KEY_U] = true
+    end
+end
+
+hook.Add("Think", "PD.Death.ChatKey", function()
+    local ply = LocalPlayer()
+    if not IsValid(ply) then return end
+
+    if ply:Alive() or not IsValid(DeathFrame) then
+        chatKeyDown = false
+        return
+    end
+
+    local down = false
+
+    for code in pairs(chatKeys) do
+        if input.IsKeyDown(code) then
+            down = true
+            break
+        end
+    end
+
+    -- Nur die Flanke, und nur solange der Chat zu ist: sonst wuerde jeder
+    -- Tastendruck beim Tippen das Fenster neu aufbauen.
+    if down and not chatKeyDown and not IsValid(ChatMainFrame) then
+        PD.Chat:Open()
+    end
+
+    chatKeyDown = down
+end)
+
 function PD.Death:Screen()
     if IsValid(DeathFrame) then
         return
     end
 
     DeathFrame = PD.Frame("", ScrW(), ScrH(), true)
+
+    DeathFrame.OnFocusChanged = function(self, focus)
+
+        if focus and IsValid(ChatMainFrame) then
+            ChatMainFrame:Remove()
+        end
+    end
 
     surface.SetFont("MLIB.16")
     local nameW2, nameH2 = surface.GetTextSize("Du kannst in " .. PD.Death.RespawnDelay .. " Sekunden Respawnen")
@@ -91,24 +162,13 @@ function PD.Death:Screen()
     lbl_g:SetWide(nameW2)
     lbl_g:SetPos((ScrW() / 2) - (lbl_g:GetWide() / 2), ScrH() - lbl_g:GetTall() - PD.H(20))
     start_death_timer()
-    
 
-    function DeathFrame:OnKeyCodePressed(key)
-        if input.GetKeyName(key) == input.LookupBinding("messagemode") then
-            chat.Open(1)
-        end
-    end
+    refresh_chat_keys()
 end
 
-hook.Add("Think", "PD.Death.CheckRespawn", function()
-    if input.IsKeyDown(KEY_SPACE) and not LocalPlayer():Alive() then
-        local waitTime = PD.Death.DeadTime + PD.Death.RespawnDelay - CurTime()
-        if waitTime <= 0 then
-            timer.Remove("PD.Death.Timer")
-            net.Start("PD.Respawn")
-            net.WriteEntity(LocalPlayer())
-            net.SendToServer()
-        end
-    end
-end)
+-- Respawn nur noch ueber den Knopf im Sterbebildschirm. Die Leertaste als
+-- Ausloeser ist entfernt: sie loeste auch beim Tippen im Chat aus. Das
+-- hook.Remove raeumt den alten Hook bei einem Lua-Refresh ab, der sonst
+-- weiterlaufen wuerde.
+hook.Remove("Think", "PD.Death.CheckRespawn")
 

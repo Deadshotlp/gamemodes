@@ -14,7 +14,8 @@ net.Receive("PD.List.Sync", function(_, ply)
     if listSyncCooldown[steamid] and CurTime() - listSyncCooldown[steamid] < 5 then return end
     listSyncCooldown[steamid] = CurTime()
 
-    PD.List:LoadFactions()
+    -- Nur den vorhandenen Stand schicken. Neu aufgebaut wird der Baum bei
+    -- Aenderungen (Jobs geladen, Charaktere geladen, Fraktionswechsel).
     PD.List:Sync(ply)
 end)
 

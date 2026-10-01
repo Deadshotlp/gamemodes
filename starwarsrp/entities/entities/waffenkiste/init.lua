@@ -3,18 +3,9 @@ AddCSLuaFile( "shared.lua" )
 
 include('shared.lua')
 
-util.AddNetworkString("WaffenkisteReparieren")
-
-net.Receive("WaffenkisteReparieren", function(len, ply)
-	if GetGlobal2Bool("WaffenkisteKaputt") then
-		ENT:SetHealth(100)
-		SetGlobal2Bool("WaffenkisteKaputt", false)
-		ENT:SetBodygroup(1, 0)
-		ply:ChatPrint("Die Waffenkiste wurde repariert!")
-	else
-		ply:ChatPrint("Die Waffenkiste ist nicht kaputt!")
-	end
-end)
+-- Der fruehere net-Empfaenger "WaffenkisteReparieren" ist entfernt: kein Client
+-- hat ihn je gesendet, und er griff auf ENT zu, das im Callback nil ist. Die
+-- Reparatur laeuft ueber ENT:AcceptInput.
 
 function ENT:Initialize()
 

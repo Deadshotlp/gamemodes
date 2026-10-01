@@ -204,7 +204,7 @@ function PD.List:Menu(wo)
                     local playerBtn = PD.Button(v.name .. " | (" .. steamName .. ")", scrl, function()
                         scrl:Clear()
 
-                        local charID = string.sub(v.name, 0, 7)
+                        local charID = k -- Schluessel der Spielerliste ist die Charakter-ID
                         local vp = FindPlayerbyCharID(charID)
                         local unit, subunit, job = FindPlayerUnit(vp)
                         local ply = GetPlayerInfos(vp)
@@ -214,7 +214,7 @@ function PD.List:Menu(wo)
                             online = "Online"
                         end
 
-                        local lbl = PD.Label(LANG.CHAR_UI_NAME .. ": " .. v.name .. " | (" .. steamName .. ")", scrl)
+                        local lbl = PD.Label("Name" .. ": " .. v.name .. " | (" .. steamName .. ")", scrl)
                         local lbl = PD.Label("Einheit" .. ": " .. unit, scrl)
                         local lbl = PD.Label("Untereinheit" .. ": " .. subunit, scrl)
                         local lbl = PD.Label("Job" .. ": " .. job, scrl)

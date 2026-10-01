@@ -5,12 +5,12 @@ PD.ESC = PD.ESC or {}
 -- Konfigurierbare Credits-Liste (anpassbar vom Server-Admin)
 -- Strukturierte Credits: Rolle oben (klein), Namen darunter
 -- Beispiel: { role = "Lead Developer", names = { "Max Mustermann" } }
-PD.Credits = PD.Credits or {
-    { role = "Lead Developer", names = { "Jens" } },
-    { role = "Stellv. Lead Developer", names = { "Deadshot" } },
-    { role = "Developer", names = { "Programa057", "Lost_Evo", "Younis", "Lucky" } },
-    { role = "Development Coordinator", names = { "TheRealj0sh", "Galaktron234" } },
-    { role = "UX / UI Design", names = { "ks_shiny" } }
+PD.Credits = {
+    { role = "Lead Developer", names = { "Deadshot" } },
+    { role = "Stellv. Lead Developer", names = { "~" } },
+    { role = "Developer", names = { "Programa057" } },
+    -- { role = "Development Coordinator", names = { "" } },
+    -- { role = "UX / UI Design", names = { "" } }
 }
 local buttons = {
     {
@@ -23,13 +23,13 @@ local buttons = {
         name = "Kollektion",
         icon = "☁",
         func = function()
-            gui.OpenURL("https://steamcommunity.com/sharedfiles/filedetails/?id=3545771562")
+            gui.OpenURL("https://steamcommunity.com/sharedfiles/filedetails/?id=3778208842")
         end
     }, {
         name = "Discord",
         icon = "💬",
         func = function()
-            gui.OpenURL("https://discord.gg/thrawnsrevenge")
+            gui.OpenURL("https://discord.gg/4tWG8tkN7g")
             gui.HideGameUI()
         end
     }, {

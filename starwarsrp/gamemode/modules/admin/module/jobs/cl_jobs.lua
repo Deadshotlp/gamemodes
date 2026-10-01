@@ -172,7 +172,7 @@ local function model_box(contentPanel, models, searchString)
     for _, child in pairs(possible_sc:GetCanvas():GetChildren()) do child:Remove() end
     for _, child in pairs(current_sc:GetCanvas():GetChildren()) do child:Remove() end
     table.sort(models)
-    PrintTable(models)
+    --PrintTable(models)
 
     for m, _ in pairs(player_manager.AllValidModels()) do
         if searchString and searchString ~= "" then
@@ -418,13 +418,13 @@ function PD.JOBS.OpenSubunitEditor(parent, unitIndex, subIndex)
     unitLabel:SetTextColor(PD.Theme.Colors.AccentGray)
     unitLabel:DockMargin(PD.W(5), PD.H(10), 0, PD.H(3))
 
-    local unitBox = PD.Dropdown(scroll, unit.name or unitIndex, function(v)
-        currentUnit = v
+    local unitBox = PD.Dropdown(scroll, unit.name or unitIndex, function(v, idx)
+        currentUnit = idx
     end)
     unitBox:Dock(TOP)
     unitBox:SetTall(PD.H(40))
     for idx, data in SortedPairs(PD.JOBS.Jobs or {}) do
-        unitBox:AddOption(idx, idx)
+        unitBox:AddOption(data.name or idx, idx)
     end
 
     local pickedColor = sub.color or Color(255, 255, 255)
@@ -542,13 +542,13 @@ function PD.JOBS.OpenJobEditor(parent, unitIndex, subIndex, jobIndex)
     unitLabel:SetTextColor(PD.Theme.Colors.AccentGray)
     unitLabel:DockMargin(PD.W(5), PD.H(10), 0, PD.H(3))
 
-    local unitBox = PD.Dropdown(scroll, unit.name or unitIndex, function(v)
-        curUnit = v
+    local unitBox = PD.Dropdown(scroll, unit.name or unitIndex, function(v, idx)
+        curUnit = idx
     end)
     unitBox:Dock(TOP)
     unitBox:SetTall(PD.H(40))
-    for idx, _ in SortedPairs(PD.JOBS.Jobs or {}) do
-        unitBox:AddOption(idx, idx)
+    for idx, data in SortedPairs(PD.JOBS.Jobs or {}) do
+        unitBox:AddOption(data.name or idx, idx)
     end
 
     local subLabel = vgui.Create("DLabel", scroll)
@@ -558,13 +558,13 @@ function PD.JOBS.OpenJobEditor(parent, unitIndex, subIndex, jobIndex)
     subLabel:SetTextColor(PD.Theme.Colors.AccentGray)
     subLabel:DockMargin(PD.W(5), PD.H(10), 0, PD.H(3))
 
-    local subBox = PD.Dropdown(scroll, sub.name or subIndex, function(v)
-        curSub = v
+    local subBox = PD.Dropdown(scroll, sub.name or subIndex, function(v, idx)
+        curSub = idx
     end)
     subBox:Dock(TOP)
     subBox:SetTall(PD.H(40))
-    for idx, _ in SortedPairs((PD.JOBS.Jobs[curUnit] and PD.JOBS.Jobs[curUnit].subunits) or {}) do
-        subBox:AddOption(idx, idx)
+    for idx, data in SortedPairs((PD.JOBS.Jobs[curUnit] and PD.JOBS.Jobs[curUnit].subunits) or {}) do
+        subBox:AddOption(data.name or idx, idx)
     end
 
     local pickedColor = job.color or Color(255, 255, 255)
@@ -1056,13 +1056,13 @@ function PD.JOBS.CreateSubunitDialog()
     unitLabel:SetTextColor(PD.Theme.Colors.AccentGray)
     unitLabel:DockMargin(PD.W(5), PD.H(10), 0, PD.H(3))
 
-    local unitBox = PD.Dropdown(scroll, "Unit wählen...", function(v)
-        subunitTable.unitIndex = v
+    local unitBox = PD.Dropdown(scroll, "Unit wählen...", function(v, idx)
+        subunitTable.unitIndex = idx
     end)
     unitBox:Dock(TOP)
     unitBox:SetTall(PD.H(40))
     for idx, data in SortedPairs(PD.JOBS.Jobs or {}) do
-        unitBox:AddOption(idx, idx)
+        unitBox:AddOption(data.name or idx, idx)
     end
 
     local maxSlider = PD.Slider(scroll, "Max Mitglieder", 0, 100, 10, function(v)
@@ -1145,19 +1145,19 @@ function PD.JOBS.CreateJobDialog()
     unitLabel:SetTextColor(PD.Theme.Colors.AccentGray)
     unitLabel:DockMargin(PD.W(5), PD.H(10), 0, PD.H(3))
 
-    local unitBox = PD.Dropdown(scroll, "Unit wählen...", function(v)
-        jobTable.unitIndex = v
+    local unitBox = PD.Dropdown(scroll, "Unit wählen...", function(v, index)
+        jobTable.unitIndex = index
         if IsValid(jobTable.subBox) then
             jobTable.subBox:Clear()
-            for subIdx, subData in SortedPairs((PD.JOBS.Jobs[v] and PD.JOBS.Jobs[v].subunits) or {}) do
-                jobTable.subBox:AddOption(subIdx, subIdx)
+            for subIdx, subData in SortedPairs((PD.JOBS.Jobs[index] and PD.JOBS.Jobs[index].subunits) or {}) do
+                jobTable.subBox:AddOption( subData.name or subIdx, subIdx)
             end
         end
     end)
     unitBox:Dock(TOP)
     unitBox:SetTall(PD.H(40))
-    for idx, _ in SortedPairs(PD.JOBS.Jobs or {}) do
-        unitBox:AddOption(idx, idx)
+    for idx, data in SortedPairs(PD.JOBS.Jobs or {}) do
+        unitBox:AddOption(data.name or idx, idx)
     end
 
     local subLabel = vgui.Create("DLabel", scroll)
@@ -1167,19 +1167,19 @@ function PD.JOBS.CreateJobDialog()
     subLabel:SetTextColor(PD.Theme.Colors.AccentGray)
     subLabel:DockMargin(PD.W(5), PD.H(10), 0, PD.H(3))
 
-    local subBox = PD.Dropdown(scroll, "SubUnit wählen...", function(v)
-        jobTable.subIndex = v
+    local subBox = PD.Dropdown(scroll, "SubUnit wählen...", function(v, idx)
+        jobTable.subIndex = idx
     end)
     subBox:Dock(TOP)
     subBox:SetTall(PD.H(40))
     jobTable.subBox = subBox
 
-    local salarySlider = PD.Slider(scroll, "Gehalt", 0, 10000, 100, function(v) jobTable.salary = v end)
-    salarySlider:Dock(TOP)
-    salarySlider:DockMargin(0, PD.H(10), 0, 0)
+    -- local salarySlider = PD.Slider(scroll, "Gehalt", 0, 1000, 100, function(v) jobTable.salary = v end)
+    -- salarySlider:Dock(TOP)
+    -- salarySlider:DockMargin(0, PD.H(10), 0, 0)
 
-    local speedSlider = PD.Slider(scroll, "Geschwindigkeit", 0, 500, 100, function(v) jobTable.speed = v end)
-    speedSlider:Dock(TOP)
+    -- local speedSlider = PD.Slider(scroll, "Geschwindigkeit", 0, 200, 100, function(v) jobTable.speed = v end)
+    -- speedSlider:Dock(TOP)
 
     
 

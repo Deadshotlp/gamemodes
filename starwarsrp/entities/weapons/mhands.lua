@@ -195,32 +195,50 @@ local anima = {
     ["ValveBiped.Bip01_R_Hand"] = Angle(0, 0, 20),
     ["ValveBiped.Bip01_L_Hand"] = Angle(0, 0, -20),
     },
-    ["kneel"] = {
-    ["Animation.ZOffset"] = -17,
+    -- ["kneel"] = {
+    -- ["Animation.ZOffset"] = -17,
 
-    ["ValveBiped.Bip01_L_Forearm"] = Angle(0, 0, 0),
-    ["ValveBiped.Bip01_R_Forearm"] = Angle(-90, -30, -70),
-    ["ValveBiped.Bip01_L_UpperArm"] = Angle(0, 0, 0),
-    ["ValveBiped.Bip01_R_UpperArm"] = Angle(50, -20, 40),
-    ["ValveBiped.Bip01_Pelvis"] = Angle(0, 0, 0),
-    ["ValveBiped.Bip01_Spine"] = Angle(0, 0, 0),
-    ["ValveBiped.Bip01_Spine4"] = Angle(0, 0, 0),
-    ["ValveBiped.Bip01_R_Calf"] = Angle(0, 90, 0),
-    ["ValveBiped.Bip01_L_Calf"] = Angle(0, 80, 0),
-    ["ValveBiped.Bip01_R_Foot"] = Angle(0, 0, 0),
-    ["ValveBiped.Bip01_L_Foot"] = Angle(0, 48.5, 0),
-    ["ValveBiped.Bip01_R_Thigh"] = Angle(0, -90, 0),
-    ["ValveBiped.Bip01_L_Thigh"] = Angle(0, 0, 0),
-    ["ValveBiped.Bip01_R_Hand"] = Angle(0, 0, 0),
-    ["ValveBiped.Bip01_L_Hand"] = Angle(0, 0, 0),
-    ["ValveBiped.Bip01_L_Finger2"] = Angle(0, 0, 0),
-    ["ValveBiped.Bip01_L_Finger11"] = Angle(0, 0, 0),
-    ["ValveBiped.Bip01_Head1"] = Angle(0, -15, 0)
-    }
-    -- ["test"] = {
-    --     ['ValveBiped.Bip01_R_UpperArm'] = Angle(35, -140, 0),
-    --     ['ValveBiped.Bip01_R_Forearm'] = Angle(-10, 0, 0),
-    --     ['ValveBiped.Bip01_R_Hand'] = Angle(0,0,-90),
+    -- ["ValveBiped.Bip01_L_Forearm"] = Angle(0, 0, 0),
+    -- ["ValveBiped.Bip01_R_Forearm"] = Angle(-90, -30, -70),
+    -- ["ValveBiped.Bip01_L_UpperArm"] = Angle(0, 0, 0),
+    -- ["ValveBiped.Bip01_R_UpperArm"] = Angle(50, -20, 40),
+    -- ["ValveBiped.Bip01_Pelvis"] = Angle(0, 0, 0),
+    -- ["ValveBiped.Bip01_Spine"] = Angle(0, 0, 0),
+    -- ["ValveBiped.Bip01_Spine4"] = Angle(0, 0, 0),
+    -- ["ValveBiped.Bip01_R_Calf"] = Angle(0, 90, 0),
+    -- ["ValveBiped.Bip01_L_Calf"] = Angle(0, 80, 0),
+    -- ["ValveBiped.Bip01_R_Foot"] = Angle(0, 0, 0),
+    -- ["ValveBiped.Bip01_L_Foot"] = Angle(0, 48.5, 0),
+    -- ["ValveBiped.Bip01_R_Thigh"] = Angle(0, -90, 0),
+    -- ["ValveBiped.Bip01_L_Thigh"] = Angle(0, 0, 0),
+    -- ["ValveBiped.Bip01_R_Hand"] = Angle(0, 0, 0),
+    -- ["ValveBiped.Bip01_L_Hand"] = Angle(0, 0, 0),
+    -- ["ValveBiped.Bip01_L_Finger2"] = Angle(0, 0, 0),
+    -- ["ValveBiped.Bip01_L_Finger11"] = Angle(0, 0, 0),
+    -- ["ValveBiped.Bip01_Head1"] = Angle(0, -15, 0)
+    -- },
+    -- ["Seitlich liegen"] = {
+    --     ["Animation.ZOffset"] = -30,
+
+    --     ["ValveBiped.Bip01_Pelvis"] = Angle(0, 0, -90),
+    --     ["ValveBiped.Bip01_Spine"] = Angle(0, 0, 0),
+    --     ["ValveBiped.Bip01_Spine1"] = Angle(0, 0, 0),
+    --     ["ValveBiped.Bip01_Spine2"] = Angle(0, 0, 0),
+    --     ["ValveBiped.Bip01_Spine4"] = Angle(0, 0, 0),
+
+    --     ["ValveBiped.Bip01_Head1"] = Angle(0, 0, 0),
+
+    --     ["ValveBiped.Bip01_L_UpperArm"] = Angle(0, 0, 0),
+    --     ["ValveBiped.Bip01_R_UpperArm"] = Angle(0, 0, 0),
+    --     ["ValveBiped.Bip01_L_Forearm"] = Angle(0, 0, 0),
+    --     ["ValveBiped.Bip01_R_Forearm"] = Angle(0, 0, 0),
+
+    --     ["ValveBiped.Bip01_L_Thigh"] = Angle(0, 0, 0),
+    --     ["ValveBiped.Bip01_R_Thigh"] = Angle(0, 0, 0),
+    --     ["ValveBiped.Bip01_L_Calf"] = Angle(0, 0, 0),
+    --     ["ValveBiped.Bip01_R_Calf"] = Angle(0, 0, 0),
+    --     ["ValveBiped.Bip01_L_Foot"] = Angle(0, 0, 0),
+    --     ["ValveBiped.Bip01_R_Foot"] = Angle(0, 0, 0)
     -- }
 }
 
@@ -365,6 +383,13 @@ elseif CLIENT then
         end
     end)
 
+    -- ResetAnimationOnServer()
+    -- -- ResetPlayerModel(ply)
+    -- isAnimating = false
+
+    -- SendAnimationToServer("Seitlich liegen")
+    -- isAnimating = true
+
     hook.Add("PlayerButtonDown", "ResetAnimationKeys", function(ply, key)
         if not ply:HasWeapon("mhands") then return end
         if not isAnimating then return end
@@ -390,7 +415,7 @@ elseif CLIENT then
         base:SetBackgroundBlur(true)
         base.Paint = function() end
 
-        local radius = PD.W(350)
+        local radius = PD.W(400)
         local centerX, centerY = ScrW() / 2, ScrH() / 2
         local buttonSize = PD.W(125)
         local count = table.Count(anima)
@@ -401,43 +426,35 @@ elseif CLIENT then
             local angle = math.rad(i * angleStep - 90)
             local x = centerX + math.cos(angle) * radius - buttonSize / 2
             local y = centerY + math.sin(angle) * radius - buttonSize / 2
+            local background = PD.Theme.Colors.BackgroundTransparent
 
-            -- local btn = vgui.Create("DButton", base)
-            -- btn:SetText(name)
-            -- btn:SetSize(buttonSize, buttonSize)
-            -- btn:SetPos(x, y)
-            -- btn:SetFont("MLIB.15")
-            -- btn:SetTextColor(Color(255, 255, 255))
-            -- btn.Paint = function(s, w, h)
-            --     draw.RoundedBox(20, 0, 0, w, h, Color(50, 50, 50, 200))
-            --     -- draw.SimpleText(name, "DermaLarge", w / 2, h / 2, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-            -- end
-            -- btn.DoClick = function()
-            --     SendAnimationToServer(name)
-            --     base:Remove()
-
-            --     isAnimating = true
-            -- end
-
-            local model_panel = PD.Panel(base, {}, function(self, w, h)
-                --surface.SetDrawColor(50, 50, 50, 200)
-                --surface.DrawOutlinedRect(0, 0, w, h, 1)
-                draw.RoundedBox( 15, 0, 0, w, h, PD.Theme.Colors.BackgroundTransparent )
+            local model_panel = PD.Panel(base, {background = background}, function(self, w, h)
+                local color = self.hovered and Color(200, 200, 200, 100) or PD.Theme.Colors.BackgroundTransparent
+                draw.RoundedBox(15, 0, 0, w, h, color)
             end)
+
             model_panel:Dock(NODOCK)
             model_panel:SetSize(buttonSize, buttonSize)
             model_panel:SetPos(x, y)
 
             local model = PD.Model(model_panel, LocalPlayer():GetModel(), 0, 0, buttonSize, buttonSize, {canRotate = false, canZoom = false})
-            model:SetFOV( 50 )
+            model:SetFOV(50)
 
-            function model:OnMousePressed( k )
-                if k == MOUSE_LEFT then
-                    SendAnimationToServer(name)
-                    base:Remove()
+            local btn = PD.Button("", model_panel, function()
+                SendAnimationToServer(name)
+                base:Remove()
 
-                    isAnimating = true
-                end
+                isAnimating = true
+            end, {backgroundColor = Color(0,0,0,0), bgDeactivate = true})
+
+            btn:Dock(FILL)
+
+            function btn:OnCursorEntered()
+                model_panel.hovered = true
+            end
+
+            function btn:OnCursorExited()
+                model_panel.hovered = false
             end
 
             for bone, ang in pairs(_) do
@@ -460,7 +477,7 @@ end
 
 function SWEP:SecondaryAttack()
     if not CLIENT then return end
-
+    
     if not isAnimating then 
         HandsMenuRadial(self.Owner)
     else

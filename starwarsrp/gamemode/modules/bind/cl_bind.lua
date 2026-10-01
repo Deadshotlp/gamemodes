@@ -18,6 +18,27 @@ PD.Binds.btn["ansicht"] = {
     end
 }
 
+--[[
+    Standard ist Alt. Auf Alt liegt in GMod ab Werk +walk - beides feuert dann
+    gleichzeitig, man geht beim Umsehen also langsamer. Das ist selten stoerend,
+    und im neuen Tastaturbild ist die Ueberschneidung orange markiert; wer sie
+    nicht will, legt den Bind dort auf eine freie Taste.
+]]
+PD.Binds.btn["freelook"] = {
+    name = "Umsehen",
+    desc = "Gehalten: umsehen, ohne Koerper und Waffe zu drehen. In der Ich-Perspektive dreht der Kopf mit, in der Schulterperspektive kreist nur die Kamera.",
+    category = "Allgemein",
+    defaultkey = KEY_LALT,
+    downFunc = function()
+        if PD.Freelook then PD.Freelook.Start() end
+    end,
+    upFunc = function()
+        if PD.Freelook then PD.Freelook.Stop() end
+    end,
+    holdFunc = function()
+    end
+}
+
 PD.Binds.btn["mouse"] = {
     name = "Maus anzeigen",
     desc = "Zeigt oder versteckt die Maus im Spiel.",
@@ -33,6 +54,39 @@ PD.Binds.btn["mouse"] = {
         else
             gui.EnableScreenClicker(true)
         end
+    end,
+    upFunc = function()
+    end,
+    holdFunc = function()
+    end
+}
+
+PD.Binds.btn["deleteanimation"] = {
+    name = "Animation zurücksetzten",
+    desc = "",
+    category = "Animation",
+    defaultkey = KEY_NONE,
+    downFunc = function()
+        if not IsFirstTimePredicted() then
+            return
+        end
+
+        ResetAnimationOnServer()
+        isAnimating = false
+    end,
+    upFunc = function()
+    end,
+    holdFunc = function()
+    end
+}
+
+PD.Binds.btn["mittelpunkt"] = {
+    name = "Mittelpunkt",
+    desc = "Zeigt den Mittelpunkt des Bildschirms an.",
+    category = "Allgemein",
+    defaultkey = KEY_NONE,
+    downFunc = function()
+        PD.HUD.ShowPoint = not PD.HUD.ShowPoint
     end,
     upFunc = function()
     end,
@@ -167,14 +221,29 @@ PD.Binds.btn["comlink_extra3"] = {
     end
 }
 
-PD.Binds.btn["open_medical_interface"] = {
-    name = "Medizinische Schnittstelle öffnen",
-    desc = "Öffnet die medizinische Schnittstelle.",
-    category = "Medizin",
+-- PD.Binds.btn["open_medical_interface"] = {
+--     name = "Medizinische Schnittstelle öffnen",
+--     desc = "Öffnet die medizinische Schnittstelle.",
+--     category = "Medizin",
+--     defaultkey = KEY_NONE,
+--     admin = false,
+--     downFunc = function()
+--         PD.DM:OpenInterface()
+--     end,
+--     upFunc = function()
+--     end,
+--     holdFunc = function()
+--     end
+-- }
+
+PD.Binds.btn["open_squad_management"] = {
+    name = "Squad Verwaltung öffnen",
+    desc = "Öffnet die Squad Verwaltung.",
+    category = "Squad",
     defaultkey = KEY_NONE,
     admin = false,
     downFunc = function()
-        PD.DM:OpenInterface()
+        PD.SQUAD:OpenInterface()
     end,
     upFunc = function()
     end,
@@ -182,14 +251,14 @@ PD.Binds.btn["open_medical_interface"] = {
     end
 }
 
-PD.Binds.btn["open_squad_management"] = {
-    name = "Squad Verwaltung öffnen",
-    desc = "Öffnet die Squad Verwaltungsoberfläche.",
-    category = "Squad",
+PD.Binds.btn["open_fortbildung_management"] = {
+    name = "Fortbildungs Verwaltung öffnen",
+    desc = "Öffnet die Fortbildungs Verwaltung.",
+    category = "Fortbildung",
     defaultkey = KEY_NONE,
     admin = false,
     downFunc = function()
-        PD.SQUAD:OpenInterface()
+        PD.FB:OpenInterface()
     end,
     upFunc = function()
     end,
@@ -402,6 +471,11 @@ function PD.Binds:Menu()
             bpnl:SetWide(PD.W(100))
         end
     end
+
+    -- Das Tastaturbild steht in einem eigenen Fenster rechts daneben und
+    -- richtet dabei auch dieses hier neu aus, damit beide zusammen mittig
+    -- sitzen. Es geht mit dem Belegungsfenster wieder zu.
+    PD.Binds:KeyboardWindow(self.base)
 end
 
 local toggle = false
@@ -436,8 +510,11 @@ end)
 
 hook.Add("PlayerButtonUp", "BindMenuPlayerButtonDownUP", function(ply, button)
     if toggle then return end
-   
-    if (IsFirstTimePredicted()) then
+
+    -- Die Pruefung war umgedreht: sie brach genau dann ab, wenn der Frame das
+    -- erste Mal vorhergesagt wurde - also immer. Damit lief kein einziges
+    -- upFunc jemals, und ein Bind zum Halten war nicht baubar.
+    if not IsFirstTimePredicted() then
         return
     end
     local bind = PD.Binds:FindBindToKey(button)

@@ -127,6 +127,15 @@ function PD.Entity.Umkleide:ShowAttachments(mainFrame, ply)
         end
     end
 
+    -- Durch Fortbildungen freigeschaltete Models
+    if PD.FB and PD.FB.GetCourseModels then
+        for _, v in ipairs(PD.FB.GetCourseModels(PD.FB.GetCharID(ply))) do
+            if string.lower(modelSelect:GetValue()) ~= string.lower(v) then
+                modelSelect:AddOption(player_manager.TranslateToPlayerModelName(v), v)
+            end
+        end
+    end
+
     local ScrollList = PD.Scroll(sub_panel)
 
     -- Check ob etwas entfernt wurde

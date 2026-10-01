@@ -1,212 +1,326 @@
 PD.WB = PD.WB or {}
 
-local function GetWepsByCategory(category)
-    local weps = {}
-    local JobID, JobTable = LocalPlayer():GetJob()
-    local name, subunit = PD.JOBS.GetSubUnit(JobTable.unit)
-    local jobWeps = JobTable.equip or {}
-    local subunitWeps = subunit.equip or {}
+local function getPrintName(class)
+    local stored = weapons.GetStored(class)
 
-    for _, wep in SortedPairs(subunitWeps) do
-        if PD.WB.Weapons[category] and PD.WB.Weapons[category][wep] then
-            table.insert(weps, wep)
+    if stored and stored.PrintName and stored.PrintName ~= "" then
+        return stored.PrintName
+    end
+
+    return class
+end
+
+local function formatWeight(weight)
+    if weight == math.floor(weight) then
+        return tostring(weight)
+    end
+
+    return string.format("%.1f", weight)
+end
+
+local function sendGive(class)
+    net.Start("PD.WB:GiveWeapon")
+        net.WriteString(class)
+    net.SendToServer()
+end
+
+local function sendRemove(class)
+    net.Start("PD.WB:RemoveWeapon")
+        net.WriteString(class)
+    net.SendToServer()
+end
+
+--------------------------------------------------------------------------------
+-- Bausteine
+--------------------------------------------------------------------------------
+
+local function header(parent, text, color)
+    local pnl = vgui.Create("DPanel", parent)
+    pnl:Dock(TOP)
+    pnl:SetTall(PD.H(30))
+    pnl:DockMargin(0, 0, 0, PD.H(6))
+
+    pnl.Paint = function(s, w, h)
+        draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.BackgroundDark)
+        surface.SetDrawColor(color or PD.Theme.Colors.AccentRed)
+        surface.DrawRect(0, 0, PD.W(3), h)
+        draw.DrawText(text, "MLIB.14", PD.W(12), h / 2 - PD.H(7), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+    end
+
+    return pnl
+end
+
+-- Eine Ausrüstungszeile mit Name, Gewicht und Aktionsknopf.
+local function equipRow(parent, class, actionText, actionColor, onClick, disabledReason)
+    local row = vgui.Create("DPanel", parent)
+    row:Dock(TOP)
+    row:SetTall(PD.H(42))
+    row:DockMargin(0, 0, 0, PD.H(4))
+
+    local weight = PD.WB.GetWeaponWeight(class)
+    local name = getPrintName(class)
+
+    row.Paint = function(s, w, h)
+        draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.BackgroundLight)
+        surface.SetDrawColor(disabledReason and PD.Theme.Colors.AccentGray or actionColor)
+        surface.DrawRect(0, 0, PD.W(3), h)
+
+        local textColor = disabledReason and PD.Theme.Colors.TextMuted or PD.Theme.Colors.Text
+
+        draw.DrawText(name, "MLIB.14", PD.W(12), PD.H(5), textColor, TEXT_ALIGN_LEFT)
+        draw.DrawText(disabledReason or (formatWeight(weight) .. " Kg"), "MLIB.12", PD.W(12), PD.H(23),
+            PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+    end
+
+    if not disabledReason then
+        local btn = PD.Button(actionText, row, onClick, {height = PD.H(30), font = "MLIB.12"})
+        btn:Dock(RIGHT)
+        btn:SetWide(PD.W(110))
+        btn:DockMargin(0, PD.H(6), PD.W(6), PD.H(6))
+        btn:SetAccentColor(actionColor)
+    end
+
+    return row
+end
+
+--------------------------------------------------------------------------------
+-- Menü
+--------------------------------------------------------------------------------
+
+local function buildCarried(parent, ply)
+    parent:Clear()
+
+    header(parent, "GETRAGEN", PD.Theme.Colors.AccentGreen)
+
+    local scroll = PD.Scroll(parent)
+    local carried = PD.WB.GetCarried(ply)
+    local anything = false
+
+    for _, category in ipairs(PD.WB.Categories) do
+        local list = carried[category.name]
+
+        if list and #list > 0 then
+            anything = true
+
+            local lbl = PD.Label(string.upper(category.name), scroll, {
+                height = PD.H(20),
+                font = "MLIB.12",
+                color = PD.Theme.Colors.TextDim
+            })
+            lbl:Dock(TOP)
+
+            for _, class in ipairs(list) do
+                equipRow(scroll, class, "Ablegen", PD.Theme.Colors.AccentRed, function()
+                    sendRemove(class)
+                end)
+            end
         end
     end
 
-    --table.Add(jobWeps, subunitWeps)
+    -- Immer-Ausrüstung getrennt anzeigen, damit klar ist warum sie nicht ablegbar ist
+    local alwaysShown = false
 
-    for num, wep in SortedPairs(jobWeps) do
-        if PD.WB.Weapons[category] and PD.WB.Weapons[category][wep] then
-            table.insert(weps, wep)
+    for _, class in ipairs(PD.WB.Always) do
+        if ply:HasWeapon(class) then
+            if not alwaysShown then
+                alwaysShown = true
+
+                local lbl = PD.Label("IMMER DABEI", scroll, {
+                    height = PD.H(20),
+                    font = "MLIB.12",
+                    color = PD.Theme.Colors.TextDim
+                })
+                lbl:Dock(TOP)
+            end
+
+            equipRow(scroll, class, nil, PD.Theme.Colors.AccentBlue, nil, "Fest ausgerüstet")
         end
     end
-    
-    return weps
+
+    if not anything and not alwaysShown then
+        local lbl = PD.Label("Nichts ausgerüstet.", scroll, {
+            height = PD.H(28),
+            font = "MLIB.14",
+            color = PD.Theme.Colors.TextMuted,
+            align = 5
+        })
+        lbl:Dock(TOP)
+    end
 end
 
-local function GetWepCategorys()
-    local cate = {}
-    for k, wep in SortedPairs(PD.WB.Weapons) do
-        local weps = GetWepsByCategory(k)
+local function buildAvailable(parent, ply)
+    parent:Clear()
 
-        if table.IsEmpty(weps) then continue end
+    header(parent, "VERFÜGBARE AUSRÜSTUNG", PD.Theme.Colors.AccentBlue)
 
-        cate[k] = weps
+    local scroll = PD.Scroll(parent)
+    local available = PD.WB.GetAvailableByCategory(ply)
+    local anything = false
+
+    for _, category in ipairs(PD.WB.Categories) do
+        local list = available[category.name]
+
+        if list and #list > 0 then
+            anything = true
+
+            local carriedCount = PD.WB.GetCarriedInCategory(ply, category.name)
+            local limitText = category.max > 0 and (carriedCount .. "/" .. category.max) or tostring(carriedCount)
+
+            local catHeader = vgui.Create("DPanel", scroll)
+            catHeader:Dock(TOP)
+            catHeader:SetTall(PD.H(26))
+            catHeader:DockMargin(0, PD.H(8), 0, PD.H(4))
+            catHeader.Paint = function(s, w, h)
+                draw.DrawText(string.upper(category.name), "MLIB.12", PD.W(4), PD.H(5), PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+                draw.DrawText(limitText, "MLIB.12", w - PD.W(4), PD.H(5), PD.Theme.Colors.TextDim, TEXT_ALIGN_RIGHT)
+
+                surface.SetDrawColor(PD.Theme.Colors.Divider)
+                surface.DrawRect(0, h - 1, w, 1)
+            end
+
+            for _, class in ipairs(list) do
+                if ply:HasWeapon(class) then
+                    equipRow(scroll, class, "Ablegen", PD.Theme.Colors.AccentRed, function()
+                        sendRemove(class)
+                    end)
+                else
+                    local ok, reason = PD.WB.CanTake(ply, class)
+
+                    if ok then
+                        equipRow(scroll, class, "Nehmen", PD.Theme.Colors.AccentGreen, function()
+                            sendGive(class)
+                        end)
+                    else
+                        equipRow(scroll, class, nil, PD.Theme.Colors.AccentGray, nil,
+                            formatWeight(PD.WB.GetWeaponWeight(class)) .. " Kg  -  " .. (reason or "nicht verfügbar"))
+                    end
+                end
+            end
+        end
     end
-    return cate
+
+    if not anything then
+        local lbl = PD.Label("Für deinen Job ist keine Ausrüstung hinterlegt.", scroll, {
+            height = PD.H(28),
+            font = "MLIB.14",
+            color = PD.Theme.Colors.TextMuted,
+            align = 5
+        })
+        lbl:Dock(TOP)
+    end
 end
 
-local function GetPlayerWeapons(ply, wep)
-    local weps = {}
-    local JobName, JobTable = ply:GetJob()
-    local name, subunit = PD.JOBS.GetSubUnit(JobTable.unit)
+function PD.WB:Refresh()
+    local frame = self.Frame
 
-    for _, wep in SortedPairs(JobTable.equip) do
-        table.insert(weps, wep)
-    end
-    for _, wep in SortedPairs(subunit.equip) do
-        table.insert(weps, wep)
-    end
-    
-    return weps
-end
+    if not IsValid(frame) then return end
+    if not IsValid(frame._left) or not IsValid(frame._right) or not IsValid(frame._weightBar) then return end
 
-local activeWeapons = {}
+    local ply = LocalPlayer()
+    local weight = PD.WB.GetCarriedWeight(ply)
 
-local function GetWepWeights()
-    local weights = 0
+    buildCarried(frame._left, ply)
+    buildAvailable(frame._right, ply)
 
-    for _, wep in pairs(activeWeapons) do
-        local weight = PD.WB.GetWeaponWeights(wep)
-        weights = weights + weight
-    end
-
-    return weights
+    frame._weightBar._weight = weight
 end
 
 function PD.WB:Menu()
     if IsValid(self.Frame) then
+        self.Frame:Remove()
+        self.Frame = nil
         return
     end
 
-    self.Frame = PD.Frame("Waffenkiste", PD.W(800), PD.H(600), true)
+    local frame = PD.Frame("WAFFENKISTE", PD.W(900), PD.H(650), true)
+    self.Frame = frame
 
-    local leftPnl = PD.Panel(self.Frame)
-    leftPnl:Dock(LEFT)
-    leftPnl:SetWide(PD.W(250))
+    local content = frame:GetContentPanel()
 
-    local lbl = PD.Label("Ausgerüstete Waffen", leftPnl, {
-        font = "MLIB.25",
-        height = PD.H(40),
-    })
+    -- Gewichtsanzeige unten, damit sie beim Scrollen stehen bleibt
+    local weightBar = vgui.Create("DPanel", content)
+    weightBar:Dock(BOTTOM)
+    weightBar:SetTall(PD.H(46))
+    weightBar:DockMargin(0, PD.H(10), 0, 0)
+    weightBar._weight = 0
 
-    local scrl = PD.Scroll(leftPnl)
+    weightBar.Paint = function(s, w, h)
+        draw.RoundedBox(0, 0, 0, w, h, PD.Theme.Colors.BackgroundDark)
 
-    local yOffset = PD.H(50)
-    for cateName, wep in SortedPairs(activeWeapons) do
-        local wepWeight = PD.WB.GetWeaponWeights(wep)
-        -- wep = wep:GetPrintName() or wep:GetClass()
-        local wepText = wep -- .. " (" .. wepWeight .. " Kg)"
-        local btn = PD.Button(wepText, scrl, function()
-            net.Start("PD.WB:RemoveWeapon")
-                net.WriteString(wep)
-            net.SendToServer()
+        local weight = s._weight or 0
+        local fraction = math.Clamp(weight / PD.WB.MaxWeight, 0, 1)
 
-            table.RemoveByValue(activeWeapons[cateName], wep)
+        local barX = PD.W(12)
+        local barY = h - PD.H(14)
+        local barW = w - PD.W(24)
+        local barH = PD.H(6)
 
-            self.Frame:Remove()
-        end)
-        btn:Dock(TOP)
-        btn:SetTall(PD.H(50))
-        btn:SetPos(PD.W(10), yOffset)
-        btn:SetAccentColor(Color(0, 255, 0))
-        yOffset = yOffset + PD.H(110)
+        surface.SetDrawColor(PD.Theme.Colors.BackgroundLight)
+        surface.DrawRect(barX, barY, barW, barH)
+
+        local color = PD.Theme.Colors.AccentGreen
+
+        if fraction >= 1 then
+            color = PD.Theme.Colors.StatusCritical
+        elseif fraction >= 0.8 then
+            color = PD.Theme.Colors.StatusWarning
+        end
+
+        surface.SetDrawColor(color)
+        surface.DrawRect(barX, barY, barW * fraction, barH)
+
+        draw.DrawText("TRAGELAST", "MLIB.12", barX, PD.H(6), PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
+        draw.DrawText(formatWeight(weight) .. " / " .. PD.WB.MaxWeight .. " Kg", "MLIB.14", w - barX, PD.H(5),
+            color, TEXT_ALIGN_RIGHT)
     end
 
-    local WeaponWeight = GetWepWeights() .. " / " .. PD.WB.MaxWeigth .. " Kg"
+    local left = vgui.Create("DPanel", content)
+    left:Dock(LEFT)
+    left:SetWide(PD.W(400))
+    left:DockMargin(0, 0, PD.W(10), 0)
+    left.Paint = function() end
 
-    local lbl = PD.Label(WeaponWeight, leftPnl, {
-        font = "MLIB.25",
-        height = PD.H(40),
-        dock = BOTTOM
-    })
+    local right = vgui.Create("DPanel", content)
+    right:Dock(FILL)
+    right.Paint = function() end
 
-    local rightPnl = PD.Panel(self.Frame)
-    rightPnl:Dock(FILL)
+    frame._left = left
+    frame._right = right
+    frame._weightBar = weightBar
 
-    local scrl = PD.Scroll(self.Frame)
-
-    local categorys = GetWepCategorys()
-
-    if table.IsEmpty(categorys) then
-        PD.Label("Keine Waffen verfügbar!", scrl)
-        return
-    end
-
-    for cateName, weps in SortedPairs(categorys) do
-        local catBtn = PD.Button(cateName, scrl, function()
-            scrl:Clear()
-
-            for _, wep in ipairs(weps) do
-                -- wep = wep:GetPrintName() or wep:GetClass()
-                local activeWep = wep
-
-                if LocalPlayer():HasWeapon(wep) then
-                    activeWep = wep .. " (Bereits im Besitz)"
-                end
-
-                local btn = PD.Button(activeWep, scrl, function()
-                    scrl:Clear()
-
-                    if not activeWeapons[cateName] then
-                        activeWeapons[cateName] = {}
-                    end
-
-                    if GetWepWeights() + PD.WB.GetWeaponWeights(wep) > PD.WB.MaxWeigth then
-                        PD.Popup("Du kannst nicht mehr als " .. PD.WB.MaxWeigth .. " Kg tragen!")
-                        return
-                    end
-
-                    -- if activeWeapons[cateName] then 
-                    --     net.Start("PD.WB:RemoveWeapon")
-                    --         net.WriteString(activeWeapons[cateName])
-                    --     net.SendToServer()
-                    -- end
-
-                    if LocalPlayer():HasWeapon(wep) then
-                        net.Start("PD.WB:RemoveWeapon")
-                            net.WriteString(wep)
-                        net.SendToServer()
-                        
-                        table.RemoveByValue(activeWeapons[cateName], wep)
-
-                        self.Frame:Remove()
-                        return
-                    end
-
-                    if PD.WB.CategoryAmount[cateName] and table.Count(activeWeapons[cateName]) >= PD.WB.CategoryAmount[cateName] then
-                        PD.Popup("Du kannst nur " .. PD.WB.CategoryAmount[cateName] .. " Waffen aus der Kategorie " .. cateName .. " tragen!")
-                        return
-                    end
-
-                    table.insert(activeWeapons[cateName], wep)
-
-                    net.Start("PD.WB:GiveWeapon")
-                        net.WriteString(wep)
-                    net.SendToServer()
-
-                    self.Frame:Remove()
-                end)
-                btn:Dock(TOP)
-
-                if LocalPlayer():HasWeapon(wep) then
-                    btn:SetAccentColor(Color(0, 255, 0))
-                end
-            end
-        end)
-        catBtn:Dock(TOP)
-        catBtn:SetTall(PD.H(150))
-    end
+    PD.WB:Refresh()
 end
 
-concommand.Add("pd_waffenkiste_Prints", function()
-    -- Waffen von Spieler
-    local jobName, jobTable = LocalPlayer():GetJob()
-    PrintTable(jobTable)
+-- Der Server stößt nach jedem Give/Strip an. Die Waffenliste des Spielers kommt
+-- beim Client leicht verzögert an, deshalb der kurze Nachlauf.
+net.Receive("PD.WB:Refresh", function()
+    timer.Simple(0.1, function()
+        PD.WB:Refresh()
+    end)
+end)
 
-    print("Spieler Waffen:")
-    PrintTable(GetPlayerWeapons(LocalPlayer()))
+-- Kategorien, Gewichte und Tragelast kommen aus der Datenbank. Ohne diese
+-- Übernahme würde der Client mit den Startwerten aus sh_waffenkiste.lua rechnen
+-- und andere Ergebnisse anzeigen, als der Server zulässt.
+net.Receive("PD.WB:Config", function()
+    PD.WB.ApplyConfig(net.ReadTable())
 
-    -- print("Waffen Kategorien:")
-    -- PrintTable(GetWepCategorys())
-
-    print("Waffen nach Kategorie:")
-    for cateName, weps in SortedPairs(GetWepCategorys()) do
-        print("Kategorie: " .. cateName)
-        PrintTable(GetWepsByCategory(cateName))
+    if IsValid(PD.WB.Frame) then
+        PD.WB:Refresh()
     end
 end)
 
-for k, v in pairs(player.GetAll()) do
-    print(v:SteamID64())
-end
+concommand.Add("pd_waffenkiste_print", function()
+    local ply = LocalPlayer()
+
+    print("Erlaubte Klassen:")
+    PrintTable(PD.WB.GetAllowedClasses(ply))
+
+    print("Nach Kategorie:")
+    PrintTable(PD.WB.GetAvailableByCategory(ply))
+
+    print("Getragen:")
+    PrintTable(PD.WB.GetCarried(ply))
+
+    print("Gewicht: " .. PD.WB.GetCarriedWeight(ply) .. " / " .. PD.WB.MaxWeight)
+end)

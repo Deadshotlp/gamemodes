@@ -41,36 +41,36 @@ PD.Scoreboard.Gruppen["eventler"] = {
 PD.Scoreboard.Buttons = {{
     name = "Goto", -- Name des Commandes 
     func = function(ply, target) -- Funktion
-        RunConsoleCommand("sam", "goto", target:GetName())
+        RunConsoleCommand("sam", "goto", target:Nick())
     end
 }, {
     name = "Bring", -- Name des Commandes 
     func = function(ply, target) -- Funktion
-        RunConsoleCommand("sam", "bring", target:GetName())
+        RunConsoleCommand("sam", "bring", target:Nick())
     end
 }, {
     name = "Return", -- Name des Commandes 
     func = function(ply, target) -- Funktion
-        RunConsoleCommand("sam", "return", target:GetName())
+        RunConsoleCommand("sam", "return", target:Nick())
     end
 }, {
     name = "Kill", -- Name des Commandes 
     func = function(ply, target) -- Funktion
-        RunConsoleCommand("sam", "slay", target:GetName())
+        RunConsoleCommand("sam", "slay", target:Nick())
     end
 }, {
     name = "Respawn", -- Name des Commandes 
     func = function(ply, target) -- Funktion
-        RunConsoleCommand("sam", "respawn", target:GetName())
+        RunConsoleCommand("sam", "respawn", target:Nick())
     end
 }, {
     name = "Kick", -- Name des Commandes 
     func = function(ply, target) -- Funktion
-        RunConsoleCommand("sam", "kick", target:GetName())
+        RunConsoleCommand("sam", "kick", target:Nick())
     end
 }, {
     name = "Ban", -- Name des Commandes 
     func = function(ply, target) -- Funktion
-        RunConsoleCommand("sam", "ban", target:GetName())
+        RunConsoleCommand("sam", "ban", target:Nick())
     end
 }}

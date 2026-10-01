@@ -48,7 +48,7 @@ function PD.FOV:Menu(base)
     -- base = PD.Frame("FOV - Settings", PD.W(300), PD.H(400), true, function(self, w, h) end, true)
     -- base:SetPos(PD.W(10), PD.H(100))
 
-    local pnl, slider = PD.NumSlider(LANG.ESC_CONFIG_FOV_CURRENT, base, 60, 120, defaultFOV, function(value)
+    local pnl, slider = PD.NumSlider("Aktuelles FOV: ", base, 60, 120, defaultFOV, function(value)
         defaultFOV = value
         PD.Config.tbl.fov.CurrentFOV = defaultFOV
 
@@ -89,19 +89,26 @@ local afkCamPos = Vector(0, 0, 0)
 local afkCamAng = Angle(0, 0, 0)
 
 hook.Add("ShouldDrawLocalPlayer", "SimpleTP.ShouldDraw", function(ply)
-    if PD.FOV.thirdPerson then
+    if PD.FOV.thirdPerson and not ply:InVehicle() then
         return true
     end
 end)
 
 hook.Add("CalcView", "ImmersiveCameraEffects", function(ply, pos, angles, fov)
     if not IsValid(ply) or not ply:Alive() then return end
+    if ply:InVehicle(ply) then return end
     -- if true then return end -- Deaktiviert für jetzt
 
     local velocity = ply:GetVelocity():Length2D()
     local isSprinting = velocity > 200 and ply:KeyDown(IN_SPEED)
     local isSneaking = ply:KeyDown(IN_WALK) or ply:KeyDown(IN_DUCK)
+    -- Freelook legt seinen Versatz nur auf die Kamera; EyeAngles selbst
+    -- bleibt eingefroren, damit Koerper und Waffe stehen.
     local eyeAngles = ply:EyeAngles()
+
+    if PD.Freelook then
+        eyeAngles = PD.Freelook.Apply(eyeAngles)
+    end
 
     local targetFOV = defaultFOV
     if isSprinting and not PD.FOV.thirdPerson then
@@ -118,7 +125,7 @@ hook.Add("CalcView", "ImmersiveCameraEffects", function(ply, pos, angles, fov)
     end
     camAngleOffset.p = Lerp(FrameTime() * camLerpSpeed, camAngleOffset.p, bob)
 
-    smoothOffsetX = Lerp(FrameTime() * 8, smoothOffsetX, PD.FOV.thirdPerson and -80 or 0)
+    smoothOffsetX = Lerp(FrameTime() * 8, smoothOffsetX, PD.FOV.thirdPerson and -100 or 0)
 
     afkBlend = Lerp(FrameTime() * 2, afkBlend, PD.FOV.AFKPerson and 1 or 0)
 
@@ -144,7 +151,7 @@ hook.Add("CalcView", "ImmersiveCameraEffects", function(ply, pos, angles, fov)
             })
 
             basePos = tr.HitPos
-            baseAng = angles
+            baseAng = PD.Freelook and PD.Freelook.Apply(angles) or angles
         end
 
         local focus = ply:GetPos() + Vector(0, 0, afkOrbitHeight)
@@ -166,7 +173,32 @@ hook.Add("CalcView", "ImmersiveCameraEffects", function(ply, pos, angles, fov)
         view.angles = LerpAngle(afkBlend, baseAng, afkCamAng)
         view.fov = currentFOV
         view.drawviewer = true
+    -- elseif false then
+    --     local angs = ang
+	-- 	local eyes = ply:GetAttachment( ply:LookupAttachment( "eyes" ) );
+	-- 	angs = eyes.Ang
+	-- 	local forward = ang:Forward()
+	-- 	local up = ang:Up()
+		
+	-- 	return {
+	-- 		origin = eyes.Pos + ( up + forward )*1.5,
+	-- 		angles = angs,
+	-- 		fov = GetConVar( "fov_desired" ):GetInt(), 
+	-- 		drawviewer = true
+	-- 	}
     else
+        -- Waffen (z.B. Scopes) implementieren ihre eigene View-Logik über SWEP:CalcView.
+        -- Normalerweise ruft GM:CalcView diese auf, aber da wir CalcView selbst hooken
+        -- und IMMER eine Tabelle zurückgeben, wird die Waffen-CalcView (und damit das Scope)
+        -- sonst nie mehr aufgerufen. Deshalb hier zuerst der Waffe die Kontrolle geben.
+        local weapon = ply:GetActiveWeapon()
+        if IsValid(weapon) and isfunction(weapon.CalcView) then
+            local wepView = weapon:CalcView(ply, pos, angles, fov)
+            if wepView then
+                return wepView
+            end
+        end
+
         recoilAngle = LerpAngle(FrameTime() * recoilDecay, recoilAngle, Angle(0, 0, 0))
 
         view.origin = pos
@@ -176,9 +208,13 @@ hook.Add("CalcView", "ImmersiveCameraEffects", function(ply, pos, angles, fov)
             eyeAngles.r + recoilAngle.r
         )
         view.fov = currentFOV
-        view.drawviewer = false
+        view.drawviewer = false 
     end
-
+    
+    --PrintTable(view)
+    -- print(pos)
+    -- print(angles)
+    -- print(fov)
 
     return view
 end)
@@ -194,7 +230,7 @@ hook.Add("PD.Config.LoadModule", "PD.FOV", function()
 
     PD.FOV:Load()
 
-    PD.Config:AddModule(LANG.ESC_CONFIG_FOV, function(base)
+    PD.Config:AddModule("FOV - Einstellungen", function(base)
         PD.FOV:Menu(base)
     end)
 end)
