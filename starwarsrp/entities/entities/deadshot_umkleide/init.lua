@@ -3,10 +3,9 @@ AddCSLuaFile("shared.lua")
 include('shared.lua')
 
 util.AddNetworkString("ShowBodygroups")
-util.AddNetworkString("ChangeBodygroup")
 
 function ENT:Initialize()
-    self.Entity:SetModel("models/reizer_props/srsp/sci_fi/armory_02_2/armory_02_2.mdl")
+    self.Entity:SetModel("models/reizer_props/srsp/sci_fi/armory_02_3/armory_02_3.mdl")
     self.Entity:PhysicsInit(SOLID_VPHYSICS)
     self.Entity:SetMoveType(MOVETYPE_VPHYSICS)
     self.Entity:SetSolid(SOLID_VPHYSICS)
@@ -26,10 +25,3 @@ function ENT:Use(ply)
     net.Start("ShowBodygroups")
     net.Send(ply)
 end
-
-net.Receive("ChangeBodygroup", function(len, ply)
-    local bodygroup = net.ReadInt(32)
-    local value = net.ReadInt(32)
-
-    ply:SetBodygroup(bodygroup, value)
-end)

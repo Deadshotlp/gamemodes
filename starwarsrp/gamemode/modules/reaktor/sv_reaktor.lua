@@ -8,6 +8,28 @@ util.AddNetworkString("PD.REAKTOR:Verbrauch")
 util.AddNetworkString("PD.REAKTOR:ExtensiveLights")
 util.AddNetworkString("PD.REAKTOR:Pumpe")
 
+--[[
+    Das Reaktorsystem wird derzeit nicht genutzt und ist abgeschaltet. Seine
+    net-Empfaenger hatten keine ausreichenden Pruefungen (Werte frei setzbar,
+    Pumpe entfernte beliebige Entities). Zum Wiederaktivieren auf true setzen
+    - vorher die Empfaenger absichern.
+
+    Ein Lua-Refresh entfernt bereits registrierte Empfaenger und Timer nicht
+    von selbst, deshalb werden sie hier ausgetragen.
+]]
+PD.REAKTOR.Enabled = false
+
+if not PD.REAKTOR.Enabled then
+    for _, name in ipairs({"PD.REAKTOR:GetInfo", "PD.REAKTOR:SetInfo", "PD.REAKTOR:Active", "PD.REAKTOR:Pumpe"}) do
+        net.Receivers[string.lower(name)] = nil
+    end
+
+    timer.Remove("PD.REAKTOR:Tick")
+    timer.Remove("PD.REAKTOR:Hitze")
+
+    return
+end
+
 local fuel = 50000
 local hitze = 0
 local cool = 50000

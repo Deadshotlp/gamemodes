@@ -2,9 +2,7 @@
 -- List / Faction System 
 --===--===--===--===--===--===--===--===--
 PD.List = PD.List or {}
-PD.List.Factions = {}
-
-PD.List.Factions = {}
+PD.List.Factions = PD.List.Factions or {}
 
 timer.Simple(0.1,function()
     net.Start("PD.List.Sync")
@@ -91,7 +89,7 @@ function PD.List:Menu(wo)
                 local playerTbl = GetPlayersByUnit(k)
 
                 if table.Count(playerTbl) == 0 then 
-                    local lbl = PD.Label("Scheint wohl das niemand im Dienst ist.", scrl)   
+                    local lbl = PD.Label("Es sind keine Spieler in dieser Einheit Online.", scrl)   
         
                     return 
                 end
@@ -128,7 +126,7 @@ function PD.List:Menu(wo)
         local unit, subunit, job = FindPlayerUnit(LocalPlayer())
 
         if not unit then
-            local lbl = PD.Label("Du bist in keiner Einheit",scrl)
+            local lbl = PD.Label("Du bist in keiner Einheit.",scrl)
             return
         end
 
@@ -158,9 +156,9 @@ function PD.List:Menu(wo)
                 online = "Online"
             end
 
-            local lbl = PD.Label("Spielzeit: " .. v.playtime, mainPlayerPanel)
-            local lbl = PD.Label("Zuletzt gesehen: " .. online, mainPlayerPanel)
-            local lbl = PD.Label("Einheit beigetreten: " .. v.join, mainPlayerPanel)
+            local lbl = PD.Label( "Spielzeit" .. ": " .. v.playtime, mainPlayerPanel)
+            local lbl = PD.Label("Zuletzt gesehen" .. ": " .. online, mainPlayerPanel)
+            local lbl = PD.Label("Einheit beigetreten" .. ": " .. v.join, mainPlayerPanel)
 
             if LocalPlayer():IsAdmin() or table.HasValue(PD.List.Permission, v.job) then
                 if FindPlayerbyCharID(charID) == LocalPlayer() then continue end
@@ -206,7 +204,7 @@ function PD.List:Menu(wo)
                     local playerBtn = PD.Button(v.name .. " | (" .. steamName .. ")", scrl, function()
                         scrl:Clear()
 
-                        local charID = string.sub(v.name, 0, 7)
+                        local charID = k -- Schluessel der Spielerliste ist die Charakter-ID
                         local vp = FindPlayerbyCharID(charID)
                         local unit, subunit, job = FindPlayerUnit(vp)
                         local ply = GetPlayerInfos(vp)
@@ -216,15 +214,15 @@ function PD.List:Menu(wo)
                             online = "Online"
                         end
 
-                        local lbl = PD.Label("Name: " .. v.name .. " | (" .. steamName .. ")", scrl)
-                        local lbl = PD.Label("Einheit: " .. unit, scrl)
-                        local lbl = PD.Label("Untereinheit: " .. subunit, scrl)
-                        local lbl = PD.Label("Job: " .. job, scrl)
-                        local lbl = PD.Label("Zuletzt gesehen: " .. online, scrl)
-                        local lbl = PD.Label("Einheit beigetreten: " .. ply.join, scrl)
-                        local lbl = PD.Label("Spielzeit: " .. ply.playtime, scrl)
+                        local lbl = PD.Label("Name" .. ": " .. v.name .. " | (" .. steamName .. ")", scrl)
+                        local lbl = PD.Label("Einheit" .. ": " .. unit, scrl)
+                        local lbl = PD.Label("Untereinheit" .. ": " .. subunit, scrl)
+                        local lbl = PD.Label("Job" .. ": " .. job, scrl)
+                        local lbl = PD.Label("Zuletzt gesehen" .. ": " .. online, scrl)
+                        local lbl = PD.Label("Einheit beigetreten" .. ": " .. ply.join, scrl)
+                        local lbl = PD.Label("Spielzeit" .. ": " .. ply.playtime, scrl)
 
-                        local ComboBoxJob = PD.ComboBox("Neuer Job hier wählen", scrl, function(val)
+                        local ComboBoxJob = PD.ComboBox("Neuen Job auswählen", scrl, function(val)
                             val = string.Explode(" | ",val)
 
                             newJob = val[1]
@@ -239,7 +237,9 @@ function PD.List:Menu(wo)
                             end
                         end
 
-                        local changeUnit = PD.Button("Unit Chnage",scrl,function()
+                        local changeUnit = PD.Button("Einheit wechseln",scrl,function()
+                            if not newJob then chat.AddText("Neuen Job auswählen") return end
+
                             net.Start("PD.List.ChangeUnit")
                                 net.WriteString(vp:GetCharacterID())
                                 net.WriteString(newJob)
@@ -269,7 +269,7 @@ function PD.List:Menu(wo)
                         kick:Dock(TOP)
 
  
-                        local defaultFaction = PD.Button("Default Faction",scrl,function()
+                        local defaultFaction = PD.Button("Standardfraktion",scrl,function()
                             net.Start("PD.List.SetPlayerFaction")
                                 net.WriteEntity(vp)
                                 net.WriteString("Ausbildung")

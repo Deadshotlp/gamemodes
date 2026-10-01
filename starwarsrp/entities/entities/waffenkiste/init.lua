@@ -3,22 +3,13 @@ AddCSLuaFile( "shared.lua" )
 
 include('shared.lua')
 
-util.AddNetworkString("WaffenkisteReparieren")
-
-net.Receive("WaffenkisteReparieren", function(len, ply)
-	if GetGlobal2Bool("WaffenkisteKaputt") then
-		ENT:SetHealth(100)
-		SetGlobal2Bool("WaffenkisteKaputt", false)
-		ENT:SetBodygroup(1, 0)
-		ply:ChatPrint("Die Waffenkiste wurde repariert!")
-	else
-		ply:ChatPrint("Die Waffenkiste ist nicht kaputt!")
-	end
-end)
+-- Der fruehere net-Empfaenger "WaffenkisteReparieren" ist entfernt: kein Client
+-- hat ihn je gesendet, und er griff auf ENT zu, das im Callback nil ist. Die
+-- Reparatur laeuft ueber ENT:AcceptInput.
 
 function ENT:Initialize()
 
-	self:SetModel("models/reizer_props/srsp/sci_fi/armory_02/armory_02.mdl")
+	self:SetModel("models/reizer_props/srsp/sci_fi/armory_01/armory_01.mdl")
 	self:PhysicsInit(SOLID_VPHYSICS)
 	self:SetMoveType(MOVETYPE_VPHYSICS)
 	self:SetSolid(SOLID_VPHYSICS)

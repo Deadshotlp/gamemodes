@@ -48,6 +48,14 @@ end
 -- Ret1:
 --
 function PLAYER:Spawn()
+	local JobName, JobTable = self.Player:GetJob()
+	print("Spawning player with job: " .. tostring(JobName))
+	if JobTable and JobTable.model then
+		self.Player:SetModel( JobTable.model[1] )
+	else
+		self.Player:SetModel( CONFIG.BackModel )
+	end
+
 end
 
 --
@@ -57,12 +65,12 @@ end
 -- Ret1:
 --
 function PLAYER:Loadout()
-
+	self.Player:StripWeapons()
 end
 
 function PLAYER:SetModel()
 
-	self.Player:SetModel( CONFIG.BackModel )
+	-- self.Player:SetModel( CONFIG.BackModel )
 
 end
 
