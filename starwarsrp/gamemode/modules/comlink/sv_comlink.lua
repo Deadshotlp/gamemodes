@@ -175,50 +175,92 @@ hook.Add("PlayerCanHearPlayersVoice", "PD.Comlink.Voice", function(listener, tal
     return true, false
 end)
 
+--[[
+    Feste Kanaele. Kommen aus der Datenbank (pd_comlink_channels, Web-Panel
+    "Funk"); bis die geantwortet hat bzw. beim ersten Start gelten diese
+    Startwerte - die bisher hier fest eingetragenen Kanaele.
+
+    access: "all"   jeder
+            "admin" nur Admins
+            "units" nur die Einheiten/Untereinheiten in units (Namen)
+]]
+PD.Comlink.FixedChannels = PD.Comlink.FixedChannels or {
+    {id = 1, name = "TeamChannel", color = {255, 0, 0}, access = "admin", units = {}},
+    {id = 2, name = "Einsatzkoordinations Funk", color = {255, 255, 255}, access = "all", units = {}},
+    {id = 3, name = "Medizinischer Notfall Funk", color = {255, 0, 0}, access = "all", units = {}},
+    {id = 4, name = "Technischer Notfall Funk", color = {255, 125, 0}, access = "all", units = {}},
+}
+
+local function FixedAccessCheck(access, units)
+    if access == "admin" then
+        return function(ply)
+            return IsValid(ply) and ply:IsAdmin()
+        end
+    end
+
+    if access == "units" then
+        return function(ply)
+            if not IsValid(ply) then return false end
+
+            for _, unit in ipairs(units or {}) do
+                -- Ein Spieler ohne Job darf den Check nicht abstuerzen lassen.
+                local okUnit, inUnit = pcall(PD.Comlink.CheckUnitAccess, ply, unit)
+                if okUnit and inUnit then return true end
+
+                local okSub, inSub = pcall(PD.Comlink.CheckSubUnitAccess, ply, unit)
+                if okSub and inSub then return true end
+            end
+
+            return false
+        end
+    end
+
+    return function()
+        return true
+    end
+end
+
+-- Baut die festen Kanaele neu auf. Ein Kanal behaelt seinen Index, solange es
+-- ihn gibt (gleiche id) - Spieler-Slots zeigen weiter auf denselben Kanal.
 function PD.Comlink.CreateDefaultChannel()
-    PD.Comlink.Table[1] = {
-        name = "TeamChannel",
-        color = Color(255, 0, 0),
-        mute = true,
-        encrypted = false,
-        passkey = "",
-        check = function(ply)
-            return ply:IsAdmin()
-        end,
-    }
+    local previous = {}
 
-    PD.Comlink.Table[2] = {
-        name = "Einsatzkoordinations Funk",
-        color = Color(255, 255, 255),
-        mute = false,
-        encrypted = false,
-        passkey = "",
-        check = function(ply)
-            return true
-        end,
-    } 
+    for idx, ch in pairs(PD.Comlink.Table) do
+        if ch.fixedChannel then
+            previous[ch.fixedChannel] = idx
+            PD.Comlink.Table[idx] = nil
+        end
+    end
 
-    PD.Comlink.Table[3] = {
-        name = "Medizinischer Notfall Funk",
-        color = Color(255, 0, 0),
-        mute = false,
-        encrypted = false,
-        passkey = "",
-        check = function(ply)
-            return true
-        end,
-    }
+    for _, def in ipairs(PD.Comlink.FixedChannels) do
+        local key = "fixed:" .. tostring(def.id)
+        local idx = previous[key]
+        previous[key] = nil
 
-    PD.Comlink.Table[4] = {
-        name = "Technischer Notfall Funk",
-        color = Color(255, 125, 0),
-        mute = false,
-        encrypted = false,
-        passkey = "",
-        check = function(ply)
-            return true
-        end,
-    }
+        if not idx or PD.Comlink.Table[idx] then
+            idx = PD.Comlink.FreeIndex()
+        end
+
+        if idx then
+            local c = def.color or {}
+
+            PD.Comlink.Table[idx] = {
+                name = tostring(def.name),
+                color = Color(tonumber(c[1]) or 255, tonumber(c[2]) or 255, tonumber(c[3]) or 255),
+                mute = def.access ~= "all",
+                encrypted = false,
+                passkey = "",
+                fixedChannel = key,
+                check = FixedAccessCheck(def.access, def.units),
+            }
+        end
+    end
+
+    for _, idx in pairs(previous) do
+        if PD.Comlink.Table[idx] == nil then
+            PD.Comlink.DropIndex(idx)
+        end
+    end
 end
 
 function PD.Comlink.CheckUnitAccess(ply, unit)
@@ -599,6 +641,145 @@ local function LoadComlinkChannel()
 end
 
 LoadComlinkChannel()
+
+--[[
+    Feste Kanaele und Sprachreichweiten aus der Datenbank (Web-Panel "Funk").
+    Neu laden: pd_reload funk. Beim ersten Start mit den bisherigen Werten
+    befuellt.
+]]
+local TBL_CHANNELS = "pd_comlink_channels"
+local TBL_RANGES = "pd_voice_ranges"
+
+util.AddNetworkString("PD.VC.Config")
+
+local function SplitList(text)
+    local out = {}
+
+    for _, part in ipairs(string.Explode(",", tostring(text or ""))) do
+        part = string.Trim(part)
+        if part ~= "" then out[#out + 1] = part end
+    end
+
+    return out
+end
+
+function PD.Comlink.SendVoiceConfig(target)
+    net.Start("PD.VC.Config")
+    net.WriteTable(PD.VC.Config)
+
+    if target then net.Send(target) else net.Broadcast() end
+end
+
+local function SeedFunk(callback)
+    PD.SQL.FetchOne("SELECT (SELECT COUNT(*) FROM `" .. TBL_CHANNELS .. "`) AS c, (SELECT COUNT(*) FROM `" .. TBL_RANGES .. "`) AS r", function(row)
+        local pending = 1
+        local function finish()
+            pending = pending - 1
+            if pending <= 0 then callback() end
+        end
+
+        if row and tonumber(row.c) == 0 then
+            for index, def in ipairs(PD.Comlink.FixedChannels) do
+                pending = pending + 1
+                PD.SQL.Query("INSERT INTO `" .. TBL_CHANNELS .. "` (`name`, `color`, `access`, `units`, `position`) VALUES ("
+                    .. PD.SQL.EscapeString(def.name) .. ", "
+                    .. PD.SQL.EscapeString(table.concat(def.color, ",")) .. ", "
+                    .. PD.SQL.EscapeString(def.access) .. ", '', " .. index .. ")", finish)
+            end
+        end
+
+        if row and tonumber(row.r) == 0 then
+            for mode, cfg in ipairs(PD.VC.Config or {}) do
+                pending = pending + 1
+                PD.SQL.Query("INSERT INTO `" .. TBL_RANGES .. "` (`mode`, `name`, `range_units`) VALUES ("
+                    .. mode .. ", " .. PD.SQL.EscapeString(cfg.name) .. ", " .. (tonumber(cfg.range) or 350) .. ")", finish)
+            end
+        end
+
+        finish()
+    end)
+end
+
+function PD.Comlink.LoadConfig(callback)
+    local createChannels = "CREATE TABLE IF NOT EXISTS `" .. TBL_CHANNELS .. "` ("
+        .. "`id` INT UNSIGNED NOT NULL AUTO_INCREMENT,"
+        .. "`name` VARCHAR(64) NOT NULL,"
+        .. "`color` VARCHAR(16) NOT NULL DEFAULT '255,255,255',"
+        .. "`access` VARCHAR(16) NOT NULL DEFAULT 'all',"
+        .. "`units` VARCHAR(1024) NOT NULL DEFAULT '',"
+        .. "`position` INT NOT NULL DEFAULT 0,"
+        .. "PRIMARY KEY (`id`)"
+        .. ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+
+    local createRanges = "CREATE TABLE IF NOT EXISTS `" .. TBL_RANGES .. "` ("
+        .. "`mode` INT NOT NULL,"
+        .. "`name` VARCHAR(32) NOT NULL,"
+        .. "`range_units` INT NOT NULL,"
+        .. "PRIMARY KEY (`mode`)"
+        .. ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+
+    PD.SQL.Query(createChannels, function()
+        PD.SQL.Query(createRanges, function()
+            SeedFunk(function()
+                PD.SQL.FetchAll("SELECT * FROM `" .. TBL_CHANNELS .. "` ORDER BY `position`, `id`", function(channels)
+                    PD.SQL.FetchAll("SELECT * FROM `" .. TBL_RANGES .. "` ORDER BY `mode`", function(ranges)
+                        local fixed = {}
+
+                        for _, row in ipairs(channels or {}) do
+                            local access = row.access
+                            if access ~= "admin" and access ~= "units" then access = "all" end
+
+                            local rgb = SplitList(row.color)
+
+                            fixed[#fixed + 1] = {
+                                id = tonumber(row.id),
+                                name = row.name,
+                                color = {tonumber(rgb[1]) or 255, tonumber(rgb[2]) or 255, tonumber(rgb[3]) or 255},
+                                access = access,
+                                units = SplitList(row.units),
+                            }
+                        end
+
+                        PD.Comlink.FixedChannels = fixed
+                        PD.Comlink.CreateDefaultChannel()
+
+                        -- Sprachreichweiten: genau die Stufen 1-4 (die Taste
+                        -- schaltet reihum durch vier Stufen).
+                        local vc = table.Copy(PD.VC.Config or {})
+                        for _, row in ipairs(ranges or {}) do
+                            local mode = tonumber(row.mode)
+                            if mode and mode >= 1 and mode <= 4 then
+                                vc[mode] = {
+                                    name = row.name,
+                                    range = math.Clamp(tonumber(row.range_units) or 350, 10, 5000),
+                                }
+                            end
+                        end
+
+                        PD.VC.Config = vc
+                        PD.Comlink.SendVoiceConfig()
+
+                        SendChannelListToAll()
+
+                        if callback then callback(#fixed, table.Count(vc)) end
+                    end)
+                end)
+            end)
+        end)
+    end)
+end
+
+hook.Add("PlayerInitialSpawn", "PD.VC.Config", function(ply)
+    timer.Simple(5, function()
+        if IsValid(ply) then PD.Comlink.SendVoiceConfig(ply) end
+    end)
+end)
+
+timer.Simple(3, function()
+    PD.Comlink.LoadConfig(function(channels, ranges)
+        print("[Funk] " .. tostring(channels) .. " feste Kanaele, " .. tostring(ranges) .. " Sprachreichweiten geladen")
+    end)
+end)
 
 -- Jobs sind (neu) aus der Datenbank geladen: Einheitskanaele nachziehen.
 hook.Add("PD.JOBS.Loaded", "PD.Comlink.UnitChannels", function()

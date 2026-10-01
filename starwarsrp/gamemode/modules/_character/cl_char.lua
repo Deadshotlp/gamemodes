@@ -416,7 +416,7 @@ function PD.Char:Menu(close)
         actionButton:SetPos(scrw / 2 - PD.W(120), scrh - PD.H(75))
 
         actionButton.DoClick = function()
-            local maxSlots = PD.Char.UserGroupChar[LocalPlayer():GetUserGroup()] or 2
+            local maxSlots = PD.Char.GetSlotLimit(LocalPlayer())
 
             if id > maxSlots then
                 ShowError("Dieser Charakterplatz ist gesperrt!", CharBase, 2)
@@ -497,7 +497,7 @@ function PD.Char:Menu(close)
 
     for i = 1, PD.Char.MaxChars do
         local data = PD.Char.Data[i]
-        local maxSlots = PD.Char.UserGroupChar[LocalPlayer():GetUserGroup()] or 2
+        local maxSlots = PD.Char.GetSlotLimit(LocalPlayer())
 
         if not data then
             data = {

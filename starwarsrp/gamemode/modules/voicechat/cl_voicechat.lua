@@ -43,3 +43,12 @@ hook.Add("PostDrawTranslucentRenderables", "PD.DrawSphere", function()
         true
     )
 end)
+
+-- Namen und Reichweiten kommen vom Server (Web-Panel "Funk").
+net.Receive("PD.VC.Config", function()
+    local cfg = net.ReadTable()
+
+    if istable(cfg) and cfg[1] then
+        PD.VC.Config = cfg
+    end
+end)

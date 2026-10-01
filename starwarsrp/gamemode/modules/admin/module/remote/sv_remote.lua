@@ -242,6 +242,29 @@ PD.Remote.Reloaders["fahrzeuge"] = function(done)
     end)
 end
 
+PD.Remote.Reloaders["charakter"] = function(done)
+    if not PD.Char or not PD.Char.LoadConfig then
+        done("Charakter-Einstellungen nicht geladen")
+        return
+    end
+
+    PD.Char.LoadConfig(function()
+        done("Charakter-Einstellungen geladen (Praefix " .. tostring(PD.Char.IDPrefix)
+            .. ", Format " .. tostring(PD.Char.IDFormat) .. ")")
+    end)
+end
+
+PD.Remote.Reloaders["funk"] = function(done)
+    if not PD.Comlink or not PD.Comlink.LoadConfig then
+        done("Funk-Modul nicht geladen")
+        return
+    end
+
+    PD.Comlink.LoadConfig(function(channels, ranges)
+        done(tostring(channels) .. " feste Kanaele, " .. tostring(ranges) .. " Sprachreichweiten geladen")
+    end)
+end
+
 PD.Remote.Reloaders["kisten"] = function(done)
     if not PD.Kiste or not PD.Kiste.LoadConfig then
         done("Transportkisten-Modul nicht geladen")
@@ -348,7 +371,7 @@ concommand.Add("pd_reload", function(ply, cmd, args)
     local area = string.lower(args[1] or "")
 
     if area == "" then
-        PD.RemoteLog("[Remote] Verwendung: pd_reload <jobs|fortbildung|waffen|arccw|fraktionen|armor|spawns|chars|fahrzeuge|kisten|all>")
+        PD.RemoteLog("[Remote] Verwendung: pd_reload <jobs|fortbildung|waffen|arccw|fraktionen|armor|spawns|chars|charakter|funk|fahrzeuge|kisten|all>")
         return
     end
 
