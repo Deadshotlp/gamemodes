@@ -271,8 +271,8 @@ PD.Remote.Reloaders["kisten"] = function(done)
         return
     end
 
-    PD.Kiste.LoadConfig(function(ok, count)
-        done(tostring(count) .. " packbare Modelle geladen")
+    PD.Kiste.LoadConfig(function(ok, count, spawnCount)
+        done(tostring(count) .. " packbare Modelle, " .. tostring(spawnCount) .. " im Kistenlager geladen")
     end)
 end
 
