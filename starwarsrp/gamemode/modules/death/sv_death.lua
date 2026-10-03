@@ -42,11 +42,14 @@ local function createRagdoll(ply)
 
     ragdoll:SetNW2Entity("PD.DM.RagdollOwner", ply)
     ply:SetNW2Entity("PD.DM.Ragdoll", ragdoll)
+    -- Verfolgerkamera statt Todeskamera: OBS_MODE_DEATHCAM bleibt fest am
+    -- Sterbeort stehen und dreht sich nur zur Leiche. Wurde die Leiche
+    -- weggezogen oder getragen, blieb die Kamera zurueck. CHASE folgt der
+    -- Leiche (und nimmt den Sichtbereich des Spielers mit).
     ply:SpectateEntity(ragdoll)
-    ply:Spectate(OBS_MODE_DEATHCAM)
+    ply:Spectate(OBS_MODE_CHASE)
 
     ply:SetViewOffset(Vector(0,0,64))
-    print(ply:GetViewOffset())
 
     return ragdoll
 end

@@ -71,7 +71,7 @@ end
 ]]
 local pending = nil
 
-net.Receive("PD.ACW:Sync", function()
+net.Receive("PD.ACW:SyncZ", function()
     local serial = net.ReadUInt(16)
     local index = net.ReadUInt(8)
     local total = net.ReadUInt(8)

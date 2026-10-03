@@ -28,6 +28,9 @@ local TBL_BLOCKS = "pd_arccw_blocks"
 local SNAPSHOT_DELAY = 15
 
 util.AddNetworkString("PD.ACW:Sync")
+-- Neues Format (komprimiert, in Teilen) unter eigenem Namen: ein Client mit
+-- der alten Datei bekommt sie gar nicht erst, statt sie falsch zu lesen.
+util.AddNetworkString("PD.ACW:SyncZ")
 
 local function esc(value)
     return PD.SQL.EscapeString(tostring(value or ""))
@@ -686,7 +689,7 @@ function PD.ACW.Sync(ply)
 
             local part = string.sub(data, (index - 1) * SYNC_CHUNK + 1, index * SYNC_CHUNK)
 
-            net.Start("PD.ACW:Sync")
+            net.Start("PD.ACW:SyncZ")
                 net.WriteUInt(serial, 16)
                 net.WriteUInt(index, 8)
                 net.WriteUInt(total, 8)
