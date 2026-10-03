@@ -13,10 +13,7 @@
 -- (Grapple-Hinweis, Seil, Use-Taste fehlten nach jedem Neustart).
 PD.ACW = PD.ACW or {}
 
-net.Receive("PD.ACW:Sync", function()
-    local weapons_ = net.ReadTable()
-    local atts = net.ReadTable()
-
+local function ApplySync(weapons_, atts, blocks)
     if istable(weapons_) then
         PD.ACW.Overrides = {}
 
@@ -58,17 +55,52 @@ net.Receive("PD.ACW:Sync", function()
     end
 
     -- Die Sperrliste. Ohne sie bot das Aufsatzmenue beim Client gesperrte
-    -- Aufsaetze an, weil nur der Server von der Sperre wusste. Ein aelterer
-    -- Server schickt sie nicht mit - dann wird nicht ueber das Ende gelesen.
-    if (net.BytesLeft() or 0) > 0 then
-        local blocks = net.ReadTable()
-
-        if istable(blocks) then
-            PD.ACW.Blocked = blocks
-        end
+    -- Aufsaetze an, weil nur der Server von der Sperre wusste.
+    if istable(blocks) then
+        PD.ACW.Blocked = blocks
     end
 
     PD.ACW.ApplyBlocks()
+end
+
+--[[
+    Der Server schickt die Werte komprimiert und bei Bedarf in Teilen (frueher
+    unkomprimiert in einer Nachricht, die ab 64 KB nicht mehr ankam). Teile
+    einer Sendung tragen dieselbe Seriennummer; eine neue Sendung verwirft
+    eine unvollstaendige alte.
+]]
+local pending = nil
+
+net.Receive("PD.ACW:Sync", function()
+    local serial = net.ReadUInt(16)
+    local index = net.ReadUInt(8)
+    local total = net.ReadUInt(8)
+    local size = net.ReadUInt(16)
+    local part = net.ReadData(size)
+
+    if not pending or pending.serial ~= serial then
+        pending = {serial = serial, total = total, parts = {}, count = 0}
+    end
+
+    if not pending.parts[index] then
+        pending.parts[index] = part
+        pending.count = pending.count + 1
+    end
+
+    if pending.count < pending.total then return end
+
+    local data = table.concat(pending.parts, "", 1, pending.total)
+    pending = nil
+
+    local json = util.Decompress(data)
+    local payload = json and util.JSONToTable(json)
+
+    if not istable(payload) then
+        print("[PD.ACW] Waffenwerte vom Server konnten nicht gelesen werden")
+        return
+    end
+
+    ApplySync(payload.weapons, payload.atts, payload.blocked)
 end)
 
 --------------------------------------------------------------------------------

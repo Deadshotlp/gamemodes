@@ -631,6 +631,9 @@ end)
     Waffenmenue an - und die kaemen sonst aus der unveraenderten Addon-Datei.
     Verschickt werden nur die geaenderten Eintraege, das sind wenige.
 ]]
+local SYNC_CHUNK = 60000
+local syncSerial = 0
+
 function PD.ACW.Sync(ply)
     local weaponPayload = {}
 
@@ -648,16 +651,54 @@ function PD.ACW.Sync(ply)
         if values then attPayload[id] = values end
     end
 
-    net.Start("PD.ACW:Sync")
-        net.WriteTable(weaponPayload)
-        net.WriteTable(attPayload)
+    --[[
+        Frueher drei WriteTable in einer Nachricht. Mit wachsender Sperrliste
+        aus dem Panel wurde das groesser als die 64 KB einer Netznachricht
+        ("Trying to send an overflowed net message") und kam gar nicht mehr an.
+        Jetzt als JSON, komprimiert und notfalls in Teilen; der Client setzt sie
+        ueber die Seriennummer wieder zusammen.
+    ]]
+    local json = util.TableToJSON({
+        weapons = weaponPayload,
+        atts = attPayload,
         -- Die Sperrliste: das Aufsatzmenue laeuft beim Client und muss sie kennen.
-        net.WriteTable(PD.ACW.Blocked)
+        blocked = PD.ACW.Blocked,
+    }) or "{}"
 
-    if IsValid(ply) then
-        net.Send(ply)
-    else
-        net.Broadcast()
+    local data = util.Compress(json) or ""
+    local total = math.max(1, math.ceil(#data / SYNC_CHUNK))
+
+    syncSerial = (syncSerial % 65535) + 1
+    local serial = syncSerial
+
+    local target = IsValid(ply) and ply or nil
+
+    if not target then
+        print(string.format("[PD.ACW] Werte an alle: %.1f KB (%.1f KB unkomprimiert), %d Teil(e)",
+            #data / 1024, #json / 1024, total))
+    end
+
+    for index = 1, total do
+        -- Teile ueber mehrere Ticks verteilen, damit der zuverlaessige
+        -- Netzpuffer der Clients nicht auf einmal volllaeuft.
+        timer.Simple((index - 1) * 0.1, function()
+            if target ~= nil and not IsValid(target) then return end
+
+            local part = string.sub(data, (index - 1) * SYNC_CHUNK + 1, index * SYNC_CHUNK)
+
+            net.Start("PD.ACW:Sync")
+                net.WriteUInt(serial, 16)
+                net.WriteUInt(index, 8)
+                net.WriteUInt(total, 8)
+                net.WriteUInt(#part, 16)
+                net.WriteData(part, #part)
+
+            if target then
+                net.Send(target)
+            else
+                net.Broadcast()
+            end
+        end)
     end
 end
 
