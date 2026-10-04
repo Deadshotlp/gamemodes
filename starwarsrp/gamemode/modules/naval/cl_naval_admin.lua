@@ -156,6 +156,11 @@ Naval.SettingInfo = {
         {"nav_valid_seconds", "Kurslösung gültig für", "s"},
         {"nav_max_drift", "Lösung ungültig nach Flug von", "m"},
     }},
+    {"Gefecht", {
+        {"combat_damage_mult", "Faktor auf allen Waffenschaden", "0,5 = doppelt so lang"},
+        {"combat_shield_regen_mult", "Nachladen der Schilde", "Faktor"},
+        {"combat_wreck_time", "Wrack sichtbar für", "s"},
+    }},
     {"Sensoren und Darstellung", {
         {"sensor_default", "Sensorreichweite (Standard)", "m"},
         {"near_ship_range", "Schiffe als Modell bis", "m"},
