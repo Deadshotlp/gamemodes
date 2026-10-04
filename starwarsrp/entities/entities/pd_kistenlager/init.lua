@@ -3,10 +3,24 @@ AddCSLuaFile("shared.lua")
 include("shared.lua")
 
 function ENT:Initialize()
-    -- Das PermaProps-Tool setzt beim Laden das gespeicherte Modell vor Spawn.
-    if not self:GetModel() or self:GetModel() == "" then
-        self:SetModel(util.IsValidModel(self.Model) and self.Model or PD.Kiste.DefaultCrateModel)
+    --[[
+        Immer das Modell aus shared.lua (ENT.Model). Frueher nur, wenn noch
+        keines gesetzt war - beim Spawnen aus dem Menue galt das nicht, und das
+        Lager stand ohne Modell da. Perma-Props speichern ohnehin dasselbe
+        Modell; ein geaendertes ENT.Model gilt so auch fuer schon gespeicherte
+        Lager.
+
+        Fehlt das Modell auf dem Server (z. B. CS:S-Modelle, CS:S ist hier
+        nicht gemountet), gibt es die Standardkiste und eine Warnung.
+    ]]
+    local model = self.Model
+
+    if not util.IsValidModel(model) then
+        print("[Kistenlager] Modell " .. tostring(model) .. " fehlt auf dem Server - nehme Standardkiste")
+        model = PD.Kiste and PD.Kiste.DefaultCrateModel or "models/props_junk/wood_crate002a.mdl"
     end
+
+    self:SetModel(model)
 
     self:PhysicsInit(SOLID_VPHYSICS)
     self:SetMoveType(MOVETYPE_VPHYSICS)

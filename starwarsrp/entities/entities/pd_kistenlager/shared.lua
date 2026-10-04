@@ -17,4 +17,4 @@ ENT.Category = "PD - Gamemode"
 ENT.Spawnable = true
 ENT.AdminOnly = true
 
-ENT.Model = "models/niksacokica/republic/rep_crate.mdl"
+ENT.Model = "models/props/de_port/cargo_container01.mdl"
