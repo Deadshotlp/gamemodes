@@ -119,6 +119,9 @@ local tickCount = 0
 local lastTime = SysTime()
 
 function Naval.Tick()
+    -- Zeitstempel des Simulationsstands (auch pausiert, damit die Uhr der
+    -- Clients weiterlaeuft); der Snapshot traegt genau diese Zeit.
+    Naval.SimTime = Naval.Now()
     if Naval.Paused then return end
 
     local now = SysTime()
@@ -143,6 +146,9 @@ end
 local function SafeTick()
     local ok, err = xpcall(Naval.Tick, debug.traceback)
     if not ok then ErrorNoHalt("[Naval] Fehler im Takt: " .. tostring(err) .. "\n") end
+
+    -- Snapshot im selben Takt: jeder Snapshot ist genau ein Simulationsschritt
+    if Naval.AfterTick then Naval.AfterTick() end
 end
 
 local function SafeAI()

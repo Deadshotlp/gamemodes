@@ -1,14 +1,13 @@
 --[[
-    Naval - Admin-Tab "Raumflotte" (Client).
+    Naval - Admin-Tab "Raumflotte" (Client): reine Konfiguration.
 
-    Links die Taktik-Ansicht mit allen Schiffen im System, rechts die
-    Werkzeuge: Simulation pausieren, Schiffe erzeugen (vor dem Map-Schiff
-    oder per Klick), auswaehlen, bearbeiten, Befehle (halten, bewegen,
-    Patrouille, anfliegen, Orbit, springen), loeschen, Map-Schiff versetzen,
-    Konsolen sperren. Gegenstueck: sv_naval_admintool.lua.
+      Simulation     Pause, Flottenkommando oeffnen
+      Einstellungen  Tempo und Regeln (dieselben Werte wie im Web-Panel)
+      Kalibrierung   Map-Schiff vermessen (Bug/Heck, Mitte, Massstab)
+      Konsolen       aufstellen, sperren, entfernen
 
-    Klicks in der Ansicht treffen die Ebene des Map-Schiffs; die Ansicht
-    dafuer etwas schraeg stellen (ziehen).
+    Schiffe und Befehle: Flottenkommando (cl_naval_fleet.lua). Server:
+    sv_naval_admintool.lua.
 ]]
 
 PD.Naval = PD.Naval or {}
@@ -24,39 +23,154 @@ net.Receive("PD.Naval.AdminData", function()
     hook.Run("PD.Naval.AdminData")
 end)
 
-local function Send(action, args)
+net.Receive("PD.Naval.AdminSettings", function()
+    C.adminSettings = util.JSONToTable(net.ReadString()) or {}
+    hook.Run("PD.Naval.AdminSettings")
+end)
+
+function Naval.AdminSend(action, args)
     net.Start("PD.Naval.Admin")
     net.WriteString(action)
     net.WriteString(util.TableToJSON(args or {}) or "{}")
     net.SendToServer()
 end
 
-local function FindSystem(text)
-    local static = C.static
-    text = string.lower(string.Trim(text or ""))
-    if not static or text == "" then return nil end
+local Send = Naval.AdminSend
 
-    for _, s in ipairs(static.systemList) do
-        if string.lower(s.name) == text then return s end
-    end
-    for _, s in ipairs(static.systemList) do
-        for planet in string.gmatch(string.lower(s.planets or ""), "[^,]+") do
-            if string.Trim(planet) == text then return s end
+--------------------------------------------------------------------------------
+-- Bausteine fuer Seitenleisten (auch vom Flottenkommando benutzt)
+--------------------------------------------------------------------------------
+
+function Naval.UIBuilder(scroll)
+    local UI = Naval.UI
+    local COL = UI.COL
+    local B = {}
+
+    function B.Header(text)
+        local p = scroll:Add("DPanel")
+        p:Dock(TOP)
+        p:DockMargin(0, 12, 0, 4)
+        p:SetTall(26)
+        p.Paint = function(s, w, h)
+            surface.SetDrawColor(COL.accent)
+            surface.DrawRect(0, h - 2, w, 2)
+            draw.SimpleText(text, "MLIB.18", 2, 2, COL.text)
         end
     end
-    for _, s in ipairs(static.systemList) do
-        if string.find(s.search or string.lower(s.name), text, 1, true) then return s end
+
+    function B.Text(text, height)
+        local p = scroll:Add("DLabel")
+        p:Dock(TOP)
+        p:DockMargin(0, 0, 0, 4)
+        p:SetFont("MLIB.14")
+        p:SetTextColor(COL.dim)
+        p:SetWrap(true)
+        p:SetAutoStretchVertical(true)
+        p:SetText(text)
+        if height then p:SetTall(height) end
+        return p
     end
+
+    function B.Row(height)
+        local p = scroll:Add("DPanel")
+        p:Dock(TOP)
+        p:DockMargin(0, 0, 0, 4)
+        p:SetTall(height or 32)
+        p.Paint = nil
+        return p
+    end
+
+    function B.Buttons(defs)
+        local row = B.Row(32)
+        local buttons = {}
+        for i, d in ipairs(defs) do
+            buttons[i] = UI.Button(row, d[1], d[2], d[3] and function() return d[3] end)
+        end
+        row.PerformLayout = function(s, w, h)
+            local bw = (w - (#buttons - 1) * 4) / #buttons
+            for i, b in ipairs(buttons) do
+                b:SetPos((i - 1) * (bw + 4), 0)
+                b:SetSize(bw, h)
+            end
+        end
+        return buttons
+    end
+
+    function B.Entry(placeholder, value)
+        local e = vgui.Create("DTextEntry", B.Row(30))
+        e:Dock(FILL)
+        e:SetFont("MLIB.16")
+        e:SetPlaceholderText(placeholder)
+        if value then e:SetValue(value) end
+        return e
+    end
+
+    function B.Combo(entries, default)
+        local c = vgui.Create("DComboBox", B.Row(30))
+        c:Dock(FILL)
+        c:SetFont("MLIB.16")
+        for _, e in ipairs(entries) do c:AddChoice(e[2], e[1], e[1] == default) end
+        return c
+    end
+
+    function B.Info(height, paint)
+        local p = B.Row(height)
+        p.Paint = function(s, w, h)
+            draw.RoundedBox(0, 0, 0, w, h, COL.panel)
+            paint(s, w, h)
+        end
+        return p
+    end
+
+    function B.ComboValue(c)
+        local _, data = c:GetSelected()
+        return data
+    end
+
+    return B
 end
 
-local function AdminShip(id)
-    for _, row in ipairs((C.admin and C.admin.ships) or {}) do
-        if row.id == id then return row end
-    end
-end
+--------------------------------------------------------------------------------
+-- Einstellungen: Beschriftung (wie im Web-Panel)
+--------------------------------------------------------------------------------
 
-local STATE_LABEL = {normal = "normal", spooling = "fährt hoch", jumping = "springt", hyperspace = "Hyperraum",
-    exiting = "Austritt", disabled = "kampfunfähig", destroyed = "zerstört"}
+Naval.SettingInfo = {
+    {"Sprünge", {
+        {"hyper_base_time", "Kürzester Sprung", "s"},
+        {"hyper_time_per_gu", "Sprungzeit pro Parsec", "s"},
+        {"hyper_max_time", "Längster Sprung", "s"},
+        {"route_speed_factor", "Faktor auf Hauptrouten", "0,5 = doppelt so schnell"},
+        {"route_minor_factor", "Faktor auf Nebenrouten", ""},
+        {"route_junction_dist", "Umstieg zwischen Routen bis", "pc"},
+        {"spool_time", "Hochfahren des Hyperantriebs", "s"},
+        {"jump_anim_time", "Eintritt in den Hyperraum", "s"},
+        {"exit_anim_time", "Austritt aus dem Hyperraum", "s"},
+        {"jump_align_tolerance", "Erlaubte Abweichung beim Sprung", "Grad"},
+        {"mass_shadow_factor", "Massenschatten", "× Radius"},
+        {"arrival_scatter", "Streuung beim Austritt", "m"},
+    }},
+    {"Navigationscomputer", {
+        {"nav_calc_base", "Kursberechnung mindestens", "s"},
+        {"nav_calc_per_gu", "Kursberechnung pro Parsec", "s"},
+        {"nav_calc_max", "Kursberechnung höchstens", "s"},
+        {"nav_valid_seconds", "Kurslösung gültig für", "s"},
+        {"nav_max_drift", "Lösung ungültig nach Flug von", "m"},
+    }},
+    {"Sensoren und Darstellung", {
+        {"sensor_default", "Sensorreichweite (Standard)", "m"},
+        {"near_ship_range", "Schiffe als Modell bis", "m"},
+        {"render_scale", "Darstellungsmaßstab", "m pro Einheit"},
+        {"render_far", "Fernbereich der Darstellung", "Einheiten"},
+    }},
+    {"Sonstiges", {
+        {"start_system", "Startsystem (ID, leer = Coruscant)", ""},
+        {"autosave_interval", "Automatisch speichern alle", "s"},
+    }},
+}
+
+--------------------------------------------------------------------------------
+-- Tab
+--------------------------------------------------------------------------------
 
 function Naval.AdminMenu(base)
     local UI = Naval.UI
@@ -71,313 +185,188 @@ function Naval.AdminMenu(base)
         return
     end
 
+    -- Zwei Spalten: links Einstellungen, rechts Simulation/Kalibrierung/Konsolen
     local holder = vgui.Create("DPanel", base)
     holder:Dock(FILL)
     holder.Paint = nil
+
+    local right = vgui.Create("DScrollPanel", holder)
+    right:Dock(RIGHT)
+    right:SetWide(math.max(360, base:GetWide() * 0.45))
+    right:DockMargin(12, 0, 0, 0)
+
+    local left = vgui.Create("DScrollPanel", holder)
+    left:Dock(FILL)
+
+    holder.PerformLayout = function(_, w) right:SetWide(math.max(360, w * 0.45)) end
+
+    local L = Naval.UIBuilder(left)
+    local R = Naval.UIBuilder(right)
+
+    ----------------------------------------------------------------------------
+    -- Simulation
+    ----------------------------------------------------------------------------
+
+    R.Header("Simulation")
+    R.Info(46, function(s, w, h)
+        local a = C.admin or {}
+        draw.SimpleText("Map-Schiff in: " .. Naval.SystemName(C.status and C.status.system), "MLIB.16", 8, 4, COL.text)
+        draw.SimpleText(a.paused and "PAUSIERT" or "läuft", "MLIB.14", 8, 24, a.paused and COL.warn or COL.ok)
+    end)
+    R.Buttons({
+        {"Pause an/aus", function() Send("pause") end, COL.warn},
+        {"Flottenkommando öffnen", function() Naval.OpenFleetCommand() end, COL.ok},
+    })
     Send("watch", {on = true})
     holder.OnRemove = function() Send("watch", {on = false}) end
 
-    local side = vgui.Create("DScrollPanel", holder)
-    side:Dock(RIGHT)
-    side:SetWide(math.min(420, ScrW() * 0.3))
-    side:DockMargin(8, 0, 0, 0)
-
-    local tac = vgui.Create("PD_NavalTactical", holder)
-    tac:Dock(FILL)
-    tac.AdminMode = true
-    tac.Range = 100000
-
-    local selected
-    local pickMode
-
-    local function SetPick(mode, hint, onPick)
-        pickMode = mode
-        tac.PickHint = hint
-        tac.OnPick = onPick
-        if not mode then tac.Marks = nil end
-    end
-
-    tac.OnRightClick = function()
-        if pickMode == "patrol" and tac.Marks and #tac.Marks >= 2 and selected then
-            Send("order", {id = selected, type = "patrol", points = tac.Marks})
-        end
-        SetPick(nil)
-    end
-
     ----------------------------------------------------------------------------
-    -- Bausteine
+    -- Kalibrierung
     ----------------------------------------------------------------------------
 
-    local function Header(text)
-        local p = side:Add("DPanel")
-        p:Dock(TOP)
-        p:DockMargin(0, 10, 0, 4)
-        p:SetTall(26)
-        p.Paint = function(s, w, h)
-            surface.SetDrawColor(COL.accent)
-            surface.DrawRect(0, h - 2, w, 2)
-            draw.SimpleText(text, "MLIB.18", 2, 2, COL.text)
-        end
-    end
-
-    local function Row(height)
-        local p = side:Add("DPanel")
-        p:Dock(TOP)
-        p:DockMargin(0, 0, 0, 4)
-        p:SetTall(height or 32)
-        p.Paint = nil
-        return p
-    end
-
-    local function Buttons(defs)
-        local row = Row(32)
-        local buttons = {}
-        for i, d in ipairs(defs) do
-            local b = UI.Button(row, d[1], d[2], d[3] and function() return d[3] end)
-            buttons[i] = b
-        end
-        row.PerformLayout = function(s, w, h)
-            local bw = (w - (#buttons - 1) * 4) / #buttons
-            for i, b in ipairs(buttons) do
-                b:SetPos((i - 1) * (bw + 4), 0)
-                b:SetSize(bw, h)
-            end
-        end
-        return buttons
-    end
-
-    local function Entry(placeholder, value)
-        local e = vgui.Create("DTextEntry", Row(30))
-        e:Dock(FILL)
-        e:SetFont("MLIB.16")
-        e:SetPlaceholderText(placeholder)
-        if value then e:SetValue(value) end
-        return e
-    end
-
-    local function Combo(entries, default)
-        local c = vgui.Create("DComboBox", Row(30))
-        c:Dock(FILL)
-        c:SetFont("MLIB.16")
-        for _, e in ipairs(entries) do c:AddChoice(e[2], e[1], e[1] == default) end
-        return c
-    end
-
-    local function Info(height, paint)
-        local p = Row(height)
-        p.Paint = function(s, w, h)
-            draw.RoundedBox(0, 0, 0, w, h, COL.panel)
-            paint(s, w, h)
-        end
-        return p
-    end
-
-    local static = C.static
-
-    local classes, factions = {}, {}
-    for id, c in SortedPairsByMemberValue(static.classes, "name") do classes[#classes + 1] = {id, c.name} end
-    for id, f in SortedPairsByMemberValue(static.factions, "name") do factions[#factions + 1] = {id, f.name} end
-
-    local function ComboValue(c)
-        local _, data = c:GetSelected()
-        return data
-    end
-
-    ----------------------------------------------------------------------------
-    -- Status
-    ----------------------------------------------------------------------------
-
-    Header("Lage")
-    Info(64, function(s, w, h)
-        local a = C.admin or {}
-        local inSystem = 0
-        for _, row in ipairs(a.ships or {}) do
-            if row.systemId == a.systemId then inSystem = inSystem + 1 end
-        end
-        draw.SimpleText("Map-Schiff in: " .. Naval.SystemName(a.systemId), "MLIB.16", 8, 6, COL.text)
-        draw.SimpleText(("%d Schiffe gesamt, %d im System"):format(#(a.ships or {}), inSystem), "MLIB.16", 8, 26, COL.dim)
-        draw.SimpleText(a.paused and "SIMULATION PAUSIERT" or "Simulation läuft", "MLIB.14", 8, 46, a.paused and COL.warn or COL.ok)
-    end)
-    Buttons({{"Pause an/aus", function() Send("pause") end, COL.warn}})
-
-    ----------------------------------------------------------------------------
-    -- Erzeugen
-    ----------------------------------------------------------------------------
-
-    Header("Schiff erzeugen")
-    local cClass = Combo(classes, "acclamator")
-    local cFaction = Combo({{"", "Fraktion der Klasse"}, unpack(factions)}, "")
-    local eName = Entry("Name (optional)")
-    local eDist = Entry("Abstand voraus in km", "10")
-
-    local function SpawnArgs(rel)
-        local faction = ComboValue(cFaction)
-        return {classId = ComboValue(cClass), factionId = faction ~= "" and faction or nil, name = eName:GetValue(),
-            distanceKm = tonumber(eDist:GetValue()) or 10, rel = rel}
-    end
-
-    Buttons({
-        {"Vor dem Map-Schiff", function() Send("spawn", SpawnArgs()) end, COL.ok},
-        {"Per Klick", function()
-            SetPick("spawn", "Klick: Schiff hier erzeugen  -  Rechtsklick: fertig", function(_, p)
-                Send("spawn", SpawnArgs(p))
-            end)
-        end},
+    R.Header("Map-Schiff vermessen")
+    R.Text("1. Ganz vorne am Schiff hinstellen und \"Hier ist vorne\" drücken.\n"
+        .. "2. Ganz hinten hinstellen und \"Hier ist hinten\" drücken.\n"
+        .. "Daraus folgen Länge, Maßstab, Schiffsmitte und Bugrichtung. Alternativ einzeln:"
+        .. " auf der Brücke durch die Frontfenster schauen -> \"Blick = Bug\".")
+    R.Buttons({
+        {"Hier ist vorne", function() RunConsoleCommand("pd_naval_calibrate", "vorne") end},
+        {"Hier ist hinten", function() RunConsoleCommand("pd_naval_calibrate", "hinten") end},
     })
-
-    ----------------------------------------------------------------------------
-    -- Alle Schiffe
-    ----------------------------------------------------------------------------
-
-    Header("Schiffe")
-    local list = vgui.Create("DListView", Row(200))
-    list:Dock(FILL)
-    list:SetMultiSelect(false)
-    list:AddColumn("Name")
-    list:AddColumn("System")
-    list:AddColumn("Zustand"):SetFixedWidth(80)
-
-    local function Select(id)
-        selected = id
-        tac.Selected = id
-    end
-
-    list.OnRowSelected = function(_, _, line) Select(line.ShipId) end
-    tac.OnSelect = function(_, id) if id then Select(id) end end
-
-    local listKey
-    local function RefreshList()
-        if not IsValid(list) then return end
-        local rows = (C.admin and C.admin.ships) or {}
-        local parts = {}
-        for _, r in ipairs(rows) do parts[#parts + 1] = r.id .. r.name .. r.systemId .. r.state end
-        local key = table.concat(parts, "|")
-        if key == listKey then return end
-        listKey = key
-
-        list:Clear()
-        table.sort(rows, function(a, b) return a.id < b.id end)
-        for _, r in ipairs(rows) do
-            local line = list:AddLine((r.map and "★ " or "") .. r.name, Naval.SystemName(r.systemId), STATE_LABEL[r.state] or r.state)
-            line.ShipId = r.id
-            if r.id == selected then line:SetSelected(true) end
-        end
-    end
-    hook.Add("PD.Naval.AdminData", holder, RefreshList)
-    RefreshList()
-
-    ----------------------------------------------------------------------------
-    -- Ausgewaehltes Schiff
-    ----------------------------------------------------------------------------
-
-    Header("Ausgewähltes Schiff")
-    Info(70, function(s, w, h)
-        local r = selected and AdminShip(selected)
-        if not r then
-            draw.SimpleText("In der Ansicht oder Liste auswählen", "MLIB.16", 8, 8, COL.dim)
-            return
-        end
-        local class = static.classes[r.classId]
-        local faction = static.factions[r.factionId]
-        draw.SimpleText(("#%d %s"):format(r.id, r.name), "MLIB.18", 8, 4, COL.text)
-        draw.SimpleText((class and class.name or r.classId) .. " - " .. (faction and faction.name or r.factionId), "MLIB.14", 8, 26, COL.dim)
-        local line = (STATE_LABEL[r.state] or r.state) .. ", " .. r.speed .. " m/s"
-        if r.order then line = line .. ", Befehl: " .. r.order .. (r.orders > 1 and (" (+" .. (r.orders - 1) .. ")") or "") end
-        if r.to then line = line .. " -> " .. Naval.SystemName(r.to) end
-        draw.SimpleText(line, "MLIB.14", 8, 46, COL.text)
-    end)
-
-    local eEditName = Entry("Neuer Name")
-    local cEditFaction = Combo({{"", "Fraktion unverändert"}, unpack(factions)}, "")
-    Buttons({{"Übernehmen", function()
-        if not selected then return end
-        Send("edit", {id = selected, name = eEditName:GetValue(), factionId = ComboValue(cEditFaction)})
-        eEditName:SetValue("")
-    end}})
-
-    Buttons({
-        {"Halten", function() if selected then Send("order", {id = selected, type = "hold"}) end end},
-        {"Bewegen (Klick)", function()
-            if not selected then return end
-            SetPick("move", "Klick: Ziel  -  Rechtsklick: abbrechen", function(_, p)
-                Send("order", {id = selected, type = "move", rel = p})
-                SetPick(nil)
-            end)
-        end},
-        {"Patrouille", function()
-            if not selected then return end
-            tac.Marks = {}
-            SetPick("patrol", "Klicks: Wegpunkte  -  Rechtsklick: Patrouille starten", function(_, p)
-                tac.Marks[#tac.Marks + 1] = p
-            end)
-            tac.Marks = {}
-        end},
-    })
-
-    local bodies = {}
-    if C.system then
-        for _, b in ipairs(C.system.bodies or {}) do bodies[#bodies + 1] = {b.id, b.name .. " (" .. b.type .. ")"} end
-        table.sort(bodies, function(a, b) return a[2] < b[2] end)
-    end
-    local cBody = Combo(bodies)
-    local eRadius = Entry("Orbit-Radius in km (leer = automatisch)")
-    Buttons({
-        {"Anfliegen", function()
-            if selected and ComboValue(cBody) then Send("order", {id = selected, type = "approach", bodyId = ComboValue(cBody)}) end
-        end},
-        {"Orbit", function()
-            if selected and ComboValue(cBody) then
-                Send("order", {id = selected, type = "orbit", bodyId = ComboValue(cBody), radiusKm = tonumber(eRadius:GetValue())})
-            end
-        end},
-    })
-
-    local eJump = Entry("Sprungziel (System oder Planet)")
-    Buttons({
-        {"Springen", function()
-            local sys = FindSystem(eJump:GetValue())
-            if not sys then notification.AddLegacy("System nicht gefunden", NOTIFY_ERROR, 3) return end
-            if selected then Send("order", {id = selected, type = "jump", systemId = sys.id}) end
-        end},
-        {"Löschen", function()
-            local r = selected and AdminShip(selected)
-            if not r or r.map then return end
-            Derma_Query(r.name .. " wirklich löschen?", "Raumflotte", "Löschen", function()
-                Send("delete", {id = r.id})
-                Select(nil)
+    R.Buttons({
+        {"Blick = Bug", function() RunConsoleCommand("pd_naval_calibrate", "bug") end},
+        {"Hier = Mitte", function() RunConsoleCommand("pd_naval_calibrate", "mitte") end},
+        {"Zurücksetzen", function()
+            Derma_Query("Kalibrierung auf die Profilwerte zurücksetzen?", "Raumflotte", "Zurücksetzen", function()
+                RunConsoleCommand("pd_naval_calibrate", "reset")
             end, "Abbrechen")
         end, COL.bad},
     })
-
-    ----------------------------------------------------------------------------
-    -- Map-Schiff
-    ----------------------------------------------------------------------------
-
-    Header("Map-Schiff")
-    local eRelocate = Entry("Zielsystem")
-    Buttons({{"Ohne Sprung versetzen", function()
-        local sys = FindSystem(eRelocate:GetValue())
-        if not sys then notification.AddLegacy("System nicht gefunden", NOTIFY_ERROR, 3) return end
-        Derma_Query("Map-Schiff sofort nach " .. sys.name .. " versetzen?", "Raumflotte", "Versetzen", function()
-            Send("relocate", {systemId = sys.id})
-        end, "Abbrechen")
-    end, COL.warn}})
+    R.Info(66, function(s, w, h)
+        local p = Naval.GetProfile()
+        if not p then return end
+        local o = p.shipOriginMap or Vector()
+        draw.SimpleText(("Bug zeigt nach Yaw %.1f°"):format(p.mapToBody and p.mapToBody.y or 0), "MLIB.14", 8, 4, COL.text)
+        draw.SimpleText(("Schiffsmitte %d %d %d"):format(o.x, o.y, o.z), "MLIB.14", 8, 24, COL.text)
+        draw.SimpleText(p.metersPerUnit and ("Maßstab %.4f m pro Einheit"):format(p.metersPerUnit) or "Maßstab: nicht vermessen",
+            "MLIB.14", 8, 44, p.metersPerUnit and COL.text or COL.warn)
+    end)
 
     ----------------------------------------------------------------------------
     -- Konsolen
     ----------------------------------------------------------------------------
 
-    Header("Konsolen")
-    for _, ent in ipairs(ents.FindByClass("pd_naval_console")) do
-        local def = ent:StationDef()
-        if def and not def.noUse then
-            local b = Buttons({{"", function() Send("console_lock", {ent = ent:EntIndex()}) end}})[1]
-            b.Think = function(s)
-                if not IsValid(ent) then s.Label = "(entfernt)" return end
-                s.Label = def.name .. " #" .. ent:GetConsoleId() .. ": " .. (ent:GetLocked() and "GESPERRT" or "frei")
+    R.Header("Konsolen")
+    R.Text("Neue Konsole: auf die Stelle schauen, an der sie stehen soll, Station wählen, \"Aufstellen\".")
+
+    local stations = {}
+    for id, def in SortedPairs(Naval.Stations or {}) do stations[#stations + 1] = {id, def.name} end
+    local cStation = R.Combo(stations, "helm")
+    R.Buttons({{"Aufstellen (Blickpunkt)", function()
+        local id = R.ComboValue(cStation)
+        if id then RunConsoleCommand("pd_naval_console_add", id) end
+    end, COL.ok}})
+
+    local consoleList = R.Row(10)
+    consoleList.Paint = nil
+
+    local function FillConsoles()
+        if not IsValid(consoleList) then return end
+        consoleList:Clear()
+
+        local list = ents.FindByClass("pd_naval_console")
+        table.sort(list, function(a, b) return a:GetConsoleId() < b:GetConsoleId() end)
+        consoleList:SetTall(math.max(#list * 34, 10))
+
+        for _, ent in ipairs(list) do
+            local def = ent:StationDef()
+            local row = vgui.Create("DPanel", consoleList)
+            row:Dock(TOP)
+            row:DockMargin(0, 0, 0, 4)
+            row:SetTall(30)
+            row.Paint = function(s, w, h)
+                draw.RoundedBox(0, 0, 0, w, h, COL.panel)
+                if not IsValid(ent) then return end
+                draw.SimpleText(((def and def.name) or ent:GetStation()) .. " #" .. ent:GetConsoleId(), "MLIB.16", 8, h / 2, COL.text, nil, TEXT_ALIGN_CENTER)
+            end
+
+            local remove = UI.Button(row, "Entfernen", function()
+                Derma_Query("Konsole entfernen?", "Raumflotte", "Entfernen", function()
+                    Send("console_remove", {ent = ent:EntIndex()})
+                    timer.Simple(1.5, FillConsoles)
+                end, "Abbrechen")
+            end, function() return COL.bad end)
+            remove:Dock(RIGHT)
+            remove:SetWide(90)
+
+            local lock = UI.Button(row, "", function() Send("console_lock", {ent = ent:EntIndex()}) end)
+            lock:Dock(RIGHT)
+            lock:DockMargin(0, 0, 4, 0)
+            lock:SetWide(90)
+            lock.Think = function(s)
+                if IsValid(ent) then s.Label = ent:GetLocked() and "Gesperrt" or "Frei" end
             end
         end
     end
+
+    FillConsoles()
+    R.Buttons({{"Liste aktualisieren", FillConsoles}})
+
+    ----------------------------------------------------------------------------
+    -- Einstellungen
+    ----------------------------------------------------------------------------
+
+    L.Header("Einstellungen")
+    L.Text("Tempo und Regeln der Raumflotte. Gilt nach dem Speichern sofort, ohne Neustart. Dieselben Werte stehen im Web-Panel unter Raumflotte.")
+
+    local entries = {}
+
+    for _, group in ipairs(Naval.SettingInfo) do
+        L.Header(group[1])
+
+        for _, info in ipairs(group[2]) do
+            local key, label, unit = info[1], info[2], info[3]
+            local row = L.Row(30)
+
+            local entry = vgui.Create("DTextEntry", row)
+            entry:Dock(RIGHT)
+            entry:SetWide(130)
+            entry:SetFont("MLIB.16")
+
+            row.Paint = function(s, w, h)
+                draw.SimpleText(label, "MLIB.16", 0, h / 2 - 1, COL.text, nil, TEXT_ALIGN_CENTER)
+                if unit ~= "" then
+                    draw.SimpleText(unit, "MLIB.12", w - 136, h / 2, COL.dim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+                end
+            end
+
+            entries[key] = entry
+        end
+    end
+
+    local function FillSettings()
+        for key, entry in pairs(entries) do
+            if IsValid(entry) then
+                local value = (C.adminSettings or {})[key]
+                entry:SetValue(value == nil and "" or tostring(value))
+                entry.Original = entry:GetValue()
+            end
+        end
+    end
+
+    hook.Add("PD.Naval.AdminSettings", holder, FillSettings)
+    Send("settings_get")
+
+    L.Buttons({{"Einstellungen speichern", function()
+        local values = {}
+        for key, entry in pairs(entries) do
+            if IsValid(entry) and entry:GetValue() ~= entry.Original then
+                local text = entry:GetValue()
+                values[key] = tonumber(text) or text
+            end
+        end
+        Send("settings_save", {values = values})
+    end, COL.ok}})
 end
 
 if PD.Admin and PD.Admin.AddTab then

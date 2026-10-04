@@ -180,14 +180,49 @@ concommand.Add("pd_naval_order", function(ply, _, args)
         local system = Naval.FindSystem(table.concat(args, " ", 3))
         if not system then Reply(ply, "System nicht gefunden") return end
         order = {type = "jump", systemId = system.id}
+    elseif kind == "jumpnear" then
+        -- Zum Map-Schiff springen und dort ankommen
+        local mapShip = Naval.GetMapShip()
+        if not mapShip then Reply(ply, "Kein Map-Schiff") return end
+        order = {type = "jump", systemId = mapShip.systemId, arriveNear = mapShip.id}
     else
-        Reply(ply, "Befehl: hold | move x y z (km) | orbit <koerper> [km] | approach <koerper> | jump <system>")
+        Reply(ply, "Befehl: hold | move x y z (km) | orbit <koerper> [km] | approach <koerper> | jump <system> | jumpnear")
         return
     end
 
     Naval.SetOrders(ship, {order}, who)
     Reply(ply, "#" .. ship.id .. " " .. ship.name .. ": " .. kind)
     Log(ply, "Befehl an #" .. ship.id .. " " .. ship.name .. ": " .. kind)
+end)
+
+-- pd_naval_edit <id> name <text...> | faction <fraktion>
+concommand.Add("pd_naval_edit", function(ply, _, args)
+    if not Allowed(ply) or not NeedSim(ply) then return end
+
+    local ship = Naval.Ships[tonumber(args[1]) or -1]
+    if not ship then Reply(ply, "Schiff nicht gefunden") return end
+
+    if args[2] == "name" then
+        local name = string.sub(string.Trim(table.concat(args, " ", 3)), 1, 64)
+        if name == "" then return end
+        ship.name = name
+    elseif args[2] == "faction" and Naval.Factions[args[3] or ""] and not ship:IsPlayerShip() then
+        ship.factionId = args[3]
+    else
+        Reply(ply, "pd_naval_edit <id> name <text> | faction <fraktion>")
+        return
+    end
+
+    ship.dirty = true
+    Naval.SaveShip(ship)
+    Reply(ply, "#" .. ship.id .. " -> " .. ship.name .. " / " .. ship.factionId)
+    Log(ply, "Schiff #" .. ship.id .. " bearbeitet: " .. ship.name .. " / " .. ship.factionId)
+end)
+
+-- Alles sofort speichern (Web-Panel liest danach die Datenbank)
+concommand.Add("pd_naval_save", function(ply)
+    if not Allowed(ply) or not Naval.SimRunning then return end
+    Reply(ply, Naval.SaveDirty(true) .. " Schiffe gespeichert")
 end)
 
 concommand.Add("pd_naval_helm", function(ply, _, args)

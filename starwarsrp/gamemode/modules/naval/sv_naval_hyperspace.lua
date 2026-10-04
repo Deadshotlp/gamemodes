@@ -75,7 +75,24 @@ function Naval.CanJump(ship, toSystemId)
     return true
 end
 
-function Naval.StartJump(ship, toSystemId, by)
+-- Ankunftspunkt: am Hauptkoerper auf der Seite, aus der man kommt. Schiffe
+-- aus derselben Richtung kommen so nahe beieinander an.
+function Naval.ArrivalFrom(toSystemId, fromSystem)
+    local to = Naval.Systems[toSystemId]
+    local main = Naval.MainBody(Naval.BodiesBySystem[toSystemId] or {})
+    if not to or not main or not fromSystem then return Naval.ArrivalPoint(toSystemId, math.random()) end
+
+    local center = Naval.BodyPos(main, Naval.Bodies)
+    local dir = V3.Sub(fromSystem.g, to.g)
+    dir.z = dir.z * 0.2
+    if V3.LenSqr(dir) < 1e-6 then dir = {x = 1, y = 0, z = 0} end
+
+    return V3.Add(center, V3.Scale(V3.Normalize(dir), main.radius * 8 + 50000))
+end
+
+-- opts.arriveNear = Schiffs-ID: Austritt in der Naehe dieses Schiffs, falls
+-- es beim Austritt im Zielsystem ist (z. B. Verstaerkung zum Map-Schiff).
+function Naval.StartJump(ship, toSystemId, by, opts)
     local ok, reason = Naval.CanJump(ship, toSystemId)
     if not ok then return false, reason end
 
@@ -90,7 +107,7 @@ function Naval.StartJump(ship, toSystemId, by)
 
     -- Ankunft: am Rand des Zielsystems, Blick in Flugrichtung
     local dir = Naval.JumpVector(from, to)
-    local arrive = Naval.ArrivalPoint(toSystemId, math.random())
+    local arrive = Naval.ArrivalFrom(toSystemId, from)
     local scatter = settings.arrival_scatter or 20000
     arrive = V3.Add(arrive, {x = (math.random() - 0.5) * scatter, y = (math.random() - 0.5) * scatter, z = (math.random() - 0.5) * scatter * 0.3})
 
@@ -106,6 +123,7 @@ function Naval.StartJump(ship, toSystemId, by)
         arrive = arrive,
         arriveRot = Q.Copy(ship.rot),
         dir = dir,
+        arriveNear = opts and opts.arriveNear or nil,
     }
 
     ship.ctrl.autopilot = {dir = dir}
@@ -157,6 +175,16 @@ function Naval.HyperspaceTick()
             ship.systemId = h.to
             ship.pos = V3.Copy(h.arrive)
             ship.rot = Q.Copy(h.arriveRot)
+
+            local near = h.arriveNear and Naval.Ships[h.arriveNear]
+            if near and near ~= ship and near.systemId == h.to and near.state == S.NORMAL then
+                -- 15-30 km seitlich/hinter dem Schiff, gleiche Blickrichtung
+                local side = (math.random() < 0.5 and -1 or 1) * (15000 + math.random() * 15000)
+                local back = -(5000 + math.random() * 15000)
+                ship.pos = V3.Add(near.pos, V3.Add(V3.Scale(Q.Left(near.rot), side), V3.Scale(Q.Forward(near.rot), back)))
+                ship.rot = Q.Copy(near.rot)
+            end
+
             ship.vel = V3.Scale(Q.Forward(ship.rot), ship:Stat("maxSpeed") * 0.3)
             Naval.Event(ship, "jump_exit", {from = h.from, to = h.to})
             Naval.SaveShip(ship)

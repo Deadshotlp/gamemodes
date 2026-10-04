@@ -176,7 +176,7 @@ Handlers.jump = function(ship, order)
     ship.ctrl.autopilot = {dir = Naval.JumpVector(from, to)}
 
     if Naval.AlignmentError(ship, order.systemId) <= (Naval.Settings.jump_align_tolerance or 2) * 0.8 then
-        Naval.StartJump(ship, order.systemId, order.issuedBy or "KI")
+        Naval.StartJump(ship, order.systemId, order.issuedBy or "KI", {arriveNear = order.arriveNear})
     end
 
     return false

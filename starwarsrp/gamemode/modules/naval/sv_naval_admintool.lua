@@ -18,6 +18,7 @@ local V3, Q = Naval.V3, Naval.Q
 
 util.AddNetworkString("PD.Naval.Admin")
 util.AddNetworkString("PD.Naval.AdminData")
+util.AddNetworkString("PD.Naval.AdminSettings")
 
 local watchers = {}
 
@@ -211,6 +212,9 @@ Actions.order = function(ply, args)
         local system = Naval.Systems[tostring(args.systemId or "")]
         if not system then Notify(ply, "System unbekannt") return end
         order = {type = "jump", systemId = system.id}
+    elseif kind == "jumpnear" then
+        if not mapShip then return end
+        order = {type = "jump", systemId = mapShip.systemId, arriveNear = mapShip.id}
     else
         return
     end
@@ -257,6 +261,81 @@ Actions.console_lock = function(ply, args)
     Log(ply, "Konsole " .. ent:GetStation() .. (locked and " gesperrt" or " entsperrt"))
 end
 
+Actions.console_remove = function(ply, args)
+    local ent = Entity(tonumber(args.ent) or -1)
+    if not IsValid(ent) or ent:GetClass() ~= "pd_naval_console" then return end
+
+    local station = ent:GetStation()
+    PD.SQL.Query("DELETE FROM `pd_naval_consoles` WHERE `id` = " .. ent:GetConsoleId(), function()
+        if Naval.SpawnConsoles then Naval.SpawnConsoles() end
+    end)
+    Log(ply, "Konsole " .. station .. " entfernt")
+end
+
+--------------------------------------------------------------------------------
+-- Einstellungen (dieselben wie im Web-Panel)
+--------------------------------------------------------------------------------
+
+local function SendSettings(ply)
+    local out = {}
+    for key, value in pairs(Naval.Settings or {}) do
+        if not string.StartWith(key, "mapcal_") and (isnumber(value) or isstring(value) or isbool(value)) then
+            out[key] = value
+        end
+    end
+
+    net.Start("PD.Naval.AdminSettings")
+    net.WriteString(util.TableToJSON(out) or "{}")
+    net.Send(ply)
+end
+
+Actions.settings_get = function(ply)
+    SendSettings(ply)
+end
+
+local READONLY = {galaxy_version = true, galaxy_unit = true}
+
+Actions.settings_save = function(ply, args)
+    local values = istable(args.values) and args.values or {}
+    local defaults = Naval.Defaults.Settings
+    local queries, changed = {}, {}
+
+    for key, value in pairs(values) do
+        key = tostring(key)
+        local default = defaults[key]
+
+        if default ~= nil and not READONLY[key] and Naval.Settings[key] ~= value then
+            if isnumber(default) then value = tonumber(value) end
+            if isstring(default) then value = string.sub(tostring(value), 1, 200) end
+
+            if value ~= nil and (not isnumber(value) or (value == value and math.abs(value) < 1e9)) then
+                queries[#queries + 1] = "REPLACE INTO `pd_naval_settings` (`config_key`, `config_value`) VALUES ("
+                    .. PD.SQL.EscapeString(key) .. ", " .. PD.SQL.EscapeString(Naval.DB.Encode(value)) .. ")"
+                changed[#changed + 1] = key .. "=" .. tostring(value)
+            end
+        end
+    end
+
+    if #queries == 0 then Notify(ply, "Keine Änderungen") return end
+
+    local pending = #queries
+    for _, q in ipairs(queries) do
+        PD.SQL.Query(q, function()
+            pending = pending - 1
+            if pending > 0 then return end
+
+            Naval.ReloadConfig(function()
+                if IsValid(ply) then
+                    Notify(ply, #changed .. " Einstellung(en) gespeichert", true)
+                    SendSettings(ply)
+                end
+            end)
+        end)
+    end
+
+    Log(ply, "Einstellungen: " .. table.concat(changed, ", "))
+end
+
 net.Receive("PD.Naval.Admin", function(_, ply)
     if not Allowed(ply) then return end
     if (ply.PD_NavalAdminNext or 0) > CurTime() then return end
@@ -267,7 +346,8 @@ net.Receive("PD.Naval.Admin", function(_, ply)
     local fn = Actions[action]
     if not fn then return end
 
-    if action ~= "watch" and action ~= "pause" and not Naval.SimRunning then
+    if action ~= "watch" and action ~= "pause" and action ~= "settings_get" and action ~= "settings_save"
+        and not Naval.SimRunning then
         Notify(ply, "Simulation läuft nicht")
         return
     end

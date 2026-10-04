@@ -46,6 +46,15 @@ function Naval.ApplyMapProfile()
         end
     end
 
+    -- Sonne und Nebel der Map: unsere Darstellung hat eigene Sterne
+    if profile.disableSun then
+        for _, ent in ipairs(ents.FindByClass("env_sun")) do ent:Fire("TurnOff") end
+        for _, ent in ipairs(ents.FindByClass("env_lensflare")) do ent:Fire("TurnOff") end
+    end
+    if profile.disableFog then
+        for _, ent in ipairs(ents.FindByClass("env_fog_controller")) do ent:Fire("TurnOff") end
+    end
+
     if cvRelays:GetBool() and profile.mapRelays then
         local n = Fire(profile.mapRelays.start)
         Naval.Log("Map auf leeren Raum geschaltet (" .. n .. " Relais)")
@@ -81,6 +90,10 @@ end)
 
 --------------------------------------------------------------------------------
 -- Kalibrierung im Spiel
+--   pd_naval_calibrate vorne        am vordersten Punkt des Schiffs ausfuehren
+--   pd_naval_calibrate hinten       am hintersten Punkt ausfuehren
+--       -> aus beiden: Laenge in Map-Einheiten, Massstab (Klassenlaenge /
+--          Map-Laenge), Schiffsmitte (Mitte der Strecke) und Bugrichtung
 --   pd_naval_calibrate bug          Blickrichtung = Bug des Schiffs (auf der
 --                                   Bruecke gerade durch die Frontfenster schauen)
 --   pd_naval_calibrate mitte        eigene Position = Schiffsmitte
@@ -108,7 +121,35 @@ concommand.Add("pd_naval_calibrate", function(ply, _, args)
     local cal = table.Copy(Naval.Settings["mapcal_" .. profile.key] or {})
     local what = string.lower(args[1] or "zeigen")
 
-    if what == "bug" then
+    if what == "vorne" or what == "hinten" then
+        local pos = ply:GetPos()
+        cal[what] = {math.Round(pos.x), math.Round(pos.y), math.Round(pos.z)}
+        ply:ChatPrint(("[Naval] %s gemerkt: %d %d %d"):format(what == "vorne" and "Bug" or "Heck", cal[what][1], cal[what][2], cal[what][3]))
+
+        if cal.vorne and cal.hinten then
+            local front = Vector(cal.vorne[1], cal.vorne[2], cal.vorne[3])
+            local back = Vector(cal.hinten[1], cal.hinten[2], cal.hinten[3])
+            local axis = front - back
+            local units = Vector(axis.x, axis.y, 0):Length()
+            local class = Naval.Classes[profile.classId]
+
+            if units < 100 then
+                ply:ChatPrint("[Naval] Bug und Heck liegen zu nah beieinander - nochmal messen")
+            elseif class then
+                local mid = (front + back) * 0.5
+                cal.metersPerUnit = math.Round(class.lengthM / units, 5)
+                cal.origin = {math.Round(mid.x), math.Round(mid.y), math.Round(mid.z)}
+                cal.yaw = math.Round(axis:Angle().y, 1)
+                cal.lengthUnits = math.Round(units)
+
+                ply:ChatPrint(("[Naval] Schiff %d Einheiten lang = %d m (%s) -> %.4f m pro Einheit"):format(units, class.lengthM,
+                    class.name, cal.metersPerUnit))
+                ply:ChatPrint(("[Naval] Mitte %d %d %d, Bug zeigt nach Yaw %.1f°"):format(cal.origin[1], cal.origin[2], cal.origin[3], cal.yaw))
+            end
+        else
+            ply:ChatPrint("[Naval] Jetzt am anderen Ende: pd_naval_calibrate " .. (what == "vorne" and "hinten" or "vorne"))
+        end
+    elseif what == "bug" then
         cal.yaw = math.Round(ply:EyeAngles().y, 1)
         ply:ChatPrint("[Naval] Bug zeigt in der Map nach Yaw " .. cal.yaw .. "°")
     elseif what == "mitte" then

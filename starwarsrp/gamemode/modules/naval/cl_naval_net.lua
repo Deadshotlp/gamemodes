@@ -21,7 +21,8 @@ local V3, Q = Naval.V3, Naval.Q
 Naval.C = Naval.C or {static = nil, system = nil, info = {}, snaps = {}, events = {}}
 local C = Naval.C
 
-local INTERP_DELAY = 0.15
+-- Zwei Snapshot-Abstaende Puffer: ein verlorenes Paket faellt nicht auf
+local INTERP_DELAY = 0.2
 local MAX_SNAPS = 30
 
 local StateName = {"normal", "spooling", "jumping", "hyperspace", "exiting", "disabled", "destroyed"}
@@ -140,7 +141,12 @@ net.Receive("PD.Naval.Snap", function()
         C.snaps = {}
     end
 
-    table.insert(C.snaps, snap)
+    local last = C.snaps[#C.snaps]
+    if last and snap.t <= last.t then
+        C.snaps[#C.snaps] = snap
+    else
+        table.insert(C.snaps, snap)
+    end
     while #C.snaps > MAX_SNAPS do table.remove(C.snaps, 1) end
 
     C.last = snap
@@ -154,11 +160,12 @@ function C.View(t)
 
     t = t or (Naval.Now() - INTERP_DELAY)
 
-    local a, b = snaps[1], nil
+    local a, b, prev = snaps[1], nil, nil
     for i = 1, #snaps do
         if snaps[i].t <= t then
             a = snaps[i]
             b = snaps[i + 1]
+            prev = snaps[i - 1]
         end
     end
 
@@ -185,8 +192,19 @@ function C.View(t)
         view.pos = V3.Add(a.pos, V3.Scale(a.vel, dt))
         view.rot = Q.Integrate(a.rot, a.angVel, dt)
 
+        -- Andere Schiffe mit ihrer letzten Geschwindigkeit fortschreiben
+        local span = prev and prev.systemId == a.systemId and (a.t - prev.t) or 0
+
         for id, sa in pairs(a.ships) do
-            view.ships[id] = {pos = V3.Add(a.pos, sa.rel), rot = sa.rot, state = sa.state}
+            local pos = V3.Add(a.pos, sa.rel)
+            local sp = span > 0 and prev.ships[id]
+
+            if sp then
+                local old = V3.Add(prev.pos, sp.rel)
+                pos = V3.Add(pos, V3.Scale(V3.Sub(pos, old), dt / span))
+            end
+
+            view.ships[id] = {pos = pos, rot = sa.rot, state = sa.state}
         end
     end
 

@@ -220,7 +220,7 @@ local function SendSnap()
     visible = list
 
     net.Start("PD.Naval.Snap", true)
-        net.WriteDouble(Naval.Now())
+        net.WriteDouble(Naval.SimTime or Naval.Now())
         net.WriteUInt(mapShip.id, 16)
         net.WriteString(mapShip.systemId or "")
         net.WriteUInt(Naval.StateIndex[mapShip.state] or 1, 4)
@@ -286,7 +286,11 @@ hook.Add("PD.Naval.SimStarted", "PD.Naval.Net", function()
         SendAllTo(ply)
     end
 
-    timer.Create("PD.Naval.Snap", 0.1, 0, SafeSnap)
+    -- Snapshot nach jedem Simulationsschritt (sv_naval_sim), nicht per
+    -- eigenem Timer - zwei gleich schnelle Timer laufen gegeneinander und
+    -- liefern doppelte bzw. uebersprungene Staende (Ruckeln).
+    timer.Remove("PD.Naval.Snap")
+    Naval.AfterTick = SafeSnap
 end)
 
 -- Nach pd_reload naval / naval_galaxy neu verteilen
