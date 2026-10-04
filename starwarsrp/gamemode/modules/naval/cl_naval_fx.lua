@@ -88,6 +88,8 @@ end
 -- toRender(pos in Systemmetern) -> Vector (Render-Einheiten) oder nil
 function Naval.DrawFX(view, toRender)
     local now = Naval.Now()
+    local scale = (C.static and C.static.settings and C.static.settings.render_scale) or 50
+    local nearClip = 1500 / scale
     local keep = {}
 
     for _, b in ipairs(bolts) do
@@ -102,17 +104,23 @@ function Naval.DrawFX(view, toRender)
             local f = (now - b.t0) / (b.t1 - b.t0)
 
             if f <= 1 then
+                -- Bolzen etwa 700 m lang (hoechstens ein Viertel der Strecke)
+                local span = math.max(Naval.V3.Dist(a, z), 1)
                 local head = Naval.V3.Lerp(a, z, f)
-                local tail = Naval.V3.Lerp(a, z, math.max(0, f - 0.08))
+                local tail = Naval.V3.Lerp(a, z, math.max(0, f - math.min(0.25, 700 / span)))
                 local h, t = toRender(head), toRender(tail)
 
-                if h and t then
-                    local width = math.max(h:Length() * 0.004, 0.15)
+                -- Nicht nahe der Kamera zeichnen: Strahlen mit einem Ende hinter
+                -- oder dicht an der Kamera verzerrt die Engine (Knick). Erst
+                -- ausserhalb der Huelle (1,5 km) sichtbar.
+                if h and t and h:Length() > nearClip and t:Length() > nearClip then
+                    local width = math.max(h:Length() * 0.01, 0.4)
                     if b.type == "missile" or b.type == "torpedo" then
                         render.SetMaterial(MAT_GLOW)
-                        render.DrawSprite(h, width * 4, width * 4, b.color)
+                        render.DrawSprite(h, width * 5, width * 5, b.color)
                     else
                         render.SetMaterial(MAT_BEAM)
+                        render.DrawBeam(t, h, width * 3, 0, 1, Color(b.color.r, b.color.g, b.color.b, 70))
                         render.DrawBeam(t, h, width, 0, 1, b.color)
                     end
                 end
@@ -133,7 +141,7 @@ function Naval.DrawFX(view, toRender)
             keepF[#keepF + 1] = fl
             local pos = ShipPos(view, fl.id)
             local p = pos and toRender(Naval.V3.Add(pos, fl.off))
-            if p then
+            if p and p:Length() > nearClip then
                 local k = 1 - (now - fl.t0) / (fl.t1 - fl.t0)
                 local size = math.max(p:Length() * 0.02, 0.6) * fl.size * (0.5 + k)
                 render.SetMaterial(MAT_GLOW)
@@ -196,7 +204,7 @@ hook.Add("PD.Naval.ClientEvent", "PD.Naval.FX", function(kind, data)
         if CurTime() > nextSound then
             nextSound = CurTime() + 0.35
             if hull > 0 then
-                LocalPlayer():EmitSound("ambient/explosions/explode_" .. math.random(1, 9) .. ".wav", 75, math.random(70, 90), math.Clamp(hull / 150, 0.2, 0.9))
+                LocalPlayer():EmitSound("ambient/explosions/explode_" .. math.random(1, 9) .. ".wav", 75, math.random(70, 90), math.Clamp(hull / 150, 0.2, 0.9) * 0.5)
                 redFlash = math.max(redFlash, math.Clamp(hull / 300, 0.1, 0.5))
             else
                 LocalPlayer():EmitSound("ambient/energy/zap" .. math.random(1, 9) .. ".wav", 70, math.random(60, 80), 0.35)
