@@ -229,30 +229,53 @@ end
 -- Laenge eines Modells in Einheiten. Die im Modell hinterlegten Grenzen
 -- stimmen bei manchen Schiffen nicht (Recusant: viel zu klein -> riesig
 -- skaliert), daher aus den echten Eckpunkten gemessen und je Modell gemerkt.
-local meshLengths = {}
+-- Laenge und Mitte (Modell-Einheiten) aus den Eckpunkten, je Modell gemerkt
+local meshInfo = {}
 
-local function MeshLength(path)
-    if meshLengths[path] ~= nil then return meshLengths[path] end
+function Naval.ModelInfo(path)
+    if meshInfo[path] ~= nil then return meshInfo[path] end
 
-    local length = false
+    local info = false
     local ok, meshes = pcall(util.GetModelMeshes, path, 0)
 
     if ok and meshes then
-        local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+        local mins = Vector(math.huge, math.huge, math.huge)
+        local maxs = Vector(-math.huge, -math.huge, -math.huge)
         for _, part in ipairs(meshes) do
             for _, v in ipairs(part.triangles or {}) do
                 local p = v.pos
-                if p.x < minX then minX = p.x end
-                if p.x > maxX then maxX = p.x end
-                if p.y < minY then minY = p.y end
-                if p.y > maxY then maxY = p.y end
+                if p.x < mins.x then mins.x = p.x end
+                if p.y < mins.y then mins.y = p.y end
+                if p.z < mins.z then mins.z = p.z end
+                if p.x > maxs.x then maxs.x = p.x end
+                if p.y > maxs.y then maxs.y = p.y end
+                if p.z > maxs.z then maxs.z = p.z end
             end
         end
-        if maxX > minX then length = math.max(maxX - minX, maxY - minY) end
+        if maxs.x > mins.x then
+            info = {length = math.max(maxs.x - mins.x, maxs.y - mins.y), center = (mins + maxs) * 0.5}
+        end
     end
 
-    meshLengths[path] = length
-    return length
+    meshInfo[path] = info
+    return info
+end
+
+local function MeshLength(path)
+    local info = Naval.ModelInfo(path)
+    return info and info.length
+end
+
+-- Sichtbare Mitte eines Schiffs (Systemmeter): der Modell-Ursprung liegt oft
+-- am Heck oder unten, Schuesse und Einschlaege sollen in die Mitte.
+function Naval.ShipCenter(classId, pos, rot)
+    local class = C.static and C.static.classes[classId or ""]
+    local info = class and class.model and Naval.ModelInfo(class.model)
+    if not info or not rot then return pos end
+
+    local k = (class.lengthM or 300) / info.length
+    local off = {x = info.center.x * k, y = info.center.y * k, z = info.center.z * k}
+    return V3.Add(pos, Q.RotateVec(rot, off))
 end
 
 function Naval.ModelLength(m)

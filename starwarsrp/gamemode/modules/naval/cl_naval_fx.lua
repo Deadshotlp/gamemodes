@@ -79,10 +79,14 @@ end)
 -- Zeichnen (vom Renderpass aufgerufen)
 --------------------------------------------------------------------------------
 
+-- Mitte des Schiffs (eigenes Schiff: Mittelpunkt, Kamera ist darin)
 local function ShipPos(view, id)
     if id == view.id then return view.pos end
     local s = view.ships[id]
-    return s and s.pos
+    if not s then return nil end
+
+    local info = C.info[id]
+    return Naval.ShipCenter and Naval.ShipCenter(info and info.classId, s.pos, s.rot) or s.pos
 end
 
 -- toRender(pos in Systemmetern) -> Vector (Render-Einheiten) oder nil
@@ -204,7 +208,7 @@ hook.Add("PD.Naval.ClientEvent", "PD.Naval.FX", function(kind, data)
         if CurTime() > nextSound then
             nextSound = CurTime() + 0.35
             if hull > 0 then
-                LocalPlayer():EmitSound("ambient/explosions/explode_" .. math.random(1, 9) .. ".wav", 75, math.random(70, 90), math.Clamp(hull / 150, 0.2, 0.9) * 0.5)
+                LocalPlayer():EmitSound("ambient/explosions/explode_" .. math.random(1, 9) .. ".wav", 75, math.random(70, 90), math.Clamp(hull / 150, 0.2, 0.9) * 0.25)
                 redFlash = math.max(redFlash, math.Clamp(hull / 300, 0.1, 0.5))
             else
                 LocalPlayer():EmitSound("ambient/energy/zap" .. math.random(1, 9) .. ".wav", 70, math.random(60, 80), 0.35)
