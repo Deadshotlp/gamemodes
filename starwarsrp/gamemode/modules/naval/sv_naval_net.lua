@@ -108,7 +108,8 @@ local function BuildStatic()
     local s = Naval.Settings
     return {
         settings = {render_scale = s.render_scale, near_ship_range = s.near_ship_range, render_far = s.render_far,
-            jump_align_tolerance = s.jump_align_tolerance, galaxy_unit = s.galaxy_unit},
+            jump_align_tolerance = s.jump_align_tolerance, galaxy_unit = s.galaxy_unit,
+            ["mapcal_" .. ((Naval.GetProfile() or {}).key or "")] = Naval.GetProfile() and s["mapcal_" .. Naval.GetProfile().key] or nil},
         classes = classes, factions = factions, relations = Naval.Relations,
         systems = systems, routes = routes,
     }

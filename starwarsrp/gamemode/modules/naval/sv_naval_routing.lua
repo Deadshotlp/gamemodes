@@ -26,7 +26,7 @@ PD.Naval = PD.Naval or {}
 
 local Naval = PD.Naval
 
-local graph, graphFor
+local graph, graphFor, graphSettings
 local cache = {}
 
 local function Dist(ax, ay, bx, by)
@@ -117,9 +117,11 @@ local function BuildGraph()
 end
 
 local function Graph()
-    if graphFor ~= Naval.Routes then
+    -- Neu bei Galaxie- oder Einstellungs-Reload (Faktoren, Umstiegsabstand)
+    if graphFor ~= Naval.Routes or graphSettings ~= Naval.Settings then
         graph = BuildGraph()
         graphFor = Naval.Routes
+        graphSettings = Naval.Settings
         cache = {}
     end
     return graph

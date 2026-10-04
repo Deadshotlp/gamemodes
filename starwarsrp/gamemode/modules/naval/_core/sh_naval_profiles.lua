@@ -78,11 +78,44 @@ PD.Naval.Profiles["rp_venator_extensive_v1_4"] = {
 PD.Naval.ActiveConVar = CreateConVar("pd_naval_active", "0", FCVAR_ARCHIVE + FCVAR_REPLICATED,
     "Naval-System auf Maps mit Profil aktivieren (1) - schaltet dort SWU ab")
 
+-- Im Spiel gemessene Werte (pd_naval_calibrate) liegen in den Einstellungen
+-- unter mapcal_<key> und ueberschreiben das Profil.
+local calibrated = {}
+
+local function Calibration(profile)
+    local settings
+    if SERVER then
+        settings = PD.Naval.Settings
+    else
+        settings = PD.Naval.C and PD.Naval.C.static and PD.Naval.C.static.settings
+    end
+
+    local cal = settings and settings["mapcal_" .. profile.key]
+    return istable(cal) and cal or nil
+end
+
 -- Profil der aktuellen Map (oder nil, auch wenn der Schalter aus ist)
 function PD.Naval.GetProfile()
     if not PD.Naval.ActiveConVar:GetBool() then return nil end
 
-    return PD.Naval.Profiles[game.GetMap()]
+    local profile = PD.Naval.Profiles[game.GetMap()]
+    if not profile then return nil end
+
+    local cal = Calibration(profile)
+    if not cal then return profile end
+
+    local cached = calibrated[profile.key]
+    if cached and cached.source == cal then return cached.profile end
+
+    local merged = table.Copy(profile)
+    if istable(cal.origin) then
+        merged.shipOriginMap = Vector(tonumber(cal.origin[1]) or 0, tonumber(cal.origin[2]) or 0, tonumber(cal.origin[3]) or 0)
+    end
+    if tonumber(cal.yaw) then merged.mapToBody = Angle(0, tonumber(cal.yaw), 0) end
+    if tonumber(cal.metersPerUnit) then merged.metersPerUnit = tonumber(cal.metersPerUnit) end
+
+    calibrated[profile.key] = {source = cal, profile = merged}
+    return merged
 end
 
 function PD.Naval.IsNavalMap()

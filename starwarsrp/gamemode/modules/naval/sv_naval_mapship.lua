@@ -78,3 +78,62 @@ hook.Add("PD.Naval.Event", "PD.Naval.MapShip", function(ship, kind)
         Fire(relays.start)
     end
 end)
+
+--------------------------------------------------------------------------------
+-- Kalibrierung im Spiel
+--   pd_naval_calibrate bug          Blickrichtung = Bug des Schiffs (auf der
+--                                   Bruecke gerade durch die Frontfenster schauen)
+--   pd_naval_calibrate mitte        eigene Position = Schiffsmitte
+--   pd_naval_calibrate massstab <m> Meter pro Map-Einheit (Standard 0.01905)
+--   pd_naval_calibrate zeigen | reset
+-- Gespeichert als mapcal_<profil> in pd_naval_settings, sofort an alle.
+--------------------------------------------------------------------------------
+
+local function SaveCalibration(profile, cal)
+    local key = "mapcal_" .. profile.key
+    Naval.Settings[key] = cal
+
+    PD.SQL.Query("REPLACE INTO `pd_naval_settings` (`config_key`, `config_value`) VALUES ("
+        .. PD.SQL.EscapeString(key) .. ", " .. PD.SQL.EscapeString(Naval.DB.Encode(cal or {})) .. ")")
+
+    if Naval.SendStatic then Naval.SendStatic() end
+end
+
+concommand.Add("pd_naval_calibrate", function(ply, _, args)
+    if not IsValid(ply) or not ply:IsAdmin() then return end
+
+    local profile = Naval.GetProfile()
+    if not profile then ply:ChatPrint("[Naval] Keine Naval-Map") return end
+
+    local cal = table.Copy(Naval.Settings["mapcal_" .. profile.key] or {})
+    local what = string.lower(args[1] or "zeigen")
+
+    if what == "bug" then
+        cal.yaw = math.Round(ply:EyeAngles().y, 1)
+        ply:ChatPrint("[Naval] Bug zeigt in der Map nach Yaw " .. cal.yaw .. "°")
+    elseif what == "mitte" then
+        local pos = ply:GetPos()
+        cal.origin = {math.Round(pos.x), math.Round(pos.y), math.Round(pos.z)}
+        cal.metersPerUnit = cal.metersPerUnit or 0.01905
+        ply:ChatPrint(("[Naval] Schiffsmitte %d %d %d, Massstab %.5f m/Einheit"):format(cal.origin[1], cal.origin[2], cal.origin[3], cal.metersPerUnit))
+    elseif what == "massstab" then
+        local m = tonumber(args[2])
+        if not m or m <= 0 or m > 10 then ply:ChatPrint("[Naval] pd_naval_calibrate massstab <meter pro einheit>, z.B. 0.01905") return end
+        cal.metersPerUnit = m
+        ply:ChatPrint("[Naval] Massstab " .. m .. " m/Einheit")
+    elseif what == "reset" then
+        cal = {}
+        ply:ChatPrint("[Naval] Kalibrierung zurueckgesetzt (Werte aus dem Profil)")
+    else
+        local p = Naval.GetProfile()
+        ply:ChatPrint(("[Naval] Bug-Yaw %s, Mitte %s, Massstab %s"):format(tostring(p.mapToBody.y), tostring(p.shipOriginMap),
+            tostring(p.metersPerUnit or "aus")))
+        return
+    end
+
+    SaveCalibration(profile, cal)
+
+    if PD.LOGS and PD.LOGS.Add then
+        PD.LOGS.Add("Naval", ply:Nick() .. " kalibriert Map-Schiff: " .. what, Color(120, 170, 255))
+    end
+end)

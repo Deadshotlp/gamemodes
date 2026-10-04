@@ -13,6 +13,8 @@ local Naval = PD.Naval
 Naval.C = Naval.C or {static = nil, system = nil, info = {}, snaps = {}, events = {}}
 local C = Naval.C
 
+local function V3Add(a, b) return {x = a.x + b.x, y = a.y + b.y, z = a.z + b.z} end
+
 local REL_COLOR = {
     ally = Color(90, 170, 255),
     neutral = Color(230, 220, 120),
@@ -66,6 +68,43 @@ function PANEL:Project(rel)
     local w, h = self:GetWide(), self:GetTall()
     local scale = math.min(w, h) / 2 / self.Range
     return w / 2 + sx * scale, h / 2 + sy2 * scale, depth
+end
+
+-- Bildschirm -> Punkt in der Ebene z = 0 (relativ zum Mittelpunkt) oder nil
+function PANEL:ScreenToPlane(sx, sy)
+    local yaw, pitch = math.rad(self.Yaw), math.rad(self.Pitch)
+    local sp = math.sin(pitch)
+    if math.abs(sp) < 0.2 then return nil end
+
+    local w, h = self:GetWide(), self:GetTall()
+    local scale = math.min(w, h) / 2 / self.Range
+    local x = (sx - w / 2) / scale
+    local y = (sy - h / 2) / scale / sp
+    local cy, syaw = math.cos(yaw), math.sin(yaw)
+
+    return {x = x * cy + y * syaw, y = -x * syaw + y * cy, z = 0}
+end
+
+-- Schiffe fuer die Anzeige: Sensorkontakte, im Admin-Modus alle im System
+function PANEL:CollectShips(view)
+    local out = {}
+
+    for id, s in pairs(view.ships or {}) do
+        out[id] = {pos = s.pos, state = s.state, info = C.info[id]}
+    end
+
+    local admin = self.AdminMode and C.admin
+    if admin and admin.systemId == view.systemId then
+        for _, row in ipairs(admin.ships or {}) do
+            if row.rel and not row.map and not out[row.id] then
+                out[row.id] = {pos = V3Add(view.pos, row.rel), state = row.state, info = row}
+            elseif out[row.id] and not out[row.id].info then
+                out[row.id].info = row
+            end
+        end
+    end
+
+    return out
 end
 
 function PANEL:Paint(w, h)
@@ -125,8 +164,8 @@ function PANEL:Paint(w, h)
 
     -- Schiffe (hinten zuerst)
     local list = {}
-    for id, s in pairs(view.ships or {}) do
-        local info = C.info[id]
+    for id, s in pairs(self:CollectShips(view)) do
+        local info = s.info
         local rel = Rel(s.pos)
         local x, y, depth = self:Project(rel)
         local relation = info and info.mapShip and "ally" or Naval.ClientRelation(myFaction, info and info.factionId)
@@ -177,6 +216,18 @@ function PANEL:Paint(w, h)
         surface.DrawLine(cx, cy, vx, vy)
     end
 
+    -- Zusatzmarken (Admin: Patrouillenpunkte, Platzierung)
+    for i, m in ipairs(self.Marks or {}) do
+        local mx2, my2 = self:Project(m)
+        surface.SetDrawColor(COL.warn)
+        surface.DrawOutlinedRect(mx2 - 5, my2 - 5, 11, 11, 1)
+        draw.SimpleText(tostring(i), "MLIB.12", mx2 + 7, my2 - 6, COL.warn)
+    end
+
+    if self.PickHint then
+        draw.SimpleText(self.PickHint, "MLIB.16", w / 2, 10, COL.warn, TEXT_ALIGN_CENTER)
+    end
+
     render.SetScissorRect(0, 0, 0, 0, false)
 
     table.sort(contacts, function(a, b) return a.dist < b.dist end)
@@ -186,6 +237,7 @@ function PANEL:Paint(w, h)
 end
 
 function PANEL:OnMousePressed(code)
+    if code == MOUSE_RIGHT and self.OnRightClick then self:OnRightClick() return end
     if code ~= MOUSE_LEFT then return end
     self.DragStart = {self:CursorPos()}
     self.DragAngles = {self.Yaw, self.Pitch}
@@ -199,6 +251,13 @@ function PANEL:OnMouseReleased(code)
     self.DragStart = nil
 
     if not self.Moved then
+        if self.OnPick then
+            local mx, my = self:CursorPos()
+            local p = self:ScreenToPlane(mx, my)
+            if p then self:OnPick(p) end
+            return
+        end
+
         self.Selected = self.Hover
         if self.OnSelect then self:OnSelect(self.Hover) end
     end
