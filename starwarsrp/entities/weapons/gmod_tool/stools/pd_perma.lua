@@ -308,15 +308,55 @@ if SERVER then
         end)
     end
 
-    hook.Add("InitPostEntity", "SpawnPermaProps", function()
+    --[[
+        Laden beim Serverstart.
+
+        Nur InitPostEntity reichte nicht: hook.Call bricht ab, sobald ein Hook
+        einen Wert zurueckgibt - gibt ein Addon dort etwas zurueck, kam dieser
+        Hook je nach Reihenfolge nie dran, und die Props fehlten ohne jede
+        Meldung. Ausserdem hiess er wie der Hook des verbreiteten
+        PermaProps-Addons ("SpawnPermaProps") und konnte davon ersetzt werden.
+
+        Jetzt: eigener Hook-Name plus Timer als Rueckfall. StartupDone haengt
+        an PD und verhindert doppeltes Laden - auch beim Lua-Refresh dieser
+        Datei mitten im Spiel.
+    ]]
+    local function StartupLoad(source)
+        if PD.PermaProps.StartupDone then return end
+        PD.PermaProps.StartupDone = true
+
+        print("[PermaProps] Lade Props fuer " .. game.GetMap() .. " (ausgeloest durch " .. source .. ")")
+
         LoadProps(function(rows)
+            print("[PermaProps] Datenbank lieferte " .. #rows .. " Props")
             SpawnAllProps(rows, "Serverstart")
         end)
+    end
+
+    -- Lua-Refresh im laufenden Spiel: stehen schon Perma-Props, nicht noch
+    -- einmal laden (sonst doppelt).
+    if not PD.PermaProps.StartupDone then
+        for _, ent in ipairs(ents.GetAll()) do
+            if ent.id and ent.PD_PermaProp then
+                PD.PermaProps.StartupDone = true
+                break
+            end
+        end
+    end
+
+    hook.Remove("InitPostEntity", "SpawnPermaProps")
+    hook.Add("InitPostEntity", "PD.PermaProps.Startup", function()
+        StartupLoad("InitPostEntity")
+    end)
+
+    timer.Simple(10, function()
+        StartupLoad("Timer")
     end)
 
     -- Ein Map-Cleanup (Admin-Menue, game.CleanUpMap) entfernt auch die
     -- Perma-Props - danach neu spawnen.
-    hook.Add("PostCleanupMap", "SpawnPermaProps", function()
+    hook.Remove("PostCleanupMap", "SpawnPermaProps")
+    hook.Add("PostCleanupMap", "PD.PermaProps.Cleanup", function()
         PD.PermaProps.Reload("Nach Map-Cleanup")
     end)
 end
