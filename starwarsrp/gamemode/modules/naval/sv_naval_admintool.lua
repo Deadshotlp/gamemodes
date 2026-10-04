@@ -261,6 +261,46 @@ Actions.console_lock = function(ply, args)
     Log(ply, "Konsole " .. ent:GetStation() .. (locked and " gesperrt" or " entsperrt"))
 end
 
+local function ConsoleArg(args)
+    local ent = Entity(tonumber(args.ent) or -1)
+    if IsValid(ent) and ent:GetClass() == "pd_naval_console" then return ent end
+end
+
+Actions.console_save = function(ply, args)
+    local list = {}
+    if args.all then
+        list = ents.FindByClass("pd_naval_console")
+    else
+        list = {ConsoleArg(args)}
+    end
+
+    for _, ent in ipairs(list) do Naval.SaveConsole(ent) end
+    Notify(ply, #list .. " Konsole(n) gespeichert", true)
+    Log(ply, #list .. " Konsole(n) Position/Ausrichtung gespeichert")
+end
+
+-- An den Blickpunkt des Admins setzen (auch der unsichtbare Projektor)
+Actions.console_here = function(ply, args)
+    local ent = ConsoleArg(args)
+    if not ent then return end
+
+    local tr = ply:GetEyeTrace()
+    ent:SetPos(tr.HitPos)
+    Naval.SaveConsole(ent)
+    Log(ply, "Konsole " .. ent:GetStation() .. " versetzt")
+end
+
+Actions.console_rotate = function(ply, args)
+    local ent = ConsoleArg(args)
+    if not ent then return end
+
+    local ang = ent:GetAngles()
+    local axis = args.axis == "p" and "p" or (args.axis == "r" and "r" or "y")
+    ang[axis] = math.NormalizeAngle(ang[axis] + math.Clamp(tonumber(args.deg) or 15, -180, 180))
+    ent:SetAngles(ang)
+    Naval.SaveConsole(ent)
+end
+
 Actions.console_remove = function(ply, args)
     local ent = Entity(tonumber(args.ent) or -1)
     if not IsValid(ent) or ent:GetClass() ~= "pd_naval_console" then return end

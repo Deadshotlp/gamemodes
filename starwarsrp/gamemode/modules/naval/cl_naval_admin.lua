@@ -262,8 +262,9 @@ function Naval.AdminMenu(base)
 
     R.Header("Konsolen")
     R.Text("Neue Konsole: auf die Stelle schauen, an der sie stehen soll, Station wählen, \"Aufstellen\". "
-        .. "Taktik-Hologramm: \"Hologramm-Projektor\" auf den Holotisch setzen (dort erscheint es), "
-        .. "dazu die Schalter Ein/Aus, näher und weiter. Drehen: beim Anschauen pd_naval_console_rotate <Grad>.")
+        .. "Ausrichten: mit dem Physgun greifen und drehen (nur Admins) oder mit Links/Rechts/Kippen (je 15°), "
+        .. "danach \"Speichern\". \"Hierher\" setzt eine Konsole an deinen Blickpunkt (auch den unsichtbaren "
+        .. "Hologramm-Projektor). Taktik-Hologramm: Projektor auf den Holotisch, dazu Ein/Aus, näher, weiter.")
 
     local stations = {}
     for id, def in SortedPairs(Naval.Stations or {}) do stations[#stations + 1] = {id, def.name} end
@@ -282,41 +283,74 @@ function Naval.AdminMenu(base)
 
         local list = ents.FindByClass("pd_naval_console")
         table.sort(list, function(a, b) return a:GetConsoleId() < b:GetConsoleId() end)
-        consoleList:SetTall(math.max(#list * 34, 10))
+        consoleList:SetTall(math.max(#list * 70, 10))
 
         for _, ent in ipairs(list) do
             local def = ent:StationDef()
-            local row = vgui.Create("DPanel", consoleList)
-            row:Dock(TOP)
-            row:DockMargin(0, 0, 0, 4)
-            row:SetTall(30)
-            row.Paint = function(s, w, h)
+            local id = ent:EntIndex()
+
+            local card = vgui.Create("DPanel", consoleList)
+            card:Dock(TOP)
+            card:DockMargin(0, 0, 0, 6)
+            card:SetTall(64)
+            card.Paint = function(s, w, h)
                 draw.RoundedBox(0, 0, 0, w, h, COL.panel)
                 if not IsValid(ent) then return end
-                draw.SimpleText(((def and def.name) or ent:GetStation()) .. " #" .. ent:GetConsoleId(), "MLIB.16", 8, h / 2, COL.text, nil, TEXT_ALIGN_CENTER)
+                local dist = math.Round(LocalPlayer():GetPos():Distance(ent:GetPos()) / 52.5)
+                draw.SimpleText(((def and def.name) or ent:GetStation()) .. " #" .. ent:GetConsoleId(), "MLIB.16", 8, 15, COL.text, nil, TEXT_ALIGN_CENTER)
+                draw.SimpleText(dist .. " m", "MLIB.12", 8, 30, COL.dim)
             end
 
-            local remove = UI.Button(row, "Entfernen", function()
+            -- Zeile 1: Sperre, Entfernen
+            local top = vgui.Create("DPanel", card)
+            top:Dock(TOP)
+            top:SetTall(30)
+            top.Paint = nil
+
+            local remove = UI.Button(top, "Entfernen", function()
                 Derma_Query("Konsole entfernen?", "Raumflotte", "Entfernen", function()
-                    Send("console_remove", {ent = ent:EntIndex()})
+                    Send("console_remove", {ent = id})
                     timer.Simple(1.5, FillConsoles)
                 end, "Abbrechen")
             end, function() return COL.bad end)
             remove:Dock(RIGHT)
-            remove:SetWide(90)
+            remove:SetWide(80)
 
-            local lock = UI.Button(row, "", function() Send("console_lock", {ent = ent:EntIndex()}) end)
+            local lock = UI.Button(top, "", function() Send("console_lock", {ent = id}) end)
             lock:Dock(RIGHT)
             lock:DockMargin(0, 0, 4, 0)
-            lock:SetWide(90)
+            lock:SetWide(80)
             lock.Think = function(s)
                 if IsValid(ent) then s.Label = ent:GetLocked() and "Gesperrt" or "Frei" end
+            end
+
+            -- Zeile 2: Ausrichtung
+            local bottom = vgui.Create("DPanel", card)
+            bottom:Dock(BOTTOM)
+            bottom:SetTall(30)
+            bottom.Paint = nil
+
+            local defs = {
+                {"Speichern", function() Send("console_save", {ent = id}) end, COL.ok, 80},
+                {"Hierher", function() Send("console_here", {ent = id}) end, nil, 70},
+                {"Rechts", function() Send("console_rotate", {ent = id, axis = "y", deg = -15}) end, nil, 56},
+                {"Links", function() Send("console_rotate", {ent = id, axis = "y", deg = 15}) end, nil, 56},
+                {"Kippen", function() Send("console_rotate", {ent = id, axis = "p", deg = 15}) end, nil, 60},
+            }
+            for _, d in ipairs(defs) do
+                local b = UI.Button(bottom, d[1], d[2], d[3] and function() return d[3] end)
+                b:Dock(RIGHT)
+                b:DockMargin(4, 0, 0, 0)
+                b:SetWide(d[4])
             end
         end
     end
 
     FillConsoles()
-    R.Buttons({{"Liste aktualisieren", FillConsoles}})
+    R.Buttons({
+        {"Liste aktualisieren", FillConsoles},
+        {"Alle speichern", function() Send("console_save", {all = true}) end, COL.ok},
+    })
 
     ----------------------------------------------------------------------------
     -- Einstellungen

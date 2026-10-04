@@ -226,6 +226,20 @@ end
 -- Schiffe
 --------------------------------------------------------------------------------
 
+-- Laenge eines Modells in Einheiten. Manche Modelle haben zu kleine
+-- Kollisionsgrenzen (dann waeren sie viel zu gross skaliert), daher das
+-- Groessere aus Kollisions- und Darstellungsgrenzen.
+function Naval.ModelLength(m)
+    local length = 1
+    local mins, maxs = m:GetModelBounds()
+    if mins then length = math.max(length, maxs.x - mins.x, maxs.y - mins.y) end
+
+    local rmins, rmaxs = m:GetModelRenderBounds()
+    if rmins then length = math.max(length, rmaxs.x - rmins.x, rmaxs.y - rmins.y) end
+
+    return length
+end
+
 local shipModels = {}   -- id -> ClientsideModel
 Naval.RenderModels = shipModels
 
@@ -239,8 +253,7 @@ local function ShipModel(id, path)
     if not IsValid(m) then return nil end
 
     m:SetNoDraw(true)
-    local mins, maxs = m:GetModelBounds()
-    m.PD_Length = math.max(maxs.x - mins.x, maxs.y - mins.y, 1)
+    m.PD_Length = Naval.ModelLength(m)
     shipModels[id] = m
 
     return m

@@ -79,6 +79,25 @@ hook.Add("PD.Naval.SimStarted", "PD.Naval.Consoles", function()
     timer.Simple(3, Naval.SpawnConsoles)
 end)
 
+-- Admins duerfen Konsolen mit dem Physgun ausrichten; danach im Admin-Menue
+-- (Raumflotte -> Konsolen -> Speichern) die Lage sichern.
+hook.Add("PhysgunPickup", "PD.Naval.Consoles", function(ply, ent)
+    if IsValid(ent) and ent:GetClass() == CLASS then return ply:IsAdmin() end
+end)
+
+hook.Add("PhysgunDrop", "PD.Naval.Consoles", function(_, ent)
+    if not IsValid(ent) or ent:GetClass() ~= CLASS then return end
+    local phys = ent:GetPhysicsObject()
+    if IsValid(phys) then phys:EnableMotion(false) end
+end)
+
+-- Aktuelle Lage einer Konsole in die Datenbank
+function Naval.SaveConsole(ent)
+    local pos, ang = ent:GetPos(), ent:GetAngles()
+    PD.SQL.Query(("UPDATE `pd_naval_consoles` SET `px` = %.2f, `py` = %.2f, `pz` = %.2f, `pitch` = %.2f, `yaw` = %.2f, `roll` = %.2f WHERE `id` = %d")
+        :format(pos.x, pos.y, pos.z, ang.p, ang.y, ang.r, ent:GetConsoleId()))
+end
+
 hook.Add("PostCleanupMap", "PD.Naval.Consoles", function()
     if Naval.SimRunning then timer.Simple(1, Naval.SpawnConsoles) end
 end)

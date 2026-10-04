@@ -43,8 +43,7 @@ local function HoloModel(key, path)
     m = ClientsideModel(path, RENDERGROUP_TRANSLUCENT)
     if not IsValid(m) then return nil end
     m:SetNoDraw(true)
-    local mins, maxs = m:GetModelBounds()
-    m.PD_Length = math.max(maxs.x - mins.x, maxs.y - mins.y, 1)
+    m.PD_Length = Naval.ModelLength(m)
     models[key] = m
     return m
 end
@@ -99,6 +98,10 @@ local function DrawHolo()
     local center = projector:GetPos() + Vector(0, 0, settings.holo_height or 45)
     local range = Naval.HoloRanges[GetGlobalInt("PD.Naval.HoloZoom", Naval.HoloDefaultZoom)] or 50000
     local scale = radius / range
+
+    -- Schiffe: echtes Verhaeltnis zueinander, aber mindestens so gross, dass
+    -- eine Venator 15 % des Radius lang ist (sonst bei grossem Bereich unsichtbar)
+    local shipScale = math.max(scale, radius * 0.15 / 1137)
     local flicker = 0.85 + math.sin(CurTime() * 23) * 0.04 + math.sin(CurTime() * 3.1) * 0.05
 
     local M, qbm = Naval.UniverseToMap(view.rot)
@@ -134,7 +137,7 @@ local function DrawHolo()
         if info.mapShip then
             local class = static.classes[info.classId]
             if class and class.model then
-                DrawShipModel("map", class.model, center, Q.ToAngle(qbm), math.max(class.lengthM * scale, radius * 0.18),
+                DrawShipModel("map", class.model, center, Q.ToAngle(qbm), class.lengthM * shipScale,
                     Color(120, 255, 160), 0.55 * flicker)
             end
         end
@@ -154,7 +157,7 @@ local function DrawHolo()
             local pos = ToHolo(rel)
 
             seen[id] = true
-            DrawShipModel(id, class.model, pos, Q.ToAngle(Q.Mul(M, s.rot)), math.max(class.lengthM * scale, radius * 0.07), col, 0.6 * flicker)
+            DrawShipModel(id, class.model, pos, Q.ToAngle(Q.Mul(M, s.rot)), class.lengthM * shipScale, col, 0.6 * flicker)
 
             labels[#labels + 1] = {pos = pos, text = info.name .. "  " .. FormatDist(dist), col = col, stem = true}
         end
