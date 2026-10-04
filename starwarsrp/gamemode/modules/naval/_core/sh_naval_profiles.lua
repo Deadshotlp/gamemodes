@@ -26,8 +26,18 @@ PD.Naval.Profiles["rp_venator_extensive_v1_4"] = {
     -- nicht entlang +x. Wert aus SWU (shipOffsetRotation), im Spiel pruefen.
     mapToBody = Angle(0, 90, 0),
 
-    -- Meter pro Map-Einheit (Venator ~1137 m lang; MESSEN: Laenge in Units)
-    metersPerUnit = 0.0254 * 16,
+    -- Meter pro Map-Einheit fuer die Parallaxe (wo im Schiff man steht).
+    -- nil = keine Parallaxe. MESSEN: Venator ~1137 m / Laenge in Units.
+    metersPerUnit = nil,
+
+    -- Map-eigene Hyperraum-Logik (pd_naval_mapfacts): beim Start leerer
+    -- Raum, bei Spruengen der originale Tunnel-Effekt der Map.
+    mapRelays = {
+        start = "desti_relay_space",
+        jump = "hyperjump_relay",
+        exit = "hyperexit_relay",
+    },
+    lockMapControls = {"hypertunnel_move2", "hyper_button_relay"},
 
     -- Aus SWU, nur fuer Pruefungen der Skybox
     skyboxReference = Vector(0, 0, 15500),
