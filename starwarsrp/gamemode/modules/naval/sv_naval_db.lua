@@ -153,6 +153,26 @@ local TABLES = {
         KEY `system` (`system_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
+    [[CREATE TABLE IF NOT EXISTS `pd_naval_system_info` (
+        `system_id` VARCHAR(64) NOT NULL,
+        `sector` VARCHAR(128) NOT NULL DEFAULT '',
+        `grid` VARCHAR(16) NOT NULL DEFAULT '',
+        `canon` TINYINT NOT NULL DEFAULT 0,
+        `legends` TINYINT NOT NULL DEFAULT 0,
+        `routes` TEXT NOT NULL,
+        PRIMARY KEY (`system_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    [[CREATE TABLE IF NOT EXISTS `pd_naval_routes` (
+        `id` VARCHAR(80) NOT NULL,
+        `name` VARCHAR(128) NOT NULL DEFAULT '',
+        `major` TINYINT NOT NULL DEFAULT 0,
+        `length_pc` DOUBLE NOT NULL DEFAULT 0,
+        `systems` MEDIUMTEXT NOT NULL,
+        `lines` MEDIUMTEXT NOT NULL,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
     [[CREATE TABLE IF NOT EXISTS `pd_naval_consoles` (
         `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
         `map` VARCHAR(128) NOT NULL,
@@ -441,7 +461,39 @@ function DB.LoadGalaxy(callback)
             Naval.Bodies = bodies
             Naval.BodiesBySystem = bySystem
 
-            if callback then callback(table.Count(systems), table.Count(bodies)) end
+            -- Zusatzangaben (Sektor, Planquadrat, Kanon) und Hyperraumrouten
+            PD.SQL.FetchAll("SELECT * FROM `pd_naval_system_info`", function(infoRows)
+                for _, row in ipairs(infoRows or {}) do
+                    local s = systems[row.system_id]
+
+                    if s then
+                        s.sector = row.sector
+                        s.grid = row.grid
+                        s.canon = tonumber(row.canon) == 1
+                        s.legends = tonumber(row.legends) == 1
+                        s.routes = DB.DecodeTable(row.routes)
+                    end
+                end
+
+                PD.SQL.FetchAll("SELECT * FROM `pd_naval_routes`", function(routeRows)
+                    local routes = {}
+
+                    for _, row in ipairs(routeRows or {}) do
+                        routes[row.id] = {
+                            id = row.id,
+                            name = row.name,
+                            major = tonumber(row.major) == 1,
+                            length = tonumber(row.length_pc) or 0,
+                            systems = DB.DecodeTable(row.systems),
+                            lines = DB.DecodeTable(row.lines),
+                        }
+                    end
+
+                    Naval.Routes = routes
+
+                    if callback then callback(table.Count(systems), table.Count(bodies), table.Count(routes)) end
+                end)
+            end)
         end)
     end)
 end

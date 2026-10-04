@@ -43,6 +43,9 @@ D.Settings = {
     mass_shadow_factor = 4,       -- vielfacher Koerperradius ohne Sprung
     arrival_scatter = 20000,      -- m Streuung beim Austritt
     admin_override_level = 50,    -- PD.Admin.Ranks-Stufe fuer Admin-Befehle
+    galaxy_unit = "swu",          -- "parsec" nach dem Import von swgalaxymap
+    galaxy_version = "",          -- Stand der importierten Galaxie-Datei
+    route_speed_factor = 0.5,     -- Sprungzeit-Faktor entlang einer Hyperraumroute
 }
 
 --------------------------------------------------------------------------------

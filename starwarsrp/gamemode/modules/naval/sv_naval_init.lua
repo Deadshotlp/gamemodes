@@ -25,12 +25,17 @@ function Naval.ReloadConfig(callback)
 end
 
 function Naval.ReloadGalaxy(callback)
-    Naval.DB.LoadGalaxy(function(systems, bodies)
-        Naval.Log(systems .. " Systeme, " .. bodies .. " Himmelskoerper geladen")
+    Naval.DB.LoadGalaxy(function(systems, bodies, routes)
+        Naval.Log(systems .. " Systeme, " .. bodies .. " Himmelskoerper, " .. tostring(routes or 0) .. " Hyperraumrouten geladen")
 
         if Naval.OnGalaxyLoaded then Naval.OnGalaxyLoaded() end
-        if callback then callback(systems, bodies) end
+        if callback then callback(systems, bodies, routes) end
     end)
+end
+
+local function Finish()
+    Naval.Ready = true
+    hook.Run("PD.Naval.Ready")
 end
 
 local function Start()
@@ -38,6 +43,23 @@ local function Start()
         Naval.DB.Seed(function()
             Naval.ReloadConfig(function()
                 Naval.ReloadGalaxy(function(systems)
+                    -- Neuere Galaxie-Datei (swgalaxymap + Wookieepedia)?
+                    local fileVersion = Naval.GalaxyFileVersion and Naval.GalaxyFileVersion()
+
+                    if fileVersion and fileVersion ~= Naval.Settings.galaxy_version then
+                        Naval.Log("Neue Galaxie-Datei (" .. fileVersion .. ") - importiere")
+
+                        Naval.ImportGalaxy(function(ok, text)
+                            Naval.Log("Galaxie-Import: " .. tostring(text))
+
+                            Naval.ReloadConfig(function()
+                                Naval.ReloadGalaxy(Finish)
+                            end)
+                        end)
+
+                        return
+                    end
+
                     if systems == 0 then
                         Naval.Log("Galaxie leer - importiere aus Star Wars Universe")
 
