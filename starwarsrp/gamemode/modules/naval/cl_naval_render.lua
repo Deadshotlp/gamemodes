@@ -414,20 +414,41 @@ local primaryFrame = 0
 local preFrame = 0
 local useFallback = false
 
+-- Exklusiver Himmel: der Himmel der Map (2D-Textur und 3D-Skybox mit
+-- eigenen Sternen/Planeten) wird nicht gezeichnet. Sonst steht er still,
+-- waehrend sich unser Weltraum mit dem Schiff dreht - das sieht aus, als
+-- verschiebe sich die Galaxie. pd_naval_sky_exclusive 0 zum Vergleich.
+local exclusive = CreateClientConVar("pd_naval_sky_exclusive", "1", true, false, "Naval: nur eigenen Weltraum statt Map-Himmel zeichnen")
+
+local function Exclusive()
+    return exclusive:GetBool() and Naval.IsNavalMap() and C.View() ~= nil
+end
+
 hook.Add("PostDraw2DSkyBox", "PD.Naval.Render", function()
     primaryFrame = FrameNumber()
-    if useFallback then return end
+    if useFallback and not Exclusive() then return end
+    if lastDrawn == FrameNumber() then return end
+
+    -- Map-Himmelstextur ueberdecken
+    if Exclusive() then render.Clear(0, 0, 0, 255, false, false) end
     Naval.RenderSpace()
 end)
 
 hook.Add("PreDrawSkyBox", "PD.Naval.RenderFallback", function()
     preFrame = FrameNumber()
+
+    if Exclusive() then
+        render.Clear(0, 0, 0, 255, true, true)
+        Naval.RenderSpace()
+        return true   -- Map-Skybox (2D und 3D) auslassen
+    end
+
     if not useFallback then return end
     Naval.RenderSpace()
 end)
 
 timer.Create("PD.Naval.RenderGuard", 1, 0, function()
-    if not Naval.IsNavalMap() then return end
+    if not Naval.IsNavalMap() or Exclusive() then return end
 
     local skyVisible = FrameNumber() - preFrame < 5
     local missing = skyVisible and FrameNumber() - primaryFrame > 30
