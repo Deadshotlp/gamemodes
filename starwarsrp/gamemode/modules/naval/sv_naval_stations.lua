@@ -172,7 +172,7 @@ net.Receive("PD.Naval.Nav", function(_, ply)
         finish = now + calc,
         ready = false,
         duration = Naval.JumpDuration(from, to, ship:Stat("hyperRating")),
-        route = Naval.SharedRoute(from, to),
+        routes = (Naval.PlanJump(from, to) or {}).routes,
         by = Who(ply),
     }
 
@@ -293,12 +293,14 @@ timer.Create("PD.Naval.Status", 0.5, 0, function()
     if nav then
         local valid, reason = Naval.NavValid(ship)
         status.nav = {target = nav.target, start = nav.start, finish = nav.finish, ready = nav.ready,
-            duration = nav.duration, route = nav.route, valid = valid, reason = reason}
+            duration = nav.duration, routes = nav.routes, valid = valid, reason = reason}
 
         if nav.target and Naval.Systems[nav.target] then
             status.align = Naval.AlignmentError(ship, nav.target)
         end
     end
+
+    status.pathKey = Naval.PathKey and Naval.PathKey(ship)
 
     local body, dist, limit = Naval.MassShadow(ship)
     if body then status.shadow = {name = body.name, dist = dist, limit = limit} end

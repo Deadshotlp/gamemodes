@@ -96,7 +96,8 @@ function Naval.SimSelfTest()
     if cor and tat then
         local dur = Naval.JumpDuration(cor, tat, 1)
         check("Sprungzeit Coruscant -> Tatooine 45-300 s", dur >= 45 and dur <= 300,
-            ("%.0f s, %.0f pc%s"):format(dur, Naval.SystemDistance(cor, tat), Naval.SharedRoute(cor, tat) and ", gemeinsame Route" or ""))
+            ("%.0f s, %.0f pc%s"):format(dur, Naval.SystemDistance(cor, tat),
+                Naval.PlanJump and (" ueber " .. table.concat(Naval.PlanJump(cor, tat).routes, " -> ")) or ""))
     else
         check("Coruscant und Tatooine gefunden", false)
     end

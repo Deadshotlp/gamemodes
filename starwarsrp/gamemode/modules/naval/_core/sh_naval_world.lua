@@ -86,10 +86,12 @@ end
 function Naval.JumpDuration(fromSystem, toSystem, rating, settings)
     settings = settings or Naval.Settings or {}
 
-    local dist = Naval.SystemDistance(fromSystem, toSystem)
+    -- Server: Weg entlang der Hyperraumrouten (effektive Parsec)
+    local plan = Naval.PlanJump and Naval.PlanJump(fromSystem, toSystem)
+    local dist = plan and plan.cost or Naval.SystemDistance(fromSystem, toSystem)
     local t = (settings.hyper_base_time or 45) + dist * (settings.hyper_time_per_gu or 0.0085)
 
-    if Naval.SharedRoute(fromSystem, toSystem) then
+    if not plan and Naval.SharedRoute(fromSystem, toSystem) then
         t = t * (settings.route_speed_factor or 0.5)
     end
 

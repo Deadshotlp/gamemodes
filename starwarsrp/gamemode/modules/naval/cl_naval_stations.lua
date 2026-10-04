@@ -348,7 +348,8 @@ local function OpenHyperdrive(console)
             UI.Bar(14, y, w - 28, 10, (now - nav.start) / math.max(nav.finish - nav.start, 1), COL_WARN)
             y = y + 22
         else
-            Line("Ziel: " .. Naval.SystemName(nav.target) .. "   Sprungdauer: " .. Fmt(nav.duration) .. (nav.route and "  (Route)" or ""), nav.valid and COL_OK or COL_BAD)
+            Line("Ziel: " .. Naval.SystemName(nav.target) .. "   Sprungdauer: " .. Fmt(nav.duration), nav.valid and COL_OK or COL_BAD)
+            Line(nav.routes and #nav.routes > 0 and ("Über " .. table.concat(nav.routes, " -> ")) or "Direktsprung abseits der Routen", COL_DIM)
             if not nav.valid then Line(nav.reason or "Ungueltig", COL_BAD) end
         end
 

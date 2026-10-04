@@ -46,6 +46,16 @@ function Naval.SendData(kind, payload, target)
 
     for index = 1, total do
         timer.Simple((index - 1) * 0.1, function()
+            -- Empfaenger zuerst: eine begonnene, nie gesendete Nachricht
+            -- blockiert sonst die naechste (auch anderer Module)
+            local valid = {}
+            if istable(target) then
+                for _, p in ipairs(target) do if IsValid(p) then valid[#valid + 1] = p end end
+            elseif IsValid(target) then
+                valid[1] = target
+            end
+            if #valid == 0 then return end
+
             local part = string.sub(data, (index - 1) * CHUNK + 1, index * CHUNK)
 
             net.Start("PD.Naval.Data")
@@ -55,14 +65,7 @@ function Naval.SendData(kind, payload, target)
                 net.WriteUInt(total, 8)
                 net.WriteUInt(#part, 16)
                 net.WriteData(part, #part)
-
-            if istable(target) then
-                local valid = {}
-                for _, p in ipairs(target) do if IsValid(p) then valid[#valid + 1] = p end end
-                if #valid > 0 then net.Send(valid) end
-            elseif IsValid(target) then
-                net.Send(target)
-            end
+            net.Send(valid)
         end)
     end
 
@@ -84,10 +87,17 @@ local function BuildStatic()
         factions[id] = {name = f.name, color = {f.color.r, f.color.g, f.color.b}, iff = f.iff, player = f.player}
     end
 
-    -- Systeme kompakt: id, Name, x, y, z, Region, Routen
+    -- Systeme kompakt: id, Name, x, y, z, Region, Routen, Planetennamen
+    -- (fuer die Suche: "Tatooine" liegt im System "Tatoo")
     for id, s in pairs(Naval.Systems) do
         if not s.hidden then
-            systems[#systems + 1] = {id, s.name, math.Round(s.g.x, 1), math.Round(s.g.y, 1), math.Round(s.g.z, 1), s.region or "", s.routes or {}}
+            local planets = {}
+            for _, b in ipairs(Naval.BodiesBySystem[id] or {}) do
+                if b.type == "planet" and b.name ~= s.name then planets[#planets + 1] = b.name end
+            end
+
+            systems[#systems + 1] = {id, s.name, math.Round(s.g.x, 1), math.Round(s.g.y, 1), math.Round(s.g.z, 1), s.region or "", s.routes or {},
+                table.concat(planets, ", ")}
         end
     end
 

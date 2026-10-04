@@ -29,10 +29,7 @@ function Naval.Event(ship, kind, data)
     hook.Run("PD.Naval.Event", ship, kind, data or {})
 end
 
--- Richtung des Sprungs im System-Koordinatensystem (= Galaxie-Achsen).
-function Naval.JumpVector(fromSystem, toSystem)
-    return V3.Normalize(V3.Sub(toSystem.g, fromSystem.g))
-end
+-- Naval.JumpVector (Richtung zum Einstieg in die Route) steht in sv_naval_routing.lua.
 
 -- Naechster Massenschatten (Koerper, Abstand, erlaubter Mindestabstand)
 function Naval.MassShadow(ship)

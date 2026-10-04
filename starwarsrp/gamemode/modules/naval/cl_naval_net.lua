@@ -37,7 +37,8 @@ local function OnData(kind, payload)
         -- Systeme kompakt -> Tabellen
         local systems, byId = {}, {}
         for _, row in ipairs(payload.systems or {}) do
-            local s = {id = row[1], name = row[2], g = {x = row[3], y = row[4], z = row[5]}, region = row[6], routes = row[7]}
+            local s = {id = row[1], name = row[2], g = {x = row[3], y = row[4], z = row[5]}, region = row[6], routes = row[7], planets = row[8] or ""}
+            s.search = string.lower(s.name .. " " .. s.planets)
             systems[#systems + 1] = s
             byId[s.id] = s
         end

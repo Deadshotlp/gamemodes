@@ -18,6 +18,38 @@ local function SendNav(action, systemId)
     net.SendToServer()
 end
 
+-- Geplanter Sprungweg (vom Server, passend zu status.pathKey)
+net.Receive("PD.Naval.Path", function()
+    local key = net.ReadString()
+    local data = util.JSONToTable(net.ReadString()) or {}
+    C.path = {key = key, points = data.points or {}, routes = data.routes or {}}
+end)
+
+local pathRequested
+timer.Create("PD.Naval.PathSync", 1, 0, function()
+    local key = C.status and C.status.pathKey
+    if not key or (C.path and C.path.key == key) or pathRequested == key then return end
+
+    pathRequested = key
+    net.Start("PD.Naval.Path")
+    net.WriteString(key)
+    net.SendToServer()
+    timer.Simple(3, function() if pathRequested == key then pathRequested = nil end end)
+end)
+
+-- Position auf dem Weg beim Zeitanteil f
+local function PathAt(points, f)
+    for i = 2, #points do
+        local a, b = points[i - 1], points[i]
+        if f <= b[3] then
+            local t = b[3] > a[3] and (f - a[3]) / (b[3] - a[3]) or 1
+            return a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t
+        end
+    end
+    local last = points[#points]
+    return last[1], last[2]
+end
+
 local function Dist2D(a, b)
     return math.sqrt((a.g.x - b.g.x) ^ 2 + (a.g.y - b.g.y) ^ 2 + (a.g.z - b.g.z) ^ 2)
 end
@@ -93,10 +125,33 @@ local function CreateMap(parent, onSelect)
         end
         s.Hover = hover
 
-        -- Kurslinie
+        -- Kurs: geplanter Weg (Routen blau, abseits gelb), sonst Luftlinie
         local cur = current and static.systemsById[current]
         local target = s.Selected and static.systemsById[s.Selected]
-        if cur and target then
+        local st = C.status or {}
+        local path = C.path and st.pathKey == C.path.key and C.path.points
+
+        if path and #path > 1 then
+            for i = 2, #path do
+                local x1, y1 = ToScreen(s, path[i - 1][1], path[i - 1][2])
+                local x2, y2 = ToScreen(s, path[i][1], path[i][2])
+                local col = path[i - 1][4] and Color(120, 200, 255) or COL.warn
+                surface.SetDrawColor(col)
+                surface.DrawLine(x1, y1, x2, y2)
+                surface.DrawLine(x1 + 1, y1, x2 + 1, y2)
+            end
+
+            -- Im Hyperraum: wo das Schiff gerade ist
+            local hy = st.hyper
+            if st.state == "hyperspace" and hy and hy.tTunnel and hy.tExit then
+                local f = math.Clamp((Naval.Now() - hy.tTunnel) / math.max(hy.tExit - hy.tTunnel, 1), 0, 1)
+                local x, y = ToScreen(s, PathAt(path, f))
+                draw.RoundedBox(4, x - 5, y - 5, 10, 10, COL.ok)
+            end
+
+            if not target and st.nav then target = static.systemsById[st.nav.target] end
+            if not target and hy and hy.to then target = static.systemsById[hy.to] end
+        elseif cur and target then
             local x1, y1 = ToScreen(s, cur.g.x, cur.g.y)
             local x2, y2 = ToScreen(s, target.g.x, target.g.y)
             surface.SetDrawColor(COL.warn)
@@ -194,7 +249,7 @@ local function OpenNavcomputer(console)
 
     local detail = vgui.Create("DPanel", side)
     detail:Dock(BOTTOM)
-    detail:SetTall(220)
+    detail:SetTall(290)
 
     local map = CreateMap(frame, function(sys)
         selected = sys
@@ -218,7 +273,7 @@ local function OpenNavcomputer(console)
         local rows = {}
 
         for _, sys in ipairs(static.systemList) do
-            if filter == "" or string.find(string.lower(sys.name), filter, 1, true) or string.find(string.lower(sys.region or ""), filter, 1, true) then
+            if filter == "" or string.find(sys.search or string.lower(sys.name), filter, 1, true) or string.find(string.lower(sys.region or ""), filter, 1, true) then
                 rows[#rows + 1] = {sys = sys, d = cur and Dist2D(cur, sys) or 0}
             end
         end
@@ -227,7 +282,9 @@ local function OpenNavcomputer(console)
 
         for i = 1, math.min(#rows, 300) do
             local r = rows[i]
-            local line = list:AddLine(r.sys.name, r.sys.region or "", math.Round(r.d))
+            local label = r.sys.name
+            if r.sys.planets and r.sys.planets ~= "" then label = label .. " (" .. r.sys.planets .. ")" end
+            local line = list:AddLine(label, r.sys.region or "", math.Round(r.d))
             line.System = r.sys
         end
     end
@@ -253,6 +310,7 @@ local function OpenNavcomputer(console)
         local y = 8
 
         local function Line(text, col)
+            if #text > 42 then text = string.sub(text, 1, 40) .. "..." end
             draw.SimpleText(text, "MLIB.16", 10, y, col or COL.text)
             y = y + 22
         end
@@ -260,6 +318,7 @@ local function OpenNavcomputer(console)
         if selected then
             Line("Ziel: " .. selected.name, COL.accent)
             if cur then Line(("Entfernung: %.0f pc"):format(Dist2D(cur, selected)), COL.text) end
+            if selected.planets and selected.planets ~= "" then Line("Planeten: " .. selected.planets, COL.dim) end
             if selected.routes and #selected.routes > 0 then Line("An einer Hyperraumroute", COL.ok) end
         else
             Line("Kein Ziel gewählt", COL.dim)
@@ -274,6 +333,7 @@ local function OpenNavcomputer(console)
             else
                 Line("Lösung " .. Naval.SystemName(nav.target) .. ": " .. UI.Fmt(nav.duration) .. " Sprung", nav.valid and COL.ok or COL.bad)
                 if not nav.valid and nav.reason then Line(nav.reason, COL.bad) end
+                Line(nav.routes and #nav.routes > 0 and ("Über " .. table.concat(nav.routes, " -> ")) or "Direkt, abseits der Routen", COL.dim)
             end
         end
     end
