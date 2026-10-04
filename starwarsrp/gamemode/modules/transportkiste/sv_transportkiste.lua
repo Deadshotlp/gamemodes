@@ -275,23 +275,9 @@ local function Unpack(ply, crate)
         return
     end
 
-    local ground = GroundBelow(crate:GetPos() + Vector(0, 0, 20), {crate, ply})
-
-    -- Drehung der Kiste seit dem Packen auf das Objekt uebertragen.
-    local ang = Angle(data.angles.p, data.angles.y + (crate:GetAngles().y - (data.crate_yaw or crate:GetAngles().y)), data.angles.r)
-
-    local pos = ground - Vector(0, 0, data.mins.z * (data.scale or 1)) + Vector(0, 0, 2)
-
-    -- Platz pruefen: Weltgeometrie und andere Objekte (die Kiste selbst
-    -- nicht). Steht ein Spieler darin, wird nicht aufgebaut.
-    local hull = util.TraceHull({
-        start = pos + Vector(0, 0, 4),
-        endpos = pos + Vector(0, 0, 4),
-        mins = data.mins * (data.scale or 1) * 0.9,
-        maxs = data.maxs * (data.scale or 1) * 0.9,
-        filter = {crate},
-        mask = MASK_SOLID,
-    })
+    -- Gemeinsame Berechnung mit der Vorschau (sh_transportkiste.lua).
+    -- Steht ein Spieler im Platz, wird nicht aufgebaut.
+    local pos, ang, hull = PD.Kiste.ComputePlacement(crate, data)
 
     if hull.Hit then
         local blocker = hull.Entity
@@ -592,24 +578,79 @@ local function BuildData(model)
 end
 
 -- Ablageort: zwischen Lager und Spieler, neben dem Lager auf dem Boden.
-local function SpawnPosition(ply, spawner)
-    local dir = ply:GetPos() - spawner:GetPos()
-    dir.z = 0
-
-    if dir:LengthSqr() < 1 then dir = spawner:GetForward() dir.z = 0 end
-    dir:Normalize()
-
-    local radius = math.max(spawner:OBBMaxs():Length2D(), 20) + 40
-    local origin = spawner:LocalToWorld(spawner:OBBCenter())
-    local pos = origin + dir * radius
-
-    -- Wand zwischen Lager und Ablageort: kurz davor ablegen.
-    local side = util.TraceLine({start = origin, endpos = pos, filter = {spawner, ply}, mask = MASK_SOLID_BRUSHONLY})
-    if side.Hit and not side.StartSolid then
-        pos = side.HitPos - dir * 20
+-- Groesse der Kiste, in die ein Modell gepackt wird (fuer die Platzsuche).
+local function CrateBounds(model)
+    local packable = PD.Kiste.Packables[model]
+    local crateModel = packable and packable.crate_model
+    if not crateModel or not util.IsValidModel(crateModel) then
+        crateModel = PD.Kiste.DefaultCrateModel
     end
 
-    return GroundBelow(pos, {spawner, ply}), math.deg(math.atan2(dir.y, dir.x))
+    local probe = ents.Create("prop_physics")
+    if not IsValid(probe) then return Vector(-24, -24, 0), Vector(24, 24, 48) end
+
+    probe:SetModel(crateModel)
+    local mins, maxs = probe:OBBMins(), probe:OBBMaxs()
+    probe:Remove()
+
+    return mins, maxs
+end
+
+--[[
+    Freien Platz fuer die neue Kiste neben dem Lager suchen.
+
+    Frueher: fester Abstand von der Lagermitte Richtung Spieler - bei grossen
+    Lagern (Container) genau da, wo der Spieler steht, die Kiste spawnte in
+    ihm. Jetzt werden Stellen rund um das Lager probiert, zuerst auf der Seite
+    des Spielers, und die erste genommen, an der die Kiste weder Spieler noch
+    Wand noch andere Objekte trifft.
+]]
+local SPOT_OFFSETS = {0, 40, -40, 80, -80, 120, -120, 160, -160, 180}
+
+local function SpawnPosition(ply, spawner, model)
+    local toPlayer = ply:GetPos() - spawner:GetPos()
+    toPlayer.z = 0
+
+    if toPlayer:LengthSqr() < 1 then toPlayer = spawner:GetForward() toPlayer.z = 0 end
+
+    local baseYaw = math.deg(math.atan2(toPlayer.y, toPlayer.x))
+    local mins, maxs = CrateBounds(model)
+
+    local origin = spawner:LocalToWorld(spawner:OBBCenter())
+    local spawnerRadius = math.max(spawner:OBBMaxs():Length2D(), spawner:OBBMins():Length2D(), 20)
+    local crateRadius = math.max(maxs.x - mins.x, maxs.y - mins.y) * 0.75
+
+    for _, extra in ipairs({0, 40}) do
+        for _, offset in ipairs(SPOT_OFFSETS) do
+            local yaw = baseYaw + offset
+            local dir = Angle(0, yaw, 0):Forward()
+            local pos = origin + dir * (spawnerRadius + crateRadius + 10 + extra)
+
+            -- Keine Wand zwischen Lager und Ablageort.
+            local side = util.TraceLine({start = origin, endpos = pos, filter = {spawner}, mask = MASK_SOLID_BRUSHONLY})
+
+            if not side.Hit then
+                local ground = GroundBelow(pos, {spawner})
+                local test = ground - Vector(0, 0, mins.z) + Vector(0, 0, 4)
+
+                -- Platz fuer die Kiste: Spieler, Props und Welt zaehlen.
+                local hull = util.TraceHull({
+                    start = test,
+                    endpos = test,
+                    mins = Vector(mins.x * 1.05, mins.y * 1.05, mins.z),
+                    maxs = Vector(maxs.x * 1.05, maxs.y * 1.05, maxs.z),
+                    filter = {spawner},
+                    mask = MASK_SOLID,
+                })
+
+                if not hull.Hit then
+                    return ground, yaw
+                end
+            end
+        end
+    end
+
+    return nil
 end
 
 net.Receive("PD.Kiste.Spawner.Take", function(len, ply)
@@ -645,7 +686,12 @@ net.Receive("PD.Kiste.Spawner.Take", function(len, ply)
 
     data.spawnedBy = sid
 
-    local ground, yaw = SpawnPosition(ply, spawner)
+    local ground, yaw = SpawnPosition(ply, spawner, model)
+    if not ground then
+        notify(ply, "Rund um das Lager ist kein Platz frei - räum etwas weg und versuch es nochmal.")
+        return
+    end
+
     local crate = MakeCrate(data, entry.name, ground, yaw, ply)
 
     if not crate then
@@ -686,4 +732,40 @@ net.Receive("PD.Kiste.Spawner.Return", function(len, ply)
     timer.Simple(0, function()
         if IsValid(ply) and IsValid(spawner) then PD.Kiste.OpenSpawner(ply, spawner) end
     end)
+end)
+
+--------------------------------------------------------------------------------
+-- Vorschau beim Aufbauen
+--------------------------------------------------------------------------------
+
+-- Der Client zeigt ein Geisterbild an der Stelle, an der das Objekt aufgebaut
+-- wuerde. Dafuer braucht er Modell und Ausrichtung aus den Kistendaten - die
+-- kennt nur der Server.
+util.AddNetworkString("PD.Kiste.PreviewRequest")
+util.AddNetworkString("PD.Kiste.PreviewData")
+
+local PREVIEW_RANGE = 600
+
+net.Receive("PD.Kiste.PreviewRequest", function(len, ply)
+    local crate = net.ReadEntity()
+
+    if not IsValid(crate) or crate:GetClass() ~= PD.Kiste.CrateClass then return end
+    if ply:GetPos():Distance(crate:GetPos()) > PREVIEW_RANGE then return end
+
+    local data = crate.PD_Packed
+    if not istable(data) then
+        notify(ply, "Diese Kiste ist leer.")
+        return
+    end
+
+    net.Start("PD.Kiste.PreviewData")
+    net.WriteEntity(crate)
+    net.WriteString(data.model or "")
+    net.WriteAngle(data.angles or angle_zero)
+    net.WriteFloat(data.crate_yaw or crate:GetAngles().y)
+    net.WriteVector(data.mins or vector_origin)
+    net.WriteVector(data.maxs or vector_origin)
+    net.WriteFloat(data.scale or 1)
+    net.WriteUInt(data.skin or 0, 8)
+    net.Send(ply)
 end)

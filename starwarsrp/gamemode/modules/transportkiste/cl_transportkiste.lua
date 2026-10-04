@@ -39,6 +39,7 @@ hook.Add("PD.Interaction.Requested", "PD.Kiste.Interaction", function(entClass)
 
     if entClass == PD.Kiste.CrateClass then
         local name = ent:GetContentName()
+        local previewOn = PD.Kiste.PreviewActive(ent)
 
         PD.IA.AddEntityActions({
             [1] = {
@@ -46,6 +47,14 @@ hook.Add("PD.Interaction.Requested", "PD.Kiste.Interaction", function(entClass)
                 name = name ~= "" and (name .. " aufbauen") or "Auspacken",
                 func = function(ply, target)
                     StartJob(target, ACTION_UNPACK)
+                end,
+                ad = {bone}
+            },
+            [2] = {
+                id = "kiste_preview",
+                name = previewOn and "Vorschau aus" or "Vorschau an",
+                func = function(ply, target)
+                    PD.Kiste.TogglePreview(target)
                 end,
                 ad = {bone}
             }
@@ -214,4 +223,109 @@ net.Receive("PD.Kiste.Spawner.Open", function()
     end)
     returnBtn:Dock(BOTTOM)
     returnBtn:SetDisabled(returnable == 0)
+end)
+
+--------------------------------------------------------------------------------
+-- Vorschau beim Aufbauen
+--------------------------------------------------------------------------------
+
+--[[
+    Geisterbild an der Stelle, an der das Objekt aufgebaut wuerde - gruen,
+    wenn Platz ist, rot, wenn etwas im Weg steht. Position und Pruefung kommen
+    aus PD.Kiste.ComputePlacement, derselben Funktion, die der Server beim
+    Aufbauen benutzt. Dreht oder verschiebt man die Kiste, wandert die
+    Vorschau mit.
+]]
+local PREVIEW_MAX_DIST = 1500
+local COLOR_FREE = Color(80, 255, 120, 140)
+local COLOR_BLOCKED = Color(255, 70, 70, 140)
+
+local preview = nil -- {crate, model (ClientsideModel), info}
+
+local function StopPreview()
+    if preview and IsValid(preview.model) then
+        preview.model:Remove()
+    end
+
+    preview = nil
+end
+
+function PD.Kiste.PreviewActive(crate)
+    return preview ~= nil and preview.crate == crate
+end
+
+function PD.Kiste.TogglePreview(crate)
+    if PD.Kiste.PreviewActive(crate) then
+        StopPreview()
+        return
+    end
+
+    StopPreview()
+
+    net.Start("PD.Kiste.PreviewRequest")
+    net.WriteEntity(crate)
+    net.SendToServer()
+end
+
+net.Receive("PD.Kiste.PreviewData", function()
+    local crate = net.ReadEntity()
+    local model = net.ReadString()
+    local info = {
+        angles = net.ReadAngle(),
+        crate_yaw = net.ReadFloat(),
+        mins = net.ReadVector(),
+        maxs = net.ReadVector(),
+        scale = net.ReadFloat(),
+    }
+    local skin = net.ReadUInt(8)
+
+    if not IsValid(crate) or model == "" then return end
+
+    StopPreview()
+
+    local ghost = ClientsideModel(model, RENDERGROUP_TRANSLUCENT)
+    if not IsValid(ghost) then return end
+
+    ghost:SetSkin(skin)
+    ghost:SetModelScale(info.scale or 1)
+    ghost:SetRenderMode(RENDERMODE_TRANSCOLOR)
+    -- Einfarbig, damit Gruen/Rot klar zu sehen ist.
+    ghost:SetMaterial("models/debug/debugwhite")
+    ghost:SetNoDraw(false)
+
+    preview = {crate = crate, model = ghost, info = info}
+end)
+
+hook.Add("Think", "PD.Kiste.Preview", function()
+    if not preview then return end
+
+    local crate = preview.crate
+    local ghost = preview.model
+
+    -- Kiste weg, verladen oder Spieler zu weit weg: Vorschau beenden.
+    if not IsValid(crate) or not IsValid(ghost) or IsValid(crate:GetParent()) or crate:GetNoDraw()
+        or LocalPlayer():GetPos():DistToSqr(crate:GetPos()) > PREVIEW_MAX_DIST * PREVIEW_MAX_DIST then
+        StopPreview()
+        return
+    end
+
+    local pos, ang, hull = PD.Kiste.ComputePlacement(crate, preview.info)
+
+    ghost:SetPos(pos)
+    ghost:SetAngles(ang)
+    ghost:SetColor(hull.Hit and COLOR_BLOCKED or COLOR_FREE)
+end)
+
+-- Hinweis unten am Bildschirm, solange die Vorschau laeuft.
+hook.Add("HUDPaint", "PD.Kiste.PreviewHint", function()
+    if not preview or not IsValid(preview.crate) then return end
+
+    local name = preview.crate:GetContentName()
+    local blocked = preview.model:GetColor().r > 200
+
+    draw.SimpleTextOutlined(
+        "Vorschau: " .. (name ~= "" and name or "Objekt") .. (blocked and " - kein Platz" or " - Platz frei"),
+        "MLIB.18", ScrW() / 2, ScrH() * 0.82,
+        blocked and COLOR_BLOCKED or COLOR_FREE,
+        TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 1, Color(0, 0, 0, 200))
 end)
