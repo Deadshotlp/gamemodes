@@ -474,6 +474,18 @@ function PD.Admin:Menu(wo)
         surface.DrawRect(0, h - 1, w, 1)
     end
 
+    -- Tabs teilen sich die Breite, damit jeder neue Tab sichtbar bleibt
+    tabBar.PerformLayout = function(s, w, h)
+        local buttons = s:GetChildren()
+        table.sort(buttons, function(a, b) return (a._order or 0) < (b._order or 0) end)
+
+        local bw = math.floor(w / math.max(#buttons, 1))
+        for i, btn in ipairs(buttons) do
+            btn:SetPos((i - 1) * bw, 0)
+            btn:SetSize(i == #buttons and w - (i - 1) * bw or bw, h)
+        end
+    end
+
     -- Content Panel
     local rightPanel = vgui.Create("DPanel", content)
     rightPanel:Dock(FILL)
@@ -486,8 +498,7 @@ function PD.Admin:Menu(wo)
     local function CreateTab(name, id, func)
         local tabBtn = vgui.Create("DButton", tabBar)
         tabBtn:SetText("")
-        tabBtn:Dock(LEFT)
-        tabBtn:SetWide(PD.W(180))
+        tabBtn._order = table.Count(tabs) + 1
         
         tabBtn._active = false
         tabBtn._hover = 0
