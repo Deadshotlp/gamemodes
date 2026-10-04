@@ -241,12 +241,19 @@ local COLOR_FREE = Color(80, 255, 120, 140)
 local COLOR_BLOCKED = Color(255, 70, 70, 140)
 
 local preview = nil -- {crate, model (ClientsideModel), info}
+local UpdatePreview -- weiter unten definiert
+
+-- Alle je erzeugten Geisterbilder - haengt an PD, damit auch nach einem
+-- Lua-Refresh (der die lokale Variable verliert) keines stehen bleibt.
+PD.Kiste.PreviewGhosts = PD.Kiste.PreviewGhosts or {}
 
 local function StopPreview()
-    if preview and IsValid(preview.model) then
-        preview.model:Remove()
+    for ghost in pairs(PD.Kiste.PreviewGhosts) do
+        if IsValid(ghost) then ghost:Remove() end
     end
 
+    PD.Kiste.PreviewGhosts = {}
+    timer.Remove("PD.Kiste.Preview")
     preview = nil
 end
 
@@ -293,10 +300,25 @@ net.Receive("PD.Kiste.PreviewData", function()
     ghost:SetMaterial("models/debug/debugwhite")
     ghost:SetNoDraw(false)
 
+    PD.Kiste.PreviewGhosts[ghost] = true
     preview = {crate = crate, model = ghost, info = info}
+
+    -- Wird die Kiste entfernt (Aufbauen, Remover, Cleanup), sofort weg.
+    crate:CallOnRemove("PD.Kiste.Preview", function(removed)
+        -- Nur wenn die Vorschau noch zu dieser Kiste gehoert.
+        if preview and preview.crate == removed then StopPreview() end
+    end)
+
+    -- Timer statt Think-Hook: hook.Call bricht ab, sobald ein anderer
+    -- Think-Hook einen Wert zurueckgibt - dann bemerkte die Vorschau nicht,
+    -- dass die Kiste weg war.
+    timer.Create("PD.Kiste.Preview", 0, 0, UpdatePreview)
+    UpdatePreview()
 end)
 
-hook.Add("Think", "PD.Kiste.Preview", function()
+hook.Remove("Think", "PD.Kiste.Preview")
+
+UpdatePreview = function()
     if not preview then return end
 
     local crate = preview.crate
@@ -314,11 +336,17 @@ hook.Add("Think", "PD.Kiste.Preview", function()
     ghost:SetPos(pos)
     ghost:SetAngles(ang)
     ghost:SetColor(hull.Hit and COLOR_BLOCKED or COLOR_FREE)
-end)
+end
 
 -- Hinweis unten am Bildschirm, solange die Vorschau laeuft.
 hook.Add("HUDPaint", "PD.Kiste.PreviewHint", function()
-    if not preview or not IsValid(preview.crate) then return end
+    if not preview then return end
+
+    -- Zweite Absicherung: Kiste oder Geisterbild weg -> Vorschau beenden.
+    if not IsValid(preview.crate) or not IsValid(preview.model) then
+        StopPreview()
+        return
+    end
 
     local name = preview.crate:GetContentName()
     local blocked = preview.model:GetColor().r > 200
