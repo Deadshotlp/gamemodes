@@ -12,15 +12,17 @@ util.AddNetworkString("PD.Char.JobChange")
 util.AddNetworkString("PD.Char.SetJobFunction")
 util.AddNetworkString("PD.Char.DefaultFaction")
 
+-- Format und Sperrliste kommen aus der Charakter-Konfiguration (Web-Panel,
+-- sh_char_config.lua). Standard wie bisher: "##-####".
 local function GenerateRandomNumber()
-    local prefix = string.format("%02d", math.random(10, 99))
-    local suffix = string.format("%04d", math.random(1000, 9999))
-    return prefix .. "-" .. suffix
+    return PD.Char.GenerateID()
 end
 
 -- Direkt auf dem Zwischenspeicher: LoadAllChars kopiert jedes Mal alle
 -- Charaktere aller Spieler, hier wird nur gelesen.
 local function IDCheck(id)
+    if PD.Char.IsIDBlocked(id) then return false end
+
     local tbl = PD.Char.Storage and PD.Char.Storage.cache or {}
 
     for _, chars in pairs(tbl) do
@@ -116,7 +118,7 @@ local function CanCreateChar(ply, name, chars)
         return false, "Charaktere werden noch geladen, bitte kurz warten."
     end
 
-    local maxSlots = math.min(PD.Char.UserGroupChar[ply:GetUserGroup()] or 2, PD.Char.MaxChars or 5)
+    local maxSlots = PD.Char.GetSlotLimit(ply)
     if #chars >= maxSlots then
         return false, "Du hast bereits die maximale Anzahl an Charakteren (" .. maxSlots .. ")."
     end
@@ -161,8 +163,17 @@ net.Receive("PD.Char.Create", function(_, ply)
         return
     end
 
+    -- Begrenzt: ein zu kurzes ID-Format im Panel darf den Server nicht in
+    -- einer Endlosschleife festhalten, wenn alle IDs vergeben sind.
     local id = GenerateRandomNumber()
+    local attempts = 1
     while not IDCheck(id) do
+        attempts = attempts + 1
+        if attempts > 1000 then
+            PD.Notify("Es ist keine freie Charakter-ID mehr verfügbar. Bitte melde dich bei der Serverleitung.", Color(255, 60, 60), false, ply)
+            return
+        end
+
         id = GenerateRandomNumber()
     end
 

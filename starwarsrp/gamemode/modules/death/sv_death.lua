@@ -42,11 +42,14 @@ local function createRagdoll(ply)
 
     ragdoll:SetNW2Entity("PD.DM.RagdollOwner", ply)
     ply:SetNW2Entity("PD.DM.Ragdoll", ragdoll)
+    -- Verfolgerkamera statt Todeskamera: OBS_MODE_DEATHCAM bleibt fest am
+    -- Sterbeort stehen und dreht sich nur zur Leiche. Wurde die Leiche
+    -- weggezogen oder getragen, blieb die Kamera zurueck. CHASE folgt der
+    -- Leiche (und nimmt den Sichtbereich des Spielers mit).
     ply:SpectateEntity(ragdoll)
-    ply:Spectate(OBS_MODE_DEATHCAM)
+    ply:Spectate(OBS_MODE_CHASE)
 
     ply:SetViewOffset(Vector(0,0,64))
-    print(ply:GetViewOffset())
 
     return ragdoll
 end
@@ -119,13 +122,39 @@ end)
 ]]
 hook.Remove("PlayerSpawn", "PD.PlayerSpawn")
 
+-- Name des Verursachers fuer das Log. Frueher immer attacker:Nick() - das gibt
+-- es nur bei Spielern. Bei NPCs brach der Hook mit einem Fehler ab, bevor die
+-- Leiche entstand: kein Tragen, kein Wiederbeleben, kein Todesbildschirm.
+local function AttackerName(attacker, victim)
+    if not IsValid(attacker) then return nil end
+    if attacker == victim then return "sich selbst" end
+
+    if attacker:IsPlayer() then
+        return attacker:Nick() .. " (" .. attacker:SteamID() .. ")"
+    end
+
+    -- Fahrzeug/Geschuetz mit Fahrer: der Fahrer zaehlt.
+    if attacker.GetDriver and IsValid(attacker:GetDriver()) and attacker:GetDriver():IsPlayer() then
+        local driver = attacker:GetDriver()
+        return driver:Nick() .. " (" .. driver:SteamID() .. ", " .. attacker:GetClass() .. ")"
+    end
+
+    if attacker:IsNPC() or attacker:IsNextBot() then
+        return "NPC " .. (attacker.PrintName or attacker:GetClass())
+    end
+
+    return attacker:GetClass()
+end
+
 hook.Add("PlayerDeath", "PD.PlayerDeath", function(victim, inflictor, attacker)
-    if not IsValid(victim) or not IsValid(attacker) then return end
+    -- Nur das Opfer muss gueltig sein: auch bei Tod durch die Welt (Fall,
+    -- Explosion ohne Verursacher) braucht es Leiche und Todesbildschirm.
+    if not IsValid(victim) then return end
 
-    local victim_name = victim:Nick() .." (" .. victim:SteamID() .. ")"
-    local attacker_name = attacker and attacker:Nick() or "Unbekannt" .." (" .. attacker:SteamID() or "Unbekannt" .. ")" or "Environment"
+    local victim_name = victim:Nick() .. " (" .. victim:SteamID() .. ")"
+    local attacker_name = AttackerName(attacker, victim)
 
-    PD.Death.Kill(victim, victim_name, attacker, attacker_name)
+    PD.Death.Kill(victim, victim_name, attacker_name ~= nil, attacker_name)
 
     if victim:GetRagdollEntity() and IsValid(victim:GetRagdollEntity()) then
         victim:GetRagdollEntity():Remove()

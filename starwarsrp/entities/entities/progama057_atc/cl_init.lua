@@ -46,6 +46,7 @@ local function GetSelectBarPos()
 	return startY + spacingY * selectBar - 35
 end
 
+PD.ATC = PD.ATC or {} -- wurde nirgends angelegt: Clientdatei brach beim Laden ab
 PD.ATC.ActiveVehicle = {}
 -- PD.ATC.ActiveVehicle[1] = {
 -- 	vehicle = "ARC-170",

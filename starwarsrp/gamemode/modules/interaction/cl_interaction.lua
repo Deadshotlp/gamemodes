@@ -179,9 +179,22 @@ function PD.IA.OtherInteraction()
     local trace = ply:GetEyeTrace()
     local ent = trace.Entity
 
-    if not ent:IsValid() and not PD.IA.CurrentBone.looked_at then return end
+    -- Das Ziel kann verschwunden sein (Kiste aufgebaut, Leiche entfernt):
+    -- dann zuruecksetzen statt auf ein NULL-Entity zuzugreifen.
+    local last = PD.IA.LastEntity and PD.IA.LastEntity.ent
+    if last ~= nil and not IsValid(last) then
+        ResetBoneInfo()
+        PD.IA.LastEntity = {}
+        return
+    end
 
-    if ply:GetPos():Distance(ent:GetPos()) >= 200 or (PD.IA.LastEntity.ent and ply:GetPos():Distance(PD.IA.LastEntity.ent:GetPos()) >= 200) then return end
+    if not IsValid(ent) then
+        -- Weggeschaut, aber das Menue haengt noch am alten Ziel: dort bleiben.
+        if not PD.IA.CurrentBone.looked_at or not IsValid(last) then return end
+        ent = last
+    end
+
+    if ply:GetPos():Distance(ent:GetPos()) >= 200 or (IsValid(last) and ply:GetPos():Distance(last:GetPos()) >= 200) then return end
 
     RequestEntityInformation(ent, "other")
 

@@ -59,6 +59,25 @@ local function defaultOnConnectionFailed(error_text)
 	hook.Call("PD.Gamemode.DatabaseConnectionFailed", nil, error_text)
 end
 
+--[[
+	Ruft einen Abfrage-Callback abgesichert auf.
+
+	mysqloo arbeitet fertige Abfragen gesammelt in einem Think-Hook ab. Warf
+	ein Callback einen Fehler, brach das die ganze Runde ab - die Antworten der
+	uebrigen Abfragen dieser Runde gingen verloren. So fehlten nach einem
+	Neustart die Perma-Props, weil der ArcCW-Callback im selben Moment
+	abstuerzte. Jetzt wird der Fehler gemeldet (mit Aufrufer) und die Runde
+	laeuft weiter.
+]]
+local function SafeCallback(fn, origin, ...)
+	local ok, err = xpcall(fn, traceback, ...)
+
+	if not ok then
+		ErrorNoHalt("[PD.SQL] Fehler im Callback: " .. tostring(err)
+			.. (origin and origin ~= "" and ("\nAbfrage gestartet in:" .. origin) or "") .. "\n")
+	end
+end
+
 local function quoteIdentifier(identifier)
 	identifier = tostring(identifier or "")
 	identifier = identifier:gsub("`", "``")
@@ -298,7 +317,7 @@ function SQL.Commit(callback, onError)
 
 	tx.onSuccess = function(...)
 		if isfunction(callback) then
-			callback(...)
+			SafeCallback(callback, tx.SQL_traceback, ...)
 		end
 	end
 
@@ -364,7 +383,7 @@ function SQL.Query(queryString, callback, firstRow, callbackObj, retryCount)
 				data = data and data[1] or nil
 			end
 
-			q.SQL_callback(data, q.SQL_callback_obj)
+			SafeCallback(q.SQL_callback, q.SQL_traceback, data, q.SQL_callback_obj)
 		end
 	end
 
