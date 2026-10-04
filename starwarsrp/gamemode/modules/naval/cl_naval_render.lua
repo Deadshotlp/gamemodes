@@ -226,10 +226,39 @@ end
 -- Schiffe
 --------------------------------------------------------------------------------
 
--- Laenge eines Modells in Einheiten. Manche Modelle haben zu kleine
--- Kollisionsgrenzen (dann waeren sie viel zu gross skaliert), daher das
--- Groessere aus Kollisions- und Darstellungsgrenzen.
+-- Laenge eines Modells in Einheiten. Die im Modell hinterlegten Grenzen
+-- stimmen bei manchen Schiffen nicht (Recusant: viel zu klein -> riesig
+-- skaliert), daher aus den echten Eckpunkten gemessen und je Modell gemerkt.
+local meshLengths = {}
+
+local function MeshLength(path)
+    if meshLengths[path] ~= nil then return meshLengths[path] end
+
+    local length = false
+    local ok, meshes = pcall(util.GetModelMeshes, path, 0)
+
+    if ok and meshes then
+        local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+        for _, part in ipairs(meshes) do
+            for _, v in ipairs(part.triangles or {}) do
+                local p = v.pos
+                if p.x < minX then minX = p.x end
+                if p.x > maxX then maxX = p.x end
+                if p.y < minY then minY = p.y end
+                if p.y > maxY then maxY = p.y end
+            end
+        end
+        if maxX > minX then length = math.max(maxX - minX, maxY - minY) end
+    end
+
+    meshLengths[path] = length
+    return length
+end
+
 function Naval.ModelLength(m)
+    local fromMesh = MeshLength(m:GetModel())
+    if fromMesh and fromMesh > 1 then return fromMesh end
+
     local length = 1
     local mins, maxs = m:GetModelBounds()
     if mins then length = math.max(length, maxs.x - mins.x, maxs.y - mins.y) end
