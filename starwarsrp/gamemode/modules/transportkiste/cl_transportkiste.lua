@@ -3,6 +3,10 @@
     Fortschrittsbalken. Ob gepackt werden darf, entscheidet der Server.
 ]]
 
+-- cl_ laedt vor sh_ (alphabetisch): PD.Kiste gibt es hier beim Serverstart
+-- noch nicht. sh_transportkiste.lua legt es ebenfalls mit "or {}" an.
+PD.Kiste = PD.Kiste or {}
+
 local ACTION_PACK, ACTION_UNPACK = 1, 2
 
 net.Receive("PD.Kiste.Config", function()
