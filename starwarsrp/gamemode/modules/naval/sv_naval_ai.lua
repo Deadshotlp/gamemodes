@@ -182,12 +182,71 @@ Handlers.jump = function(ship, order)
     return false
 end
 
+-- Angreifen: auf bevorzugte Gefechtsentfernung (60 % der Waffenreichweite)
+-- gehen, dort mit dem Bug zum Ziel halten. Fertig, wenn das Ziel weg,
+-- zerstoert oder kampfunfaehig ist.
+Handlers.attack = function(ship, order)
+    local target = Naval.Ships[order.targetId or -1]
+    if not target or target.systemId ~= ship.systemId or target.state == S.DESTROYED
+        or target.state == S.DISABLED then
+        if ship.subs then ship.subs.target = nil end
+        return true
+    end
+
+    if Naval.Combat then
+        local subs = Naval.Combat(ship)
+        subs.target = target.id
+        if subs.roe == "hold" then subs.roe = "return" end
+    end
+
+    local pref = math.max(3000, (Naval.MaxWeaponRange and Naval.MaxWeaponRange(ship) or 20000) * 0.6)
+    local rel = V3.Sub(target.pos, ship.pos)
+    local dist = V3.Len(rel)
+
+    if dist > pref * 1.15 then
+        FlyTo(ship, V3.Sub(target.pos, V3.Scale(V3.Normalize(rel), pref)), pref * 0.1)
+    else
+        ship.ctrl.autopilot = {dir = rel}
+        ship.ctrl.throttle = dist < pref * 0.6 and 0 or 0.15
+    end
+
+    return false
+end
+
+-- Flucht: KI-Schiffe unter 20 % Huelle springen ins naechste System
+local function CheckFlee(ship)
+    if ship.fleeing or (ship.flags and ship.flags.noFlee) or ship.state ~= S.NORMAL then return end
+
+    local class = ship:Class()
+    if not class or (ship.hull or class.hull) > class.hull * 0.2 then return end
+    if ship.subs and Naval.SubFactor and Naval.SubFactor(ship, "hyperdrive") <= 0 then return end
+
+    local here = Naval.Systems[ship.systemId]
+    if not here then return end
+
+    local best, bestD
+    for id, s in pairs(Naval.Systems) do
+        if id ~= ship.systemId and s.jumpable and not s.hidden then
+            local d = Naval.SystemDistance(here, s)
+            if not bestD or d < bestD then best, bestD = s, d end
+        end
+    end
+
+    if best then
+        ship.fleeing = true
+        Naval.SetOrders(ship, {{type = "jump", systemId = best.id}}, "KI (Flucht)")
+        Naval.Event(ship, "flee", {to = best.id})
+    end
+end
+
 function Naval.AITick()
     for _, ship in pairs(Naval.Ships) do
         if ship:IsPlayerShip() or (ship.flags and ship.flags.aiOff) then continue end
 
         local state = ship.state
         if state == S.DESTROYED or state == S.DISABLED then continue end
+
+        CheckFlee(ship)
 
         local queue = ship.orders and ship.orders.queue
         local order = queue and queue[1]

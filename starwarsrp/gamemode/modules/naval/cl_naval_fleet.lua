@@ -19,7 +19,8 @@ local C = Naval.C
 local STATE_LABEL = {normal = "normal", spooling = "fährt hoch", jumping = "springt", hyperspace = "Hyperraum",
     exiting = "Austritt", disabled = "kampfunfähig", destroyed = "zerstört"}
 
-local ORDER_LABEL = {hold = "halten", move = "fliegt", patrol = "Patrouille", orbit = "Orbit", jump = "Sprung"}
+local ORDER_LABEL = {hold = "halten", move = "fliegt", patrol = "Patrouille", orbit = "Orbit", jump = "Sprung", attack = "Angriff"}
+local ROE_LABEL = {hold = "Feuer halten", ["return"] = "Nur zurückschießen", free = "Feuer frei (alle Feinde)"}
 
 function Naval.FindSystemByText(text)
     local static = C.static
@@ -135,8 +136,20 @@ function Naval.OpenFleetCommand()
         tac.Selected = id
     end
 
-    list.OnRowSelected = function(_, _, line) Select(line.ShipId) end
-    tac.OnSelect = function(_, id) if id then Select(id) end end
+    -- Angriffsmodus: der naechste gewaehlte Kontakt wird Ziel
+    local attackMode = false
+    local function Choose(id)
+        if attackMode and selected and id and id ~= selected then
+            Send("order", {id = selected, type = "attack", targetId = id})
+            attackMode = false
+            tac.PickHint = nil
+            return
+        end
+        Select(id)
+    end
+
+    list.OnRowSelected = function(_, _, line) Choose(line.ShipId) end
+    tac.OnSelect = function(_, id) if id then Choose(id) end end
 
     local listKey
     local function RefreshList()
@@ -201,11 +214,38 @@ function Naval.OpenFleetCommand()
         draw.SimpleText(("#%d %s"):format(r.id, r.name), "MLIB.18", 8, 4, COL.text)
         draw.SimpleText((class and class.name or r.classId) .. " - " .. (faction and faction.name or r.factionId)
             .. " - " .. Naval.SystemName(r.systemId), "MLIB.14", 8, 26, COL.dim)
-        local line = (STATE_LABEL[r.state] or r.state) .. ", " .. r.speed .. " m/s"
+        local line = (STATE_LABEL[r.state] or r.state) .. ", " .. r.speed .. " m/s, Hülle " .. (r.hull or 100) .. " %"
         if r.order then line = line .. ", " .. (ORDER_LABEL[r.order] or r.order) .. (r.orders > 1 and (" (+" .. (r.orders - 1) .. ")") or "") end
         if r.to then line = line .. " -> " .. Naval.SystemName(r.to) end
         draw.SimpleText(line, "MLIB.14", 8, 46, COL.text)
     end)
+
+    B.Info(26, function(s, w, h)
+        local r = selected and AdminShip(selected)
+        if not r or r.map then return end
+        local target = r.target and AdminShip(r.target)
+        draw.SimpleText((ROE_LABEL[r.roe] or "-") .. (target and ("  -  Ziel: " .. target.name) or ""), "MLIB.14", 8, 5, COL.text)
+    end)
+
+    local cRoe = B.Combo({{"hold", ROE_LABEL.hold}, {"return", ROE_LABEL["return"]}, {"free", ROE_LABEL.free}}, "return")
+    cRoe.OnSelect = function(_, _, _, value)
+        if selected then Send("roe", {id = selected, roe = value}) end
+    end
+
+    B.Buttons({
+        {"Angreifen (Ziel wählen)", function()
+            if not selected then return end
+            attackMode = true
+            tac.PickHint = "Ziel in der Karte oder Liste anklicken"
+        end, COL.bad},
+        {"Reparieren", function()
+            local r = selected and AdminShip(selected)
+            if not r then return end
+            Derma_Query(r.name .. " vollständig reparieren?", "Flottenkommando", "Reparieren", function()
+                Send("repair", {id = r.id})
+            end, "Abbrechen")
+        end, COL.ok},
+    })
 
     B.Buttons({
         {"Halten", function() if selected then Send("order", {id = selected, type = "hold"}) end end},

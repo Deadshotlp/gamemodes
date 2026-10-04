@@ -195,6 +195,11 @@ end
 
 local lastSystem
 
+local function HullPct(ship)
+    local max = (ship:Class() or {}).hull or 1
+    return math.Clamp(math.Round((ship.hull or max) / max * 100), 0, 100)
+end
+
 local function SendSnap()
     local mapShip = Naval.GetMapShip()
     if not mapShip then return end
@@ -230,6 +235,7 @@ local function SendSnap()
         net.WriteFloat(mapShip.vel.x) net.WriteFloat(mapShip.vel.y) net.WriteFloat(mapShip.vel.z)
         net.WriteFloat(mapShip.angVel.x) net.WriteFloat(mapShip.angVel.y) net.WriteFloat(mapShip.angVel.z)
         net.WriteFloat(mapShip.ctrl.throttle or 0)
+        net.WriteUInt(HullPct(mapShip), 7)
 
         net.WriteUInt(#list, 12)
         for _, ship in ipairs(list) do
@@ -238,6 +244,7 @@ local function SendSnap()
             net.WriteFloat(rel.x) net.WriteFloat(rel.y) net.WriteFloat(rel.z)
             WriteQuat(ship.rot)
             net.WriteUInt(Naval.StateIndex[ship.state] or 1, 4)
+            net.WriteUInt(HullPct(ship), 7)
         end
     net.Send(recipients)
 end

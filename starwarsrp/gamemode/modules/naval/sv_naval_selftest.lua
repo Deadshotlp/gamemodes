@@ -102,7 +102,49 @@ function Naval.SimSelfTest()
         check("Coruscant und Tatooine gefunden", false)
     end
 
-    -- 7. Netzwerk: Groesse der festen Daten
+    -- 7. Testgefecht Venator gegen Munificent auf 30 km, Bug an Bug
+    if Naval.CombatFire and Naval.Classes.munificent then
+        local a, b = TestShip("venator"), TestShip("munificent")
+        a.id, b.id = 64001, 64002
+        a.flags.test, b.flags.test = true, true
+        b.pos = {x = 30000, y = 0, z = 0}
+        b.rot = Q.FromAngle(0, 180, 0)
+        Naval.Combat(a).roe = "free"
+        Naval.Combat(b).roe = "free"
+
+        local tc, firstHull = 0, nil
+        local hullA, hullB = a.hull, b.hull
+        while tc < 1800 and a.hull > 0 and b.hull > 0 do
+            local sink = {}
+            Naval.CombatRegen(a, 0.5)
+            Naval.CombatRegen(b, 0.5)
+            Naval.CombatFire(a, b, 0.5, sink)
+            Naval.CombatFire(b, a, 0.5, sink)
+            for _, hit in ipairs(sink) do
+                local hitTarget = hit.target == a.id and a or b
+                local attacker = hit.attacker == a.id and a or b
+                Naval.ApplyHit(hitTarget, attacker, hit.type, hit.amount)
+            end
+            if not firstHull and (a.hull < hullA or b.hull < hullB) then firstHull = tc end
+            tc = tc + 0.5
+        end
+
+        local loser = a.hull <= 0 and a or (b.hull <= 0 and b or nil)
+        local damagedSubs = 0
+        for id, hp in pairs(loser and loser.subs.hp or {}) do
+            local max = 1
+            for _, s in ipairs(loser:Class().subsystems or {}) do if s.id == id then max = s.hp end end
+            if hp < max then damagedSubs = damagedSubs + 1 end
+        end
+
+        check("Schilde halten zuerst", (firstHull or 0) >= 10, ("erster Hüllenschaden nach %.0f s"):format(firstHull or -1))
+        check("Gefecht dauert 1-15 min", loser ~= nil and tc >= 60 and tc <= 900,
+            ("%.0f s, %s verliert (Hülle %d / %d)"):format(tc, loser and loser.classId or "keiner", math.Round(a.hull), math.Round(b.hull)))
+        check("Verlierer zerstört, Subsysteme beschädigt", loser ~= nil and loser.state == Naval.State.DESTROYED and damagedSubs > 0,
+            damagedSubs .. " Subsysteme beschädigt")
+    end
+
+    -- 8. Netzwerk: Groesse der festen Daten
     if Naval.BuildStaticForTest then
         local payload = Naval.BuildStaticForTest()
         local bytes = #(util.Compress(util.TableToJSON(payload)) or "")

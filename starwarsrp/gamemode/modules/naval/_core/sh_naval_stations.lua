@@ -34,6 +34,23 @@ PD.Naval.Stations = {
     },
 }
 
+-- Kampfstationen (Stufe 2)
+PD.Naval.Stations.weapons = {
+    name = "Waffenleitstand",
+    model = "models/lordtrilobite/starwars/isd/imp_console_large01.mdl",
+    desc = "Ziel, Batterien, Feuer",
+}
+PD.Naval.Stations.shields = {
+    name = "Schildkontrolle",
+    model = "models/lordtrilobite/starwars/isd/imp_console_medium03.mdl",
+    desc = "Zonen, Strahlen/Partikel, heben/senken",
+}
+PD.Naval.Stations.engineering = {
+    name = "Maschinenraum",
+    model = "models/lordtrilobite/starwars/isd/imp_console_large01.mdl",
+    desc = "Reaktor, Energieverteilung, Schäden",
+}
+
 -- Taktik-Hologramm: Schalter loesen direkt eine Aktion aus (kein Fenster),
 -- der Projektor markiert nur den Ort, an dem das Hologramm erscheint.
 PD.Naval.Stations.holo_power = {

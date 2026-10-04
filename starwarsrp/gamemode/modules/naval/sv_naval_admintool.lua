@@ -57,6 +57,9 @@ local function BuildData()
             systemId = ship.systemId, state = ship.state, speed = math.Round(ship:Speed()),
             order = ship.orders.queue[1] and ship.orders.queue[1].type or nil,
             orders = #ship.orders.queue, map = ship:IsPlayerShip() or nil,
+            hull = math.Round((ship.hull or 0) / math.max((ship:Class() or {}).hull or 1, 1) * 100),
+            roe = ship.subs and ship.subs.roe or nil,
+            target = ship.subs and ship.subs.target or nil,
         }
 
         if mapShip and ship.systemId == mapShip.systemId then
@@ -212,6 +215,10 @@ Actions.order = function(ply, args)
         local system = Naval.Systems[tostring(args.systemId or "")]
         if not system then Notify(ply, "System unbekannt") return end
         order = {type = "jump", systemId = system.id}
+    elseif kind == "attack" then
+        local target = Naval.Ships[tonumber(args.targetId) or -1]
+        if not target or target == ship or target.systemId ~= ship.systemId then Notify(ply, "Ziel nicht im selben System") return end
+        order = {type = "attack", targetId = target.id}
     elseif kind == "jumpnear" then
         if not mapShip then return end
         order = {type = "jump", systemId = mapShip.systemId, arriveNear = mapShip.id}
@@ -249,6 +256,26 @@ Actions.relocate = function(ply, args)
     ship:Log("admin", ply:Nick(), "Schiff nach " .. system.name .. " versetzt")
     Notify(ply, "Map-Schiff nach " .. system.name .. " versetzt", true)
     Log(ply, "Map-Schiff nach " .. system.name .. " versetzt")
+end
+
+Actions.roe = function(ply, args)
+    local ship = GetShip(ply, args)
+    if not ship or not Naval.Combat then return end
+    local roe = args.roe
+    if roe ~= "hold" and roe ~= "return" and roe ~= "free" then return end
+
+    Naval.Combat(ship).roe = roe
+    ship.dirty = true
+    Log(ply, "Feuerverhalten #" .. ship.id .. " " .. ship.name .. ": " .. roe)
+end
+
+Actions.repair = function(ply, args)
+    local ship = GetShip(ply, args, true)
+    if not ship or not Naval.Repair then return end
+
+    Naval.Repair(ship)
+    Notify(ply, ship.name .. " repariert", true)
+    Log(ply, "Schiff #" .. ship.id .. " " .. ship.name .. " repariert")
 end
 
 Actions.console_lock = function(ply, args)

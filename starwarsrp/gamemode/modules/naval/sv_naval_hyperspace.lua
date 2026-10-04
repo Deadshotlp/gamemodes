@@ -56,6 +56,11 @@ end
 function Naval.CanJump(ship, toSystemId)
     if ship.state ~= S.NORMAL then return false, "Antrieb nicht bereit (" .. tostring(ship.state) .. ")" end
 
+    for _, blocker in pairs(Naval.JumpBlockers or {}) do
+        local reason = blocker(ship)
+        if reason then return false, reason end
+    end
+
     local to = Naval.Systems[toSystemId]
     if not to then return false, "Unbekanntes Ziel" end
     if not to.jumpable then return false, "Ziel ist gesperrt" end

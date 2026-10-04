@@ -334,7 +334,12 @@ local function DrawShips(view, M, camOffset)
                     m:SetPos(pos)
                     m:SetAngles(Q.ToAngle(Q.Mul(M, s.rot)))
                     m:SetupBones()
+
+                    -- Wrack dunkel, kampfunfaehig gedimmt
+                    local dim = s.state == "destroyed" and 0.25 or (s.state == "disabled" and 0.55 or 1)
+                    if dim < 1 then render.SetColorModulation(dim, dim * 0.9, dim * 0.85) end
                     m:DrawModel()
+                    if dim < 1 then render.SetColorModulation(1, 1, 1) end
                 end
             end
         end
@@ -444,6 +449,19 @@ function Naval.RenderSpace()
             Lighting(sunDir)
             DrawShips(view, M, camOffset)
             render.SuppressEngineLighting(false)
+
+            -- Kampfeffekte (cl_naval_fx.lua)
+            if Naval.DrawFX then
+                local scale, far = Scale(), Far()
+                Naval.DrawFX(view, function(p)
+                    local rel = V3.Sub(p, view.pos)
+                    local len = V3.Len(rel)
+                    if len < 1 then return nil end
+                    local dir = ToMapVector(M, rel)
+                    dir:Normalize()
+                    return dir * math.min(len / scale, far) - camOffset
+                end)
+            end
         cam.End3D()
     end
 

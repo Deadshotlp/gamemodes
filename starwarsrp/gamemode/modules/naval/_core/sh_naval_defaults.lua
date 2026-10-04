@@ -48,6 +48,9 @@ D.Settings = {
     route_speed_factor = 0.5,     -- Sprungzeit-Faktor entlang einer Hauptroute
     route_minor_factor = 0.7,     -- Sprungzeit-Faktor entlang einer Nebenroute
     route_junction_dist = 25,     -- pc: Umstieg zwischen Routen bis zu diesem Abstand
+    combat_damage_mult = 0.5,     -- Faktor auf allen Waffenschaden (Kampfdauer)
+    combat_shield_regen_mult = 1, -- Faktor auf das Nachladen der Schilde
+    combat_wreck_time = 20,       -- s: Wrack sichtbar, dann entfernt
     holo_radius = 60,             -- Einheiten: Radius des Taktik-Hologramms
     holo_height = 45,             -- Einheiten ueber dem Projektor
 }

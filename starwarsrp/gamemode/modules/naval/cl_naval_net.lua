@@ -125,6 +125,7 @@ net.Receive("PD.Naval.Snap", function()
     snap.vel = {x = net.ReadFloat(), y = net.ReadFloat(), z = net.ReadFloat()}
     snap.angVel = {x = net.ReadFloat(), y = net.ReadFloat(), z = net.ReadFloat()}
     snap.throttle = net.ReadFloat()
+    snap.hull = net.ReadUInt(7)
 
     local count = net.ReadUInt(12)
     for _ = 1, count do
@@ -133,6 +134,7 @@ net.Receive("PD.Naval.Snap", function()
             rel = {x = net.ReadFloat(), y = net.ReadFloat(), z = net.ReadFloat()},
             rot = ReadQuat(),
             state = StateName[net.ReadUInt(4)] or "normal",
+            hull = net.ReadUInt(7),
         }
     end
 
@@ -169,7 +171,7 @@ function C.View(t)
         end
     end
 
-    local view = {systemId = a.systemId, state = a.state, throttle = a.throttle, vel = a.vel, id = a.id, ships = {}}
+    local view = {systemId = a.systemId, state = a.state, throttle = a.throttle, vel = a.vel, id = a.id, hull = a.hull, ships = {}}
 
     if b and b.systemId == a.systemId and b.t > a.t then
         local f = math.Clamp((t - a.t) / (b.t - a.t), 0, 1)
@@ -181,9 +183,9 @@ function C.View(t)
             local relA = V3.Add(a.pos, sa.rel)
 
             if sb then
-                view.ships[id] = {pos = V3.Lerp(relA, V3.Add(b.pos, sb.rel), f), rot = Q.Slerp(sa.rot, sb.rot, f), state = sb.state}
+                view.ships[id] = {pos = V3.Lerp(relA, V3.Add(b.pos, sb.rel), f), rot = Q.Slerp(sa.rot, sb.rot, f), state = sb.state, hull = sb.hull}
             else
-                view.ships[id] = {pos = relA, rot = sa.rot, state = sa.state}
+                view.ships[id] = {pos = relA, rot = sa.rot, state = sa.state, hull = sa.hull}
             end
         end
     else
@@ -204,7 +206,7 @@ function C.View(t)
                 pos = V3.Add(pos, V3.Scale(V3.Sub(pos, old), dt / span))
             end
 
-            view.ships[id] = {pos = pos, rot = sa.rot, state = sa.state}
+            view.ships[id] = {pos = pos, rot = sa.rot, state = sa.state, hull = sa.hull}
         end
     end
 

@@ -79,6 +79,8 @@ local function AtStation(ply, station)
     return ply:GetPos():Distance(ent:GetPos()) <= Naval.StationUseRange * 1.5
 end
 
+Naval.AtStation = AtStation
+
 local function RateLimit(ply, key, per)
     local now = CurTime()
     ply.PD_NavalRate = ply.PD_NavalRate or {}
@@ -338,6 +340,7 @@ timer.Create("PD.Naval.Status", 0.5, 0, function()
     end
 
     status.pathKey = Naval.PathKey and Naval.PathKey(ship)
+    status.combat = Naval.CombatStatus and Naval.CombatStatus(ship)
 
     local body, dist, limit = Naval.MassShadow(ship)
     if body then status.shadow = {name = body.name, dist = dist, limit = limit} end

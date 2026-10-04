@@ -180,13 +180,17 @@ concommand.Add("pd_naval_order", function(ply, _, args)
         local system = Naval.FindSystem(table.concat(args, " ", 3))
         if not system then Reply(ply, "System nicht gefunden") return end
         order = {type = "jump", systemId = system.id}
+    elseif kind == "attack" then
+        local target = Naval.Ships[tonumber(args[3]) or -1]
+        if not target or target.systemId ~= ship.systemId then Reply(ply, "Ziel nicht im selben System") return end
+        order = {type = "attack", targetId = target.id}
     elseif kind == "jumpnear" then
         -- Zum Map-Schiff springen und dort ankommen
         local mapShip = Naval.GetMapShip()
         if not mapShip then Reply(ply, "Kein Map-Schiff") return end
         order = {type = "jump", systemId = mapShip.systemId, arriveNear = mapShip.id}
     else
-        Reply(ply, "Befehl: hold | move x y z (km) | orbit <koerper> [km] | approach <koerper> | jump <system> | jumpnear")
+        Reply(ply, "Befehl: hold | move x y z (km) | orbit <koerper> [km] | approach <koerper> | jump <system> | jumpnear | attack <ziel-id>")
         return
     end
 
@@ -217,6 +221,35 @@ concommand.Add("pd_naval_edit", function(ply, _, args)
     Naval.SaveShip(ship)
     Reply(ply, "#" .. ship.id .. " -> " .. ship.name .. " / " .. ship.factionId)
     Log(ply, "Schiff #" .. ship.id .. " bearbeitet: " .. ship.name .. " / " .. ship.factionId)
+end)
+
+-- pd_naval_roe <id> hold|return|free
+concommand.Add("pd_naval_roe", function(ply, _, args)
+    if not Allowed(ply) or not NeedSim(ply) or not Naval.Combat then return end
+
+    local ship = Naval.Ships[tonumber(args[1]) or -1]
+    local roe = args[2]
+    if not ship or ship:IsPlayerShip() or (roe ~= "hold" and roe ~= "return" and roe ~= "free") then
+        Reply(ply, "pd_naval_roe <id> hold|return|free")
+        return
+    end
+
+    Naval.Combat(ship).roe = roe
+    ship.dirty = true
+    Reply(ply, "#" .. ship.id .. " Feuerverhalten " .. roe)
+    Log(ply, "Feuerverhalten #" .. ship.id .. ": " .. roe)
+end)
+
+-- pd_naval_repair <id>   (auch das Map-Schiff)
+concommand.Add("pd_naval_repair", function(ply, _, args)
+    if not Allowed(ply) or not NeedSim(ply) or not Naval.Repair then return end
+
+    local ship = Naval.Ships[tonumber(args[1]) or -1]
+    if not ship then Reply(ply, "Schiff nicht gefunden") return end
+
+    Naval.Repair(ship)
+    Reply(ply, "#" .. ship.id .. " repariert")
+    Log(ply, "Schiff #" .. ship.id .. " " .. ship.name .. " repariert")
 end)
 
 -- Alles sofort speichern (Web-Panel liest danach die Datenbank)

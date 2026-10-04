@@ -421,7 +421,7 @@ net.Receive("PD.Naval.ShipLog", function()
     if IsValid(logFrame) and logFrame.SetRows then logFrame.SetRows(rows) end
 end)
 
-local KIND_LABEL = {nav = "Navigation", manual = "Eintrag", admin = "Kommando", contact = "Kontakt", damage = "Schaden"}
+local KIND_LABEL = {nav = "Navigation", manual = "Eintrag", admin = "Kommando", contact = "Kontakt", damage = "Schaden", combat = "Gefecht"}
 
 local function OpenShipLog(console)
     local frame = UI.Frame("LOGBUCH", 760, 560)
