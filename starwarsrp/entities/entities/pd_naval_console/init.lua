@@ -15,6 +15,18 @@ function ENT:Initialize()
 
     local phys = self:GetPhysicsObject()
     if IsValid(phys) then phys:EnableMotion(false) end
+
+    -- Projektor: nur ein Ortsmarker
+    if def and def.marker then
+        self:SetNotSolid(true)
+        self:DrawShadow(false)
+    end
+end
+
+-- Immer an alle uebertragen: Admin-Liste und Hologramm brauchen auch
+-- Konsolen ausserhalb der Sichtweite.
+function ENT:UpdateTransmitState()
+    return TRANSMIT_ALWAYS
 end
 
 function ENT:Use(activator)

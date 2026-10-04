@@ -53,6 +53,15 @@ function Naval.OpenStation(ply, ent)
         return
     end
 
+    if def.action then
+        if (ply.PD_NavalActionNext or 0) > CurTime() then return end
+        ply.PD_NavalActionNext = CurTime() + 0.4
+
+        local fn = Naval.StationActions[def.action]
+        if fn then fn(ply, ent) end
+        return
+    end
+
     ply.PD_NavalStation = ent
 
     net.Start("PD.Naval.Station.Open")
@@ -76,6 +85,34 @@ local function RateLimit(ply, key, per)
     if (ply.PD_NavalRate[key] or 0) > now then return false end
     ply.PD_NavalRate[key] = now + per
     return true
+end
+
+--------------------------------------------------------------------------------
+-- Taktik-Hologramm (Schalter)
+--------------------------------------------------------------------------------
+
+Naval.StationActions = Naval.StationActions or {}
+
+local function HoloZoom(delta)
+    local zoom = math.Clamp(GetGlobalInt("PD.Naval.HoloZoom", Naval.HoloDefaultZoom) + delta, 1, #Naval.HoloRanges)
+    SetGlobalInt("PD.Naval.HoloZoom", zoom)
+    return Naval.HoloRanges[zoom]
+end
+
+Naval.StationActions.holo_toggle = function(ply, ent)
+    local on = not GetGlobalBool("PD.Naval.HoloOn", false)
+    SetGlobalBool("PD.Naval.HoloOn", on)
+    ent:EmitSound(on and "buttons/button24.wav" or "buttons/button18.wav", 65)
+end
+
+Naval.StationActions.holo_zoom_in = function(ply, ent)
+    HoloZoom(-1)
+    ent:EmitSound("buttons/button16.wav", 60)
+end
+
+Naval.StationActions.holo_zoom_out = function(ply, ent)
+    HoloZoom(1)
+    ent:EmitSound("buttons/button16.wav", 60, 90)
 end
 
 --------------------------------------------------------------------------------

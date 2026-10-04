@@ -4,7 +4,18 @@ include("shared.lua")
 local DIST = 350 * 350
 
 function ENT:Draw()
-    self:DrawModel()
+    local marker = self:StationDef()
+    if marker and marker.marker then
+        -- Projektor: nur fuer Admins sichtbar, solange das Hologramm aus ist
+        if not LocalPlayer():IsAdmin() or GetGlobalBool("PD.Naval.HoloOn", false) then return end
+        render.SetColorModulation(0.3, 0.7, 1)
+        render.SetBlend(0.5)
+        self:DrawModel()
+        render.SetBlend(1)
+        render.SetColorModulation(1, 1, 1)
+    else
+        self:DrawModel()
+    end
 
     if LocalPlayer():GetPos():DistToSqr(self:GetPos()) > DIST then return end
 

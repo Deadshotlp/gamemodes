@@ -53,6 +53,8 @@ local function UniverseToMap(shipRot)
     return Q.Mul(qbm, Q.Conj(shipRot)), qbm
 end
 
+Naval.UniverseToMap = UniverseToMap
+
 local function ToMapVector(M, v)
     local r = Q.RotateVec(M, v)
     return Vector(r.x, r.y, r.z)

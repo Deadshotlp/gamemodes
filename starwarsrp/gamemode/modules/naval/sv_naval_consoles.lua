@@ -60,8 +60,18 @@ function Naval.SpawnConsoles()
             return
         end
 
-        for _, row in ipairs(rows) do SpawnConsole(row) end
-        Naval.Log(#rows .. " Konsolen aufgestellt")
+        local count = 0
+        for _, row in ipairs(rows) do
+            if Naval.Stations[row.station] then
+                SpawnConsole(row)
+                count = count + 1
+            else
+                -- Station gibt es nicht mehr (z. B. alte Taktik-Konsole/Brueckenanzeige)
+                PD.SQL.Query("DELETE FROM `pd_naval_consoles` WHERE `id` = " .. (tonumber(row.id) or 0))
+                Naval.Log("Konsole '" .. tostring(row.station) .. "' entfernt (Station gibt es nicht mehr)")
+            end
+        end
+        Naval.Log(count .. " Konsolen aufgestellt")
     end)
 end
 

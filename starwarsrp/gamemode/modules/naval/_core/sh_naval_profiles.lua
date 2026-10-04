@@ -65,7 +65,6 @@ PD.Naval.Profiles["rp_venator_extensive_v1_4"] = {
         {station = "helm", pos = Vector(-7176, -3725, 1016), ang = Angle(0, -20, 0)},
         {station = "navcomputer", pos = Vector(-7272, -4552, 1088), ang = Angle(0, 0, 0)},
         {station = "hyperdrive", pos = Vector(-6711, -3725, 1016), ang = Angle(0, -160, 0)},
-        {station = "bridgescreen", pos = Vector(-7120, -4552, 1160), ang = Angle(90, 0, 0)},
     },
 }
 

@@ -48,6 +48,8 @@ D.Settings = {
     route_speed_factor = 0.5,     -- Sprungzeit-Faktor entlang einer Hauptroute
     route_minor_factor = 0.7,     -- Sprungzeit-Faktor entlang einer Nebenroute
     route_junction_dist = 25,     -- pc: Umstieg zwischen Routen bis zu diesem Abstand
+    holo_radius = 60,             -- Einheiten: Radius des Taktik-Hologramms
+    holo_height = 45,             -- Einheiten ueber dem Projektor
 }
 
 --------------------------------------------------------------------------------

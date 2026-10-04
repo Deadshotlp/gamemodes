@@ -162,6 +162,10 @@ Naval.SettingInfo = {
         {"render_scale", "Darstellungsmaßstab", "m pro Einheit"},
         {"render_far", "Fernbereich der Darstellung", "Einheiten"},
     }},
+    {"Taktik-Hologramm", {
+        {"holo_radius", "Größe (Radius)", "Einheiten"},
+        {"holo_height", "Höhe über dem Projektor", "Einheiten"},
+    }},
     {"Sonstiges", {
         {"start_system", "Startsystem (ID, leer = Coruscant)", ""},
         {"autosave_interval", "Automatisch speichern alle", "s"},
@@ -257,7 +261,9 @@ function Naval.AdminMenu(base)
     ----------------------------------------------------------------------------
 
     R.Header("Konsolen")
-    R.Text("Neue Konsole: auf die Stelle schauen, an der sie stehen soll, Station wählen, \"Aufstellen\".")
+    R.Text("Neue Konsole: auf die Stelle schauen, an der sie stehen soll, Station wählen, \"Aufstellen\". "
+        .. "Taktik-Hologramm: \"Hologramm-Projektor\" auf den Holotisch setzen (dort erscheint es), "
+        .. "dazu die Schalter Ein/Aus, näher und weiter. Drehen: beim Anschauen pd_naval_console_rotate <Grad>.")
 
     local stations = {}
     for id, def in SortedPairs(Naval.Stations or {}) do stations[#stations + 1] = {id, def.name} end
