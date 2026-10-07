@@ -99,6 +99,11 @@ D.Settings = {
     field_nebula_sensors = 0.35,  -- Sensorreichweite im Nebel
     field_nebula_shields = 0.4,   -- Schildladung im Nebel
     field_nebula_hide = 20000,    -- m: Schiffe im Nebel erst ab hier sichtbar
+    relocate_window = 600,        -- s: so lange gilt die Freigabe zum Umstationieren
+    relocate_countdown = 10,      -- s vom Erreichen der Weltgrenze bis zum Mapwechsel
+    relocate_border_margin = 400, -- Einheiten: so nah an der Weltgrenze loest ein Fahrzeug aus
+    relocate_cone = 60,           -- Grad: Grenzseite muss so genau zum Planeten zeigen
+    relocate_orbit_factor = 1.5,  -- Orbit = Abstand bis Massenschatten x Faktor
     supply_enabled = 1,           -- Nachschub-System: 0 = Munition wird nicht verbraucht, keine Kisten noetig
     supply_delivery_time = 90,    -- s von der Anforderung bis zur Anlieferung
     supply_cooldown = 900,        -- s zwischen zwei Lieferungen (nach der Anlieferung)

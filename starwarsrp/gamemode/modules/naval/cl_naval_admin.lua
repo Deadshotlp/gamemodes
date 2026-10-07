@@ -216,6 +216,13 @@ Naval.SettingInfo = {
         {"field_nebula_shields", "Schildladung im Nebel", "Faktor"},
         {"field_nebula_hide", "Im Nebel sichtbar bis", "m"},
     }},
+    {"Umstationieren (Planeten-Maps)", {
+        {"relocate_window", "Freigabe gilt", "s"},
+        {"relocate_countdown", "Countdown bis Mapwechsel", "s"},
+        {"relocate_border_margin", "Auslösen ab Abstand zur Weltgrenze", "Einheiten"},
+        {"relocate_cone", "Grenzseite Richtung Planet (Toleranz)", "Grad"},
+        {"relocate_orbit_factor", "Orbit-Abstand", "× Massenschatten"},
+    }},
     {"Nachschub", {
         {"supply_enabled", "Nachschub-System", "1 = an, 0 = Munition unbegrenzt"},
         {"supply_delivery_time", "Lieferzeit", "s"},

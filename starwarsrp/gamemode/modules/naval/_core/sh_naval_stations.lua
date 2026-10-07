@@ -197,3 +197,12 @@ PD.Naval.Stations.supply_intake = {
     noUse = true,
     marker = true,
 }
+
+-- Stufe 4f: Umstationieren auf Planeten-Maps (auch auf der Planeten-Map fuer
+-- den Rueckflug, daher offline = ohne laufende Simulation bedienbar)
+PD.Naval.Stations.relocation = {
+    name = "Umstationierung",
+    model = "models/lordtrilobite/starwars/isd/imp_console_medium03.mdl",
+    desc = "Landezone auf dem Planeten im Orbit wählen, Rückflug zum Schiff",
+    offline = true,
+}

@@ -48,7 +48,7 @@ function Naval.OpenStation(ply, ent)
         return
     end
 
-    if not Naval.SimRunning or not Naval.GetMapShip() then
+    if not def.offline and (not Naval.SimRunning or not Naval.GetMapShip()) then
         Notify(ply, "Das Schiffssystem ist nicht aktiv.")
         return
     end
