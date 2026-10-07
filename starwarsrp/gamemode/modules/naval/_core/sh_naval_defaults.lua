@@ -99,6 +99,7 @@ D.Settings = {
     field_nebula_sensors = 0.35,  -- Sensorreichweite im Nebel
     field_nebula_shields = 0.4,   -- Schildladung im Nebel
     field_nebula_hide = 20000,    -- m: Schiffe im Nebel erst ab hier sichtbar
+    supply_enabled = 1,           -- Nachschub-System: 0 = Munition wird nicht verbraucht, keine Kisten noetig
     supply_delivery_time = 90,    -- s von der Anforderung bis zur Anlieferung
     supply_cooldown = 900,        -- s zwischen zwei Lieferungen (nach der Anlieferung)
     supply_max_crates = 8,        -- Kisten je Lieferung

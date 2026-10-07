@@ -46,6 +46,9 @@ local function OpenLogistics(console)
         local l = L()
         draw.SimpleText("BESTAND AN BORD", "MLIB.14", 14, 8, COL.dim)
         if not l then return end
+        if not l.enabled then
+            draw.SimpleText("Nachschub-System AUS: Munition wird nicht verbraucht", "MLIB.12", w - 14, 10, COL.warn, TEXT_ALIGN_RIGHT)
+        end
         local y = 34
         local function Row(name, cur, max, col, note)
             draw.SimpleText(("%s: %d / %d"):format(name, cur, max), "MLIB.16", 14, y, max > 0 and COL.text or COL.dim)
@@ -110,6 +113,13 @@ local function OpenLogistics(console)
     adminNow:SetPos(224, 256) adminNow:SetSize(222, 32)
     adminNow:SetVisible(LocalPlayer():IsAdmin())
 
+    -- Hauptschalter (nur Admins)
+    local toggle = UI.Button(frame, "Admin: Nachschub-System AN/AUS", function()
+        Naval.CombatCmd("logistics", "adminToggle", {})
+    end, function() local l = L() return l and l.enabled and COL.ok or COL.bad end)
+    toggle:SetPos(frame:GetWide() - 360, 9) toggle:SetSize(310, 28)
+    toggle:SetVisible(LocalPlayer():IsAdmin())
+
     -- Ablauf und Kisten an Bord
     local info = vgui.Create("DPanel", frame)
     info:SetPos(20, 365)
@@ -145,6 +155,7 @@ local function OpenLogistics(console)
         if not IsValid(s) then return end
         local l = L()
         send.Disabled = not (l and l.available) or Total() == 0
+        toggle.Label = l and l.enabled and "Admin: Nachschub-System ist AN" or "Admin: Nachschub-System ist AUS"
     end
 end
 

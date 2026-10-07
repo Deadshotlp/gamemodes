@@ -217,6 +217,7 @@ Naval.SettingInfo = {
         {"field_nebula_hide", "Im Nebel sichtbar bis", "m"},
     }},
     {"Nachschub", {
+        {"supply_enabled", "Nachschub-System", "1 = an, 0 = Munition unbegrenzt"},
         {"supply_delivery_time", "Lieferzeit", "s"},
         {"supply_cooldown", "Sperre zwischen Lieferungen", "s"},
         {"supply_max_crates", "Kisten je Lieferung", "Anzahl"},

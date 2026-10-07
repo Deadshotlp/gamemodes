@@ -462,13 +462,14 @@ local function Fire(ship, target, dt, focusSystem, sink)
             for _, a in ipairs(b.arc or {}) do if a == zone then inArc = true break end end
         end
 
-        if wt and not subs.off[i] and inArc and dist <= wt.range and (not wt.ammo or (subs.ammo[i] or 0) > 0) then
+        local endless = Naval.SupplyEnabled and not Naval.SupplyEnabled()
+        if wt and not subs.off[i] and inArc and dist <= wt.range and (not wt.ammo or endless or (subs.ammo[i] or 0) > 0) then
             subs.due[i] = (subs.due[i] or 0) + active * wt.rof / 60 * dt * wf
             local shots = math.floor(subs.due[i])
 
             if shots > 0 then
                 subs.due[i] = subs.due[i] - shots
-                if wt.ammo then
+                if wt.ammo and not endless then
                     shots = math.min(shots, subs.ammo[i])
                     subs.ammo[i] = subs.ammo[i] - shots
                 end

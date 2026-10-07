@@ -37,6 +37,13 @@ local function Setting(key, default)
     return tonumber(Naval.Settings and Naval.Settings[key]) or default
 end
 
+-- Hauptschalter (supply_enabled): aus = Munition wird nicht verbraucht,
+-- verlorene Maschinen kommen ausserhalb von Gefechten von selbst zurueck,
+-- keine Anforderungen
+function Naval.SupplyEnabled()
+    return Setting("supply_enabled", 1) == 1
+end
+
 local function Markers(station)
     local list = {}
     for _, ent in ipairs(ents.FindByClass("pd_naval_console")) do
@@ -154,6 +161,7 @@ local function Friendly(ship)
 end
 
 function Naval.SupplyCheck(ship)
+    if not Naval.SupplyEnabled() then return false, "Nachschub-System ist abgeschaltet" end
     local subs = ship.subs or {}
     if subs.supply then return false, "Eine Lieferung ist schon unterwegs" end
     if (subs.supplyNext or 0) > os.time() then
@@ -227,7 +235,18 @@ local function Intake(ship)
 end
 
 -- KI-Schiffe in eigenem Gebiet ausserhalb von Gefechten
+-- Abgeschaltet: Maschinen kommen bei allen Schiffen ausserhalb von Gefechten zurueck
+local function RefillCraft(ship)
+    if not Naval.Hangar or ship.state ~= S.NORMAL or (ship.lastAttacked or 0) > CurTime() - 120 then return end
+    local h, cap = Naval.Hangar(ship)
+    for _, k in ipairs({"fighter", "bomber"}) do
+        local max = (cap[k] or 0) * 12 - ((ship.subs.hangarOut or {})[k] or 0)
+        if (h[k] or 0) < max then h[k] = math.min(max, (h[k] or 0) + 2) ship.dirty = true end
+    end
+end
+
 local function NpcResupply(ship)
+    if not Naval.SupplyEnabled() then RefillCraft(ship) return end
     if ship:IsPlayerShip() or ship.state ~= S.NORMAL or (ship.lastAttacked or 0) > CurTime() - 120 then return end
     if ship.flags and (ship.flags.surrendered or ship.flags.prisoner or ship.flags.hidden) then return end
     local terr = Naval.Territory and Naval.Territory[ship.systemId]
@@ -267,7 +286,10 @@ timer.Create("PD.Naval.Supply", 1, 0, function()
         npcAcc = npcAcc + 1
         if npcAcc >= 60 then
             npcAcc = 0
-            for _, s in pairs(Naval.Ships) do NpcResupply(s) end
+            for _, s in pairs(Naval.Ships) do
+                if Naval.Combat then Naval.Combat(s) end
+                NpcResupply(s)
+            end
         end
     end, debug.traceback)
     if not ok then ErrorNoHalt("[Naval] Nachschub: " .. tostring(err) .. "\n") end
@@ -319,6 +341,16 @@ LC.adminDeliver = function(ply, ship, args)
     if PD.LOGS and PD.LOGS.Add then PD.LOGS.Add("Naval", ply:Nick() .. ": Nachschub sofort geliefert", Color(120, 170, 255)) end
 end
 
+LC.adminToggle = function(ply)
+    if not ply:IsAdmin() then return end
+    local on = not Naval.SupplyEnabled()
+    Naval.Settings.supply_enabled = on and 1 or 0
+    PD.SQL.Query("REPLACE INTO `pd_naval_settings` (`config_key`, `config_value`) VALUES ('supply_enabled', '" .. (on and 1 or 0) .. "')")
+    NotifyAll("Nachschub-System " .. (on and "eingeschaltet - Munition muss nachgeliefert werden" or "abgeschaltet - Munition wird nicht verbraucht"),
+        on and Color(120, 220, 160) or Color(240, 200, 90))
+    if PD.LOGS and PD.LOGS.Add then PD.LOGS.Add("Naval", ply:Nick() .. ": Nachschub-System " .. (on and "an" or "aus"), Color(120, 170, 255)) end
+end
+
 LC.adminCooldown = function(ply, ship)
     if not ply:IsAdmin() then return end
     ship.subs.supplyNext = 0
@@ -349,6 +381,7 @@ Naval.StatusExtras.logistics = function(ship)
     end
 
     return {
+        enabled = Naval.SupplyEnabled() or nil,
         ammo = ammo, craft = {cur = craftCur, max = craftMax},
         hull = math.Round(ship.hull or hullMax), hullMax = hullMax, partsMax = Setting("supply_parts_max", 80),
         delivery = subs.supply and {eta = math.max(0, (subs.supply.eta or 0) - os.time()), crates = subs.supply.crates} or nil,
