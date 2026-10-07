@@ -8,7 +8,13 @@
     Ausgerichtet wie das Schiff: was im Hologramm vorn liegt, liegt auch vor
     dem Bug. Um das eigene Schiff die sechs Schildzonen (blau = voll,
     rot = schwach), das Ziel des Waffenleitstands mit rotem Ring, unbekannte
-    Kontakte grau. Mitte = Map-Schiff, Ringe in der Schiffsebene, Kontakte in
+    Kontakte grau.
+
+    Stufe 4d: Schalter holo_mode wechselt Taktik <-> Galaxie (Umkreis um das
+    System aus "Im Hologramm zeigen" am Navigationscomputer, sonst um unsere
+    Position; Routen, Gebiete, Frontlinien, umkaempfte Systeme, geplanter
+    Sprungweg). Schalter holo_tilt stellt das Hologramm als Wand auf: um die
+    Querachse des Projektors gekippt, Norden/Bug oben, Hoehen zum Betrachter. Mitte = Map-Schiff, Ringe in der Schiffsebene, Kontakte in
     Fraktions-/Beziehungsfarben mit Hoehenlinie, Himmelskoerper als
     Drahtkugeln; ausserhalb des Bereichs Richtungsmarken am Rand.
 ]]
@@ -90,21 +96,17 @@ local function FormatDist(m)
     return Naval.FormatDist and Naval.FormatDist(m) or (math.Round(m / 1000) .. " km")
 end
 
-local function DrawHolo()
+local function DrawTactical(center, radius, labels, flicker)
     local view = C.View and C.View()
     local static = C.static
     if not view or not view.rot or not static then return end
 
-    local settings = static.settings or {}
-    local radius = settings.holo_radius or 60
-    local center = projector:GetPos() + Vector(0, 0, settings.holo_height or 45)
     local range = Naval.HoloRanges[GetGlobalInt("PD.Naval.HoloZoom", Naval.HoloDefaultZoom)] or 50000
     local scale = radius / range
 
     -- Schiffe: echtes Verhaeltnis zueinander, aber mindestens so gross, dass
     -- eine Venator 15 % des Radius lang ist (sonst bei grossem Bereich unsichtbar)
     local shipScale = math.max(scale, radius * 0.15 / 1137)
-    local flicker = 0.85 + math.sin(CurTime() * 23) * 0.04 + math.sin(CurTime() * 3.1) * 0.05
 
     local M, qbm = Naval.UniverseToMap(view.rot)
     local Q = Naval.Q
@@ -116,19 +118,15 @@ local function DrawHolo()
 
     local holoCol = Color(COL_HOLO.r, COL_HOLO.g, COL_HOLO.b, 140 * flicker)
 
-    -- Ringe und Lichtkegel
+    -- Ringe
     render.SetColorMaterial()
     for i = 1, 4 do Ring(center, radius * i / 4, Color(holoCol.r, holoCol.g, holoCol.b, (i == 4 and 120 or 50) * flicker)) end
-    render.DrawLine(center - Vector(0, 0, settings.holo_height or 45), center, Color(90, 190, 255, 40), true)
-    render.SetMaterial(MAT_GLOW)
-    render.DrawSprite(center - Vector(0, 0, (settings.holo_height or 45) - 2), radius * 0.6, radius * 0.6, Color(60, 150, 255, 60))
 
     if view.state == "hyperspace" then
-        Label(center + Vector(0, 0, 10), "HYPERRAUM", holoCol, 0.08)
+        labels[#labels + 1] = {pos = center + Vector(0, 0, 10), text = "HYPERRAUM", col = holoCol, size = 0.08}
         return
     end
 
-    local labels = {}
     local myFaction = Naval.MapShipFaction and Naval.MapShipFaction()
 
     render.SuppressEngineLighting(true)
@@ -309,9 +307,199 @@ local function DrawHolo()
         end
     end
 
+    labels[#labels + 1] = {pos = center + Vector(radius, 0, 0), text = FormatDist(range), col = holoCol, size = 0.035}
+end
+
+--------------------------------------------------------------------------------
+-- Galaxie-Ansicht (Stufe 4d)
+--------------------------------------------------------------------------------
+
+local gridCache = {}
+
+local function DrawGalaxy(center, radius, labels, flicker, F, R)
+    local static = C.static
+    if not static or not static.systemsById then return end
+
+    local focusId = GetGlobalString("PD.Naval.HoloFocus", "")
+    local here = C.status and C.status.system
+    local fsys = static.systemsById[focusId ~= "" and focusId or (here or "")]
+    if not fsys then return end
+
+    local rangePc = Naval.HoloGalaxyRanges[GetGlobalInt("PD.Naval.HoloGalaxyZoom", Naval.HoloGalaxyDefaultZoom)] or 800
+    local s = radius / rangePc
+    local fx, fy = fsys.g.x, fsys.g.y
+    local function G(x, y, lift) return center + R * ((x - fx) * s) + F * ((y - fy) * s) + Vector(0, 0, lift or 0) end
+    local function Inside(x, y, k) return (x - fx) ^ 2 + (y - fy) ^ 2 <= (rangePc * (k or 1)) ^ 2 end
+
+    local holoCol = Color(COL_HOLO.r, COL_HOLO.g, COL_HOLO.b, 140 * flicker)
+    render.SetColorMaterial()
+    local last
+    for a = 0, 360, 6 do
+        local p = center + (R * math.cos(math.rad(a)) + F * math.sin(math.rad(a))) * radius
+        if last then render.DrawLine(last, p, Color(holoCol.r, holoCol.g, holoCol.b, 120 * flicker), true) end
+        last = p
+    end
+
+    -- Gebiete und Frontlinien (Raster fuer diesen Ausschnitt, zwischengespeichert)
+    if gridCache.static ~= static then gridCache = {static = static} end
+    local key = (focusId ~= "" and focusId or here or "") .. ":" .. rangePc
+    if gridCache[key] == nil then
+        gridCache[key] = Naval.InfluenceGrid and Naval.InfluenceGrid(fx - rangePc, fy - rangePc, fx + rangePc, fy + rangePc, rangePc / 18) or false
+    end
+    local grid = gridCache[key]
+    if grid then
+        for _, st in ipairs(grid.strips) do
+            local cx, cy = st.x + st.w / 2, st.y + grid.cell / 2
+            if Inside(cx, cy) then
+                local col = Naval.TerritoryColor(st.f, 40 * flicker)
+                render.DrawQuad(G(st.x, st.y), G(st.x + st.w, st.y), G(st.x + st.w, st.y + grid.cell), G(st.x, st.y + grid.cell), col)
+            end
+        end
+        for _, fr in ipairs(grid.fronts) do
+            if Inside(fr[1], fr[2]) and Inside(fr[3], fr[4]) then
+                render.DrawLine(G(fr[1], fr[2], 0.1), G(fr[3], fr[4], 0.1), fr[5] and Color(255, 90, 70, 230 * flicker) or Color(200, 220, 255, 60 * flicker), true)
+            end
+        end
+    end
+
+    -- Hyperraumrouten
+    for _, route in pairs(static.routes or {}) do
+        local col = route.major and Color(110, 160, 240, 170 * flicker) or Color(80, 110, 160, 90 * flicker)
+        for _, line in ipairs(route.lines or {}) do
+            for i = 2, #line do
+                local a, b = line[i - 1], line[i]
+                if Inside(a[1], a[2], 1.02) and Inside(b[1], b[2], 1.02) then
+                    render.DrawLine(G(a[1], a[2], 0.05), G(b[1], b[2], 0.05), col, true)
+                end
+            end
+        end
+    end
+
+    -- Systeme an Routen oder mit Gebiet (hoechstens 400)
+    local territory = Naval.TerritoryData and Naval.TerritoryData()
+    render.SetMaterial(MAT_GLOW)
+    local count = 0
+    for _, sys in ipairs(static.systemList or {}) do
+        if count >= 400 then break end
+        local owner = territory and territory.byId[sys.id]
+        if (owner or (sys.routes and #sys.routes > 0)) and Inside(sys.g.x, sys.g.y) then
+            count = count + 1
+            local col = owner and Naval.TerritoryColor(owner, 220 * flicker) or Color(200, 215, 240, 160 * flicker)
+            render.DrawSprite(G(sys.g.x, sys.g.y, 0.2), radius * 0.03, radius * 0.03, col)
+        end
+    end
+
+    -- Umkaempfte Systeme
+    if territory then
+        render.SetColorMaterial()
+        local pulse = 0.5 + math.sin(CurTime() * 4) * 0.5
+        for id in pairs(territory.contested) do
+            local sys = static.systemsById[id]
+            if sys and Inside(sys.g.x, sys.g.y) then
+                local p = G(sys.g.x, sys.g.y, 0.3)
+                local lastP
+                for a = 0, 360, 30 do
+                    local q = p + (R * math.cos(math.rad(a)) + F * math.sin(math.rad(a))) * radius * 0.04
+                    if lastP then render.DrawLine(lastP, q, Color(255, 60, 50, (120 + pulse * 135) * flicker), true) end
+                    lastP = q
+                end
+                labels[#labels + 1] = {pos = p, text = sys.name .. " (umkämpft)", col = Color(255, 90, 70)}
+            end
+        end
+    end
+
+    -- Geplanter Sprungweg
+    local st = C.status or {}
+    local path = C.path and st.pathKey == C.path.key and C.path.points
+    if path and #path > 1 then
+        render.SetColorMaterial()
+        for i = 2, #path do
+            local a, b = path[i - 1], path[i]
+            render.DrawLine(G(a[1], a[2], 0.4), G(b[1], b[2], 0.4), a[4] and Color(120, 220, 255, 230) or Color(240, 200, 70, 230), true)
+        end
+    end
+
+    -- Unsere Position, Mittelpunkt, Sprungziel
+    local cur = here and static.systemsById[here]
+    if cur and Inside(cur.g.x, cur.g.y, 1.05) then
+        local size = radius * (0.06 + math.sin(CurTime() * 5) * 0.015)
+        render.SetMaterial(MAT_GLOW)
+        render.DrawSprite(G(cur.g.x, cur.g.y, 0.5), size, size, Color(120, 255, 160, 255))
+        labels[#labels + 1] = {pos = G(cur.g.x, cur.g.y, 1), text = "Hier: " .. cur.name, col = Color(120, 255, 160)}
+    end
+    if fsys ~= cur then labels[#labels + 1] = {pos = G(fx, fy, 1), text = fsys.name, col = holoCol} end
+    local nav = st.nav and static.systemsById[st.nav.target or ""]
+    if nav and Inside(nav.g.x, nav.g.y) then labels[#labels + 1] = {pos = G(nav.g.x, nav.g.y, 1), text = "Ziel: " .. nav.name, col = Color(240, 200, 70)} end
+
+    labels[#labels + 1] = {pos = center + R * radius, text = ("%s pc"):format(rangePc), col = holoCol, size = 0.035}
+end
+
+--------------------------------------------------------------------------------
+-- Hologramm: Lichtkegel, Inhalt (ggf. als Wand gekippt), Beschriftungen
+--------------------------------------------------------------------------------
+
+local function DrawHolo()
+    local static = C.static
+    if not static then return end
+
+    local settings = static.settings or {}
+    local radius = settings.holo_radius or 60
+    local height = settings.holo_height or 45
+    local base = projector:GetPos()
+    local wall = GetGlobalBool("PD.Naval.HoloWall", false)
+    local galaxy = GetGlobalInt("PD.Naval.HoloMode", 0) == 1
+    local flicker = 0.85 + math.sin(CurTime() * 23) * 0.04 + math.sin(CurTime() * 3.1) * 0.05
+
+    -- Als Wand steht die Karte hoeher (Unterkante etwa auf Hoehe der liegenden)
+    local center = base + Vector(0, 0, height + (wall and radius or 0))
+
+    -- Achsen des Projektors (waagerecht)
+    local F = projector:GetForward()
+    F.z = 0
+    if F:LengthSqr() < 1e-4 then F = Vector(1, 0, 0) end
+    F:Normalize()
+    local U = Vector(0, 0, 1)
+    local R = F:Cross(U)
+
+    -- Lichtkegel (nicht gekippt)
+    render.SetColorMaterial()
+    render.DrawLine(base, center, Color(90, 190, 255, 40), true)
+    render.SetMaterial(MAT_GLOW)
+    render.DrawSprite(base + Vector(0, 0, 2), radius * 0.6, radius * 0.6, Color(60, 150, 255, 60))
+
+    -- Wand: v' = R(v.R) + U(v.F) - F(v.U) um den Mittelpunkt (Norden/Bug nach
+    -- oben, Hoehen zum Betrachter auf der Vorderseite)
+    local function Tilt(p)
+        if not wall then return p end
+        local v = p - center
+        return center + R * v:Dot(R) + U * v:Dot(F) - F * v:Dot(U)
+    end
+
+    if wall then
+        local B = Matrix({
+            {R.x * R.x + U.x * F.x - F.x * U.x, R.x * R.y + U.x * F.y - F.x * U.y, R.x * R.z + U.x * F.z - F.x * U.z, 0},
+            {R.y * R.x + U.y * F.x - F.y * U.x, R.y * R.y + U.y * F.y - F.y * U.y, R.y * R.z + U.y * F.z - F.y * U.z, 0},
+            {R.z * R.x + U.z * F.x - F.z * U.x, R.z * R.y + U.z * F.y - F.z * U.y, R.z * R.z + U.z * F.z - F.z * U.z, 0},
+            {0, 0, 0, 1},
+        })
+        local M = Matrix()
+        M:Translate(center)
+        M = M * B
+        M:Translate(-center)
+        cam.PushModelMatrix(M, true)
+    end
+
+    local labels = {}
+    local ok, err = pcall(function()
+        if galaxy then DrawGalaxy(center, radius, labels, flicker, F, R)
+        else DrawTactical(center, radius, labels, flicker) end
+    end)
+
+    if wall then cam.PopModelMatrix() end
+    if not ok then error(err, 0) end
+
     if EyePos():DistToSqr(center) < 900 * 900 then
-        for _, l in ipairs(labels) do Label(l.pos + Vector(0, 0, 1.5), l.text, l.col, 0.03) end
-        Label(center + Vector(radius, 0, 0), FormatDist(range), holoCol, 0.035)
+        for _, l in ipairs(labels) do Label(Tilt(l.pos) + Vector(0, 0, 1.5), l.text, l.col, l.size or 0.03) end
     end
 end
 

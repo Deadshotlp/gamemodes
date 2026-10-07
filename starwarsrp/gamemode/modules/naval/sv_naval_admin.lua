@@ -25,6 +25,8 @@
       pd_naval_fleet mode <flotten_id> <formation|engage|hold>
       pd_naval_interdict <id> on|off      Abfangfeld
       pd_naval_surrender <id> [undo]      Kapitulation ausloesen/aufheben
+      pd_naval_territory <system|sektor|region> <fraktion|none> [umkaempft] <name...>
+            Gebiet zuordnen (System vor Sektor vor Region)
 ]]
 
 PD.Naval = PD.Naval or {}
@@ -419,4 +421,50 @@ concommand.Add("pd_naval_surrender", function(ply, _, args)
         Naval.Surrender(ship, IsValid(ply) and ply:Nick() or "Konsole")
         Reply(ply, ship.name .. " kapituliert")
     end
+end)
+
+
+--------------------------------------------------------------------------------
+-- Stufe 4d: Gebiete / Frontlinien
+--------------------------------------------------------------------------------
+
+concommand.Add("pd_naval_territory", function(ply, _, args)
+    if not Allowed(ply) or not Naval.DB or not Naval.DB.LoadTerritory then return end
+
+    local kinds = {system = "system", sektor = "sector", sector = "sector", region = "region"}
+    local kind = kinds[string.lower(args[1] or "")]
+    local faction = args[2] or ""
+    local contested = string.lower(args[3] or "") == "umkaempft" or string.lower(args[3] or "") == "contested"
+    local name = table.concat(args, " ", contested and 4 or 3)
+
+    if not kind or faction == "" or name == "" then
+        Reply(ply, "pd_naval_territory <system|sektor|region> <fraktion|none> [umkaempft] <name...>")
+        return
+    end
+    if faction == "none" then faction = "" end
+    if faction ~= "" and not Naval.Factions[faction] then Reply(ply, "Unbekannte Fraktion " .. faction) return end
+
+    local key = name
+    if kind == "system" then
+        local sys = Naval.FindSystem(name)
+        if not sys then Reply(ply, "System nicht gefunden") return end
+        key = sys.id
+    elseif kind == "region" then
+        key = Naval.NormRegion(name)
+    end
+
+    local esc = PD.SQL.EscapeString
+    local sql = (faction == "" and not contested)
+        and ("DELETE FROM `pd_naval_territory` WHERE `kind` = " .. esc(kind) .. " AND `area_key` = " .. esc(key))
+        or ("REPLACE INTO `pd_naval_territory` (`kind`, `area_key`, `faction_id`, `contested`, `updated_at`) VALUES ("
+            .. esc(kind) .. ", " .. esc(key) .. ", " .. esc(faction) .. ", " .. (contested and 1 or 0) .. ", " .. os.time() .. ")")
+
+    PD.SQL.Query(sql, function()
+        Naval.DB.LoadTerritory(function(count)
+            if Naval.SimRunning and Naval.SendStatic then Naval.SendStatic() end
+            Reply(ply, ("Gebiet gesetzt: %s %s -> %s%s (%d Systeme mit Zuordnung)"):format(kind, key, faction ~= "" and faction or "keine",
+                contested and ", umkämpft" or "", count))
+        end)
+    end)
+    Log(ply, "Gebiet " .. kind .. " " .. key .. " -> " .. (faction ~= "" and faction or "keine") .. (contested and " (umkämpft)" or ""))
 end)

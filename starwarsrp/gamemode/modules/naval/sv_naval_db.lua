@@ -238,6 +238,17 @@ local TABLES = {
         PRIMARY KEY (`server_key`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
+    -- Gebiete (Stufe 4d): Fraktion je Region, Sektor oder System, dazu
+    -- "umkaempft". Gilt: System vor Sektor vor Region.
+    [[CREATE TABLE IF NOT EXISTS `pd_naval_territory` (
+        `kind` VARCHAR(16) NOT NULL,
+        `area_key` VARCHAR(128) NOT NULL,
+        `faction_id` VARCHAR(64) NOT NULL DEFAULT '',
+        `contested` TINYINT NOT NULL DEFAULT 0,
+        `updated_at` BIGINT NOT NULL DEFAULT 0,
+        PRIMARY KEY (`kind`, `area_key`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
     [[CREATE TABLE IF NOT EXISTS `pd_naval_log` (
         `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         `server_key` VARCHAR(64) NOT NULL DEFAULT 'main',
@@ -434,6 +445,53 @@ function Naval.GetRelation(a, b)
     return row and row[b] or Naval.Relation.NEUTRAL
 end
 
+--------------------------------------------------------------------------------
+-- Gebiete und Frontlinien (Stufe 4d)
+--------------------------------------------------------------------------------
+
+-- Regionsnamen vereinheitlichen ("*Outer", "Outer" -> "Outer Rim")
+local REGION_ALIAS = {
+    outer = "Outer Rim", mid = "Mid Rim", inner = "Inner Rim", core = "Core Worlds", expansion = "Expansion Region",
+    wild = "Wild Space", unknown = "Unknown Regions", deep = "Deep Core", hutt = "Hutt Space", colonies = "Colonies",
+}
+
+function Naval.NormRegion(region)
+    local r = string.Trim(string.gsub(tostring(region or ""), "^%*+", ""))
+    return REGION_ALIAS[string.lower(r)] or r
+end
+
+-- Naval.Territory = {systemId = {f = Fraktion oder nil, c = umkaempft}}
+function DB.LoadTerritory(callback)
+    PD.SQL.FetchAll("SELECT * FROM `pd_naval_territory`", function(rows)
+        local byKind = {system = {}, sector = {}, region = {}}
+        for _, row in ipairs(rows or {}) do
+            local list = byKind[row.kind]
+            if list then list[row.area_key] = {f = row.faction_id ~= "" and row.faction_id or nil, c = tonumber(row.contested) == 1} end
+        end
+
+        local territory, count = {}, 0
+        for id, s in pairs(Naval.Systems or {}) do
+            local sys, sec, reg = byKind.system[id], s.sector and byKind.sector[s.sector], byKind.region[Naval.NormRegion(s.region)]
+            local f = (sys and sys.f) or (sec and sec.f) or (reg and reg.f)
+            local c = (sys and sys.c) or false
+            if f or c then
+                territory[id] = {f = f, c = c or nil}
+                count = count + 1
+            end
+        end
+
+        Naval.Territory = territory
+        if callback then callback(count) end
+    end)
+end
+
+-- Gebiete vor dem Rueckruf laden: die festen Daten fuer die Clients enthalten sie
+local function FinishGalaxy(callback, systems, bodies, routes)
+    DB.LoadTerritory(function()
+        if callback then callback(table.Count(systems), table.Count(bodies), table.Count(routes)) end
+    end)
+end
+
 -- Textur-Ueberschreibungen aus dem Web-Panel (Einstellung texture_overrides =
 -- {bodyId = {material, cloud}}); getrennt gespeichert, damit ein Neu-Import
 -- der Galaxie sie nicht loescht
@@ -530,8 +588,7 @@ function DB.LoadGalaxy(callback)
                     end
 
                     Naval.Routes = routes
-
-                    if callback then callback(table.Count(systems), table.Count(bodies), table.Count(routes)) end
+                    FinishGalaxy(callback, systems, bodies, routes)
                 end)
             end)
         end)

@@ -71,6 +71,18 @@ PD.Naval.Stations.holo_zoom_out = {
     desc = "Herauszoomen",
     action = "holo_zoom_out",
 }
+PD.Naval.Stations.holo_mode = {
+    name = "Hologramm: Taktik / Galaxie",
+    model = "models/kingpommes/starwars/misc/misc_panel_1.mdl",
+    desc = "Ansicht umschalten",
+    action = "holo_mode",
+}
+PD.Naval.Stations.holo_tilt = {
+    name = "Hologramm: liegend / Wand",
+    model = "models/kingpommes/starwars/misc/misc_panel_2.mdl",
+    desc = "Ausrichtung umschalten",
+    action = "holo_tilt",
+}
 PD.Naval.Stations.holo_projector = {
     name = "Hologramm-Projektor",
     model = "models/hunter/plates/plate025x025.mdl",
@@ -82,6 +94,10 @@ PD.Naval.Stations.holo_projector = {
 -- Zoomstufen des Hologramms: Radius in Metern
 PD.Naval.HoloRanges = {5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e6, 2.5e6, 1e7, 5e7, 2e8, 1e9}
 PD.Naval.HoloDefaultZoom = 4
+
+-- Galaxie-Ansicht des Hologramms: Umkreis in Parsec
+PD.Naval.HoloGalaxyRanges = {100, 200, 400, 800, 1500, 3000, 6000, 12000, 25000}
+PD.Naval.HoloGalaxyDefaultZoom = 4
 
 PD.Naval.StationUseRange = 160
 

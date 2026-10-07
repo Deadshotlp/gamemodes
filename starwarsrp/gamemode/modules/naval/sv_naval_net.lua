@@ -127,6 +127,12 @@ local function BuildStatic()
         routes[id] = {name = r.name, major = r.major, lines = r.lines}
     end
 
+    -- Gebiete: {systemId, Fraktion ("" = keine), umkaempft 0/1}
+    local territory = {}
+    for id, t in pairs(Naval.Territory or {}) do
+        territory[#territory + 1] = {id, t.f or "", t.c and 1 or 0}
+    end
+
     local s = Naval.Settings
     return {
         settings = {render_scale = s.render_scale, near_ship_range = s.near_ship_range, render_far = s.render_far,
@@ -138,7 +144,7 @@ local function BuildStatic()
             ["mapcal_" .. ((Naval.GetProfile() or {}).key or "")] = Naval.GetProfile() and s["mapcal_" .. Naval.GetProfile().key] or nil,
             ["hardpoints_" .. ((Naval.GetProfile() or {}).key or "")] = Naval.GetProfile() and s["hardpoints_" .. Naval.GetProfile().key] or nil},
         classes = classes, factions = factions, relations = Naval.Relations,
-        systems = systems, routes = routes,
+        systems = systems, routes = routes, territory = territory,
     }
 end
 

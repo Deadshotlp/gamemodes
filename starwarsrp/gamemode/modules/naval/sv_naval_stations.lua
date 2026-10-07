@@ -96,9 +96,28 @@ end
 Naval.StationActions = Naval.StationActions or {}
 
 local function HoloZoom(delta)
+    -- Galaxie-Ansicht: eigener Zoom (Parsec)
+    if GetGlobalInt("PD.Naval.HoloMode", 0) == 1 then
+        local zoom = math.Clamp(GetGlobalInt("PD.Naval.HoloGalaxyZoom", Naval.HoloGalaxyDefaultZoom) + delta, 1, #Naval.HoloGalaxyRanges)
+        SetGlobalInt("PD.Naval.HoloGalaxyZoom", zoom)
+        return Naval.HoloGalaxyRanges[zoom]
+    end
+
     local zoom = math.Clamp(GetGlobalInt("PD.Naval.HoloZoom", Naval.HoloDefaultZoom) + delta, 1, #Naval.HoloRanges)
     SetGlobalInt("PD.Naval.HoloZoom", zoom)
     return Naval.HoloRanges[zoom]
+end
+
+Naval.StationActions.holo_mode = function(ply, ent)
+    local mode = GetGlobalInt("PD.Naval.HoloMode", 0) == 1 and 0 or 1
+    SetGlobalInt("PD.Naval.HoloMode", mode)
+    ent:EmitSound("buttons/button14.wav", 60, mode == 1 and 110 or 95)
+end
+
+Naval.StationActions.holo_tilt = function(ply, ent)
+    local wall = not GetGlobalBool("PD.Naval.HoloWall", false)
+    SetGlobalBool("PD.Naval.HoloWall", wall)
+    ent:EmitSound("buttons/lever7.wav", 60)
 end
 
 Naval.StationActions.holo_toggle = function(ply, ent)
@@ -199,6 +218,16 @@ net.Receive("PD.Naval.Nav", function(_, ply)
     if action == "clear" then
         ship.nav = nil
         Notify(ply, "Kursloesung verworfen.", true)
+        return
+    end
+
+    -- Galaxie-Hologramm auf ein System ausrichten ("" = Map-Schiff)
+    if action == "holo_focus" then
+        local id = net.ReadString() or ""
+        if id ~= "" and not Naval.Systems[id] then return end
+        SetGlobalString("PD.Naval.HoloFocus", id)
+        SetGlobalInt("PD.Naval.HoloMode", 1)
+        Notify(ply, id ~= "" and ("Hologramm zeigt " .. Naval.Systems[id].name) or "Hologramm zeigt unsere Position", true)
         return
     end
 

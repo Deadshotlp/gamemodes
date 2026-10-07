@@ -67,6 +67,125 @@ local function Dist2D(a, b)
     return math.sqrt((a.g.x - b.g.x) ^ 2 + (a.g.y - b.g.y) ^ 2 + (a.g.z - b.g.z) ^ 2)
 end
 
+--------------------------------------------------------------------------------
+-- Gebiete und Frontlinien (Stufe 4d)
+--
+-- Einflussraster: jede Zelle gehoert der Fraktion des naechsten Systems mit
+-- Zuordnung (bis INFLUENCE pc entfernt). Frontlinien = Kanten zwischen
+-- Zellen verschiedener Fraktionen. Je Zeile zusammengefasste Streifen
+-- (schnell zu zeichnen). Ergebnis zwischengespeichert, bis neue Daten kommen.
+--------------------------------------------------------------------------------
+
+local INFLUENCE = 700
+
+local function FactionColor(fid, alpha)
+    local f = C.static and C.static.factions and C.static.factions[fid]
+    local c = f and f.color or {200, 200, 200}
+    return Color(c[1], c[2], c[3], alpha or 255)
+end
+Naval.TerritoryColor = FactionColor
+
+-- Gebiete aus den festen Daten: owned = Liste {x, y, f}, contested = {systemId = true}
+function Naval.TerritoryData()
+    local static = C.static
+    if not static or not static.territory then return nil end
+    if static.territoryData then return static.territoryData end
+
+    local owned, contested, byId = {}, {}, {}
+    for _, row in ipairs(static.territory) do
+        local sys = static.systemsById[row[1]]
+        if sys then
+            if row[2] ~= "" then owned[#owned + 1] = {x = sys.g.x, y = sys.g.y, f = row[2]} end
+            if row[3] == 1 then contested[row[1]] = true end
+            byId[row[1]] = row[2] ~= "" and row[2] or nil
+        end
+    end
+
+    static.territoryData = {owned = owned, contested = contested, byId = byId}
+    return static.territoryData
+end
+
+-- Fraktion des naechsten Systems (bis INFLUENCE) aus den Eimern rundum
+local function NearestOwner(buckets, cx, cy)
+    local bx, by = math.floor(cx / INFLUENCE), math.floor(cy / INFLUENCE)
+    local best, bestD = nil, INFLUENCE * INFLUENCE
+    for k = 0, 8 do
+        local list = buckets[(bx + k % 3 - 1) .. ":" .. (by + math.floor(k / 3) - 1)]
+        for _, o in ipairs(list or {}) do
+            local d = (o.x - cx) ^ 2 + (o.y - cy) ^ 2
+            if d < bestD then best, bestD = o.f, d end
+        end
+    end
+    return best
+end
+
+-- Raster ueber einen Ausschnitt (x0..x1, y0..y1 in Parsec), Zellgroesse cell
+function Naval.InfluenceGrid(x0, y0, x1, y1, cell)
+    local data = Naval.TerritoryData()
+    if not data or #data.owned == 0 then return nil end
+
+    -- Systeme in Eimer der Groesse INFLUENCE einsortieren
+    local buckets = {}
+    for _, o in ipairs(data.owned) do
+        local key = math.floor(o.x / INFLUENCE) .. ":" .. math.floor(o.y / INFLUENCE)
+        buckets[key] = buckets[key] or {}
+        table.insert(buckets[key], o)
+    end
+
+    local nx, ny = math.ceil((x1 - x0) / cell), math.ceil((y1 - y0) / cell)
+    local owner = {}
+    for j = 0, ny - 1 do
+        local row = {}
+        local cy = y0 + (j + 0.5) * cell
+        for i = 0, nx - 1 do
+            local cx = x0 + (i + 0.5) * cell
+            row[i] = NearestOwner(buckets, cx, cy)
+        end
+        owner[j] = row
+    end
+
+    -- Streifen je Zeile und Frontkanten
+    local strips, fronts = {}, {}
+    for j = 0, ny - 1 do
+        local i = 0
+        while i < nx do
+            local f = owner[j][i]
+            local start = i
+            while i < nx and owner[j][i] == f do i = i + 1 end
+            if f then strips[#strips + 1] = {x = x0 + start * cell, y = y0 + j * cell, w = (i - start) * cell, f = f} end
+        end
+        for k = 0, nx - 1 do
+            local a = owner[j][k]
+            local right = k + 1 < nx and owner[j][k + 1] or nil
+            local up = j + 1 < ny and owner[j + 1][k] or nil
+            if a ~= right and (a or right) and k + 1 < nx then
+                local x = x0 + (k + 1) * cell
+                fronts[#fronts + 1] = {x, y0 + j * cell, x, y0 + (j + 1) * cell, a and right}
+            end
+            if a ~= up and (a or up) and j + 1 < ny then
+                local y = y0 + (j + 1) * cell
+                fronts[#fronts + 1] = {x0 + k * cell, y, x0 + (k + 1) * cell, y, a and up}
+            end
+        end
+    end
+
+    return {strips = strips, fronts = fronts, contested = data.contested, cell = cell}
+end
+
+-- Ganze Galaxie einmal (Navigationscomputer), neu bei neuen Daten
+local function GalaxyGrid()
+    local static = C.static
+    if not static then return nil end
+    if static.galaxyGrid ~= nil then return static.galaxyGrid or nil end
+    local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
+    for _, s in ipairs(static.systemList or {}) do
+        x0, y0 = math.min(x0, s.g.x), math.min(y0, s.g.y)
+        x1, y1 = math.max(x1, s.g.x), math.max(y1, s.g.y)
+    end
+    static.galaxyGrid = x0 < x1 and Naval.InfluenceGrid(x0 - INFLUENCE, y0 - INFLUENCE, x1 + INFLUENCE, y1 + INFLUENCE, 150) or false
+    return static.galaxyGrid or nil
+end
+
 local function CreateMap(parent, onSelect)
     local UI = Naval.UI
     local COL = UI.COL
@@ -100,6 +219,37 @@ local function CreateMap(parent, onSelect)
 
         local px, py = s:LocalToScreen(0, 0)
         render.SetScissorRect(px, py, px + w, py + h, true)
+
+        -- Gebiete und Frontlinien
+        local grid = s.ShowTerritory ~= false and GalaxyGrid()
+        if grid then
+            draw.NoTexture()
+            for _, st in ipairs(grid.strips) do
+                local x1, y1 = ToScreen(s, st.x, st.y + grid.cell)
+                local x2, y2 = ToScreen(s, st.x + st.w, st.y)
+                if x2 >= 0 and x1 <= w and y2 >= 0 and y1 <= h then
+                    surface.SetDrawColor(FactionColor(st.f, 34))
+                    surface.DrawRect(x1, y1, math.max(x2 - x1, 1), math.max(y2 - y1, 1))
+                end
+            end
+            for _, fr in ipairs(grid.fronts) do
+                local x1, y1 = ToScreen(s, fr[1], fr[2])
+                local x2, y2 = ToScreen(s, fr[3], fr[4])
+                if math.max(x1, x2) >= 0 and math.min(x1, x2) <= w and math.max(y1, y2) >= 0 and math.min(y1, y2) <= h then
+                    surface.SetDrawColor(fr[5] and Color(255, 90, 70, 200) or Color(200, 210, 230, 70))
+                    surface.DrawLine(x1, y1, x2, y2)
+                end
+            end
+            local pulse = 150 + math.sin(CurTime() * 4) * 100
+            for id in pairs(grid.contested) do
+                local sys = static.systemsById[id]
+                if sys then
+                    local x, y = ToScreen(s, sys.g.x, sys.g.y)
+                    surface.SetDrawColor(255, 60, 50, pulse)
+                    surface.DrawOutlinedRect(x - 6, y - 6, 13, 13, 2)
+                end
+            end
+        end
 
         -- Routen
         for _, route in pairs(static.routes or {}) do
@@ -753,7 +903,7 @@ local function OpenNavcomputer(console)
 
     local detail = vgui.Create("DPanel", side)
     detail:Dock(BOTTOM)
-    detail:SetTall(290)
+    detail:SetTall(334)
 
     local map = CreateMap(frame, function(sys)
         selected = sys
@@ -802,13 +952,20 @@ local function OpenNavcomputer(console)
 
     local clear = UI.Button(detail, "Kurs verwerfen", function() SendNav("clear") end, function() return COL.bad end)
 
+    -- Galaxie-Hologramm auf das gewaehlte System (sonst unsere Position)
+    local holo = UI.Button(detail, "Im Hologramm zeigen", function() SendNav("holo_focus", selected and selected.id or "") end)
+    local terr = UI.Button(detail, "", function() map.ShowTerritory = map.ShowTerritory == false end)
+    terr.Think = function(b) b.Label = map.ShowTerritory == false and "Gebiete: aus" or "Gebiete: an" end
+
     detail.PerformLayout = function(s, w, h)
+        holo:SetPos(0, h - 128) holo:SetSize(w * 0.62 - 3, 38)
+        terr:SetPos(w * 0.62 + 3, h - 128) terr:SetSize(w * 0.38 - 3, 38)
         calc:SetPos(0, h - 84) calc:SetSize(w, 38)
         clear:SetPos(0, h - 40) clear:SetSize(w, 38)
     end
 
     detail.Paint = function(s, w, h)
-        draw.RoundedBox(0, 0, 0, w, h - 90, COL.panel)
+        draw.RoundedBox(0, 0, 0, w, h - 134, COL.panel)
         local st = C.status or {}
         local cur = static and st.system and static.systemsById[st.system]
         local y = 8
