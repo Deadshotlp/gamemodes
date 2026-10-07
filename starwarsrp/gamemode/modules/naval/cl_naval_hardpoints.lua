@@ -3,7 +3,10 @@
 
     Links das Schiffsmodell mit allen Stellungen und ihren Feuerboegen
     (Ziehen = drehen, Mausrad = zoomen), rechts Liste und Werte der gewaehlten
-    Stellung. Ziel: eine Schiffsklasse oder das Map-Schiff (eigene Stellungen
+    Stellung. Mehrfachauswahl (Strg/Shift in der Liste): Lage und Richtung
+    verschieben alle gewaehlten gemeinsam, die uebrigen Werte gelten fuer alle;
+    Kopieren, Spiegeln, Loeschen und die Zwischenablage (auch zwischen Klassen)
+    arbeiten auf der Auswahl. Ziel: eine Schiffsklasse oder das Map-Schiff (eigene Stellungen
     je Map-Profil). Fuer das Map-Schiff: "Stellung hier" nimmt Position und
     Blickrichtung des Spielers (an der Kanone stehen, in Schussrichtung
     schauen).
@@ -58,7 +61,14 @@ function Naval.OpenHardpointEditor()
 
     local target = "__map"
     local list = CurrentList(target)
-    local selected = nil
+    local sel = {}      -- gewaehlte Stellungen (Index -> true)
+    local primary = nil -- deren Werte stehen in den Reglern
+
+    local function Selected()
+        local out = {}
+        for i = 1, #list do if sel[i] then out[#out + 1] = i end end
+        return out
+    end
 
     -- Ziel waehlen
     local cTarget = vgui.Create("DComboBox", frame)
@@ -124,12 +134,12 @@ function Naval.OpenHardpointEditor()
 
         for i, hp in ipairs(list) do
             local pos = center + Vector(hp.x or 0, hp.y or 0, hp.z or 0) * len
-            local col = i == selected and Color(255, 255, 80) or (TYPE_COLOR[hp.type] or Color(255, 255, 255))
-            render.DrawSphere(pos, len * (i == selected and 0.012 or 0.008), 8, 8, col)
+            local col = sel[i] and Color(255, 255, 80) or (TYPE_COLOR[hp.type] or Color(255, 255, 255))
+            render.DrawSphere(pos, len * (sel[i] and 0.012 or 0.008), 8, 8, col)
 
             -- Feuerbogen: waagerechter Faecher und senkrechte Grenzen
-            local reach = len * (i == selected and 0.3 or 0.15)
-            local alpha = i == selected and 220 or 90
+            local reach = len * (sel[i] and 0.3 or 0.15)
+            local alpha = sel[i] and 220 or 90
             local function Dir(yaw, pitch)
                 local y, p = math.rad(yaw), math.rad(pitch)
                 return Vector(math.cos(p) * math.cos(y), math.cos(p) * math.sin(y), math.sin(p))
@@ -177,25 +187,28 @@ function Naval.OpenHardpointEditor()
     B.Header("Stellungen")
     local lv = vgui.Create("DListView", B.Row(220))
     lv:Dock(FILL)
-    lv:SetMultiSelect(false)
+    lv:SetMultiSelect(true)
     lv:AddColumn("#"):SetFixedWidth(30)
     lv:AddColumn("Gruppe")
     lv:AddColumn("Typ")
     lv:AddColumn("Anz."):SetFixedWidth(40)
 
     local fields = {}
+    local filling = false
     local function FillList()
+        filling = true
         lv:Clear()
         for i, hp in ipairs(list) do
             local wt = Naval.WeaponTypes[hp.type] or {}
             local line = lv:AddLine(i, hp.group ~= "" and hp.group or "-", wt.name or hp.type, hp.count or 1)
             line.Index = i
-            if i == selected then line:SetSelected(true) end
+            if sel[i] then line:SetSelected(true) end
         end
+        filling = false
     end
 
     local function FillFields()
-        local hp = selected and list[selected]
+        local hp = primary and list[primary]
         for key, f in pairs(fields) do
             f.Updating = true
             if f.SetValue and hp then
@@ -212,36 +225,81 @@ function Naval.OpenHardpointEditor()
         end
     end
 
-    lv.OnRowSelected = function(_, _, line)
-        selected = line.Index
+    local function Select(indices, prim)
+        sel = {}
+        for _, i in ipairs(indices) do sel[i] = true end
+        primary = prim or indices[#indices]
+        FillList()
         FillFields()
     end
 
+    lv.OnRowSelected = function(_, _, line)
+        if filling then return end
+        local indices = {}
+        for _, l in ipairs(lv:GetSelected()) do indices[#indices + 1] = l.Index end
+        sel = {}
+        for _, i in ipairs(indices) do sel[i] = true end
+        primary = sel[line.Index] and line.Index or indices[#indices]
+        FillFields()
+    end
+
+    -- Lage und Richtung: Verschiebung fuer alle gewaehlten; sonst gleicher Wert
+    local RELATIVE = {x = true, y = true, z = true, yaw = true, pitch = true}
+    local function Clean(hp)
+        hp.x = math.Clamp(math.Round(hp.x or 0, 3), -0.7, 0.7)
+        hp.y = math.Clamp(math.Round(hp.y or 0, 3), -0.7, 0.7)
+        hp.z = math.Clamp(math.Round(hp.z or 0, 3), -0.7, 0.7)
+        hp.yaw = math.Round(math.NormalizeAngle(hp.yaw or 0))
+        hp.pitch = math.Clamp(math.Round(hp.pitch or 0), -90, 90)
+    end
+
     local function Changed(key, value)
-        local hp = selected and list[selected]
-        if not hp then return end
-        hp[key] = value
+        local base = primary and list[primary]
+        if not base then return end
+        local delta = RELATIVE[key] and (value - (base[key] or 0)) or nil
+
+        for _, i in ipairs(Selected()) do
+            local hp = list[i]
+            if delta then hp[key] = (hp[key] or 0) + delta else hp[key] = value end
+            Clean(hp)
+        end
+
         if key == "group" or key == "type" or key == "count" then
-            local line = lv:GetLine(lv:GetSelectedLine() or 0)
-            if line then
-                local wt = Naval.WeaponTypes[hp.type] or {}
-                line:SetColumnText(2, hp.group ~= "" and hp.group or "-")
-                line:SetColumnText(3, wt.name or hp.type)
-                line:SetColumnText(4, hp.count or 1)
+            for _, line in ipairs(lv:GetLines()) do
+                local hp = list[line.Index]
+                if hp and sel[line.Index] then
+                    local wt = Naval.WeaponTypes[hp.type] or {}
+                    line:SetColumnText(2, hp.group ~= "" and hp.group or "-")
+                    line:SetColumnText(3, wt.name or hp.type)
+                    line:SetColumnText(4, hp.count or 1)
+                end
             end
         end
     end
 
-    B.Header("Gewählte Stellung")
+    local function Move(key, amount)
+        for _, i in ipairs(Selected()) do
+            list[i][key] = (list[i][key] or 0) + amount
+            Clean(list[i])
+        end
+        FillFields()
+    end
+
+    B.Header("Gewählte Stellungen")
+    B.Info(24, function(sp, w, h)
+        local n = #Selected()
+        draw.SimpleText(n == 0 and "Keine gewählt (Strg/Shift-Klick = mehrere)" or (n == 1 and "1 Stellung gewählt"
+            or (n .. " Stellungen gewählt - Lage/Richtung verschieben alle")), "MLIB.14", 6, 4, n > 1 and COL.accent or COL.dim)
+    end)
     local eGroup = B.Entry("Gruppe (z. B. Turbolaser Backbord)")
-    eGroup.OnChange = function(s) if not s.Updating then Changed("group", s:GetValue()) end end
+    eGroup.OnChange = function(sp) if not sp.Updating then Changed("group", sp:GetValue()) end end
     fields.group = eGroup
 
     local types = {}
     for _, id in ipairs(Naval.WeaponTypeList) do types[#types + 1] = {id, Naval.WeaponTypes[id].name} end
     local cType = B.Combo(types, "turbolaser")
     cType.IsCombo = true
-    cType.OnSelect = function(s, _, _, data) if not s.Updating then Changed("type", data) end end
+    cType.OnSelect = function(sp, _, _, data) if not sp.Updating then Changed("type", data) end end
     fields.type = cType
 
     local function Slider(key, label, min, max, decimals, default)
@@ -254,8 +312,8 @@ function Naval.OpenHardpointEditor()
         sl.Default = default
         sl.Label:SetTextColor(COL.text)
         sl.Label:SetFont("MLIB.14")
-        sl.OnValueChanged = function(s, v)
-            if s.Updating then return end
+        sl.OnValueChanged = function(sp, v)
+            if sp.Updating then return end
             Changed(key, decimals == 0 and math.Round(v) or math.Round(v, decimals))
         end
         fields[key] = sl
@@ -273,34 +331,77 @@ function Naval.OpenHardpointEditor()
     Slider("ammo", "Munition (Raketen/Torpedos)", 0, 500, 0, 50)
     FillFields()
 
-    local function Add(hp)
-        list[#list + 1] = hp
-        selected = #list
-        FillList()
-        FillFields()
+    -- Schrittweise verschieben / drehen
+    local eStep = B.Entry("Schritt in Schiffslängen", "0.01")
+    local function Step() return tonumber(eStep:GetValue()) or 0.01 end
+    B.Buttons({
+        {"vor", function() Move("x", Step()) end}, {"zurück", function() Move("x", -Step()) end},
+        {"links", function() Move("y", Step()) end}, {"rechts", function() Move("y", -Step()) end},
+    })
+    B.Buttons({
+        {"hoch", function() Move("z", Step()) end}, {"runter", function() Move("z", -Step()) end},
+        {"↺ 15°", function() Move("yaw", 15) end}, {"↻ 15°", function() Move("yaw", -15) end},
+    })
+
+    local function AddMany(items)
+        local indices = {}
+        for _, hp in ipairs(items) do
+            list[#list + 1] = hp
+            indices[#indices + 1] = #list
+        end
+        Select(indices)
+    end
+
+    local function Mirror(hp)
+        local copy = table.Copy(hp)
+        copy.y = -(hp.y or 0)
+        copy.yaw = -(hp.yaw or 0)
+        local g = hp.group or ""
+        if string.find(g, "Backbord", 1, true) then copy.group = string.gsub(g, "Backbord", "Steuerbord")
+        elseif string.find(g, "Steuerbord", 1, true) then copy.group = string.gsub(g, "Steuerbord", "Backbord") end
+        return copy
     end
 
     B.Buttons({
         {"Neu", function()
-            Add({group = "", type = "turbolaser", count = 1, x = 0, y = 0, z = 0.05, yaw = 0, pitch = 0, arcH = 90, arcV = 60})
+            AddMany({{group = "", type = "turbolaser", count = 1, x = 0, y = 0, z = 0.05, yaw = 0, pitch = 0, arcH = 90, arcV = 60}})
         end, COL.ok},
+        {"Kopieren", function()
+            local copies = {}
+            for _, i in ipairs(Selected()) do copies[#copies + 1] = table.Copy(list[i]) end
+            if #copies > 0 then AddMany(copies) end
+        end},
         {"Spiegeln", function()
-            local hp = selected and list[selected]
-            if not hp then return end
-            local copy = table.Copy(hp)
-            copy.y = -(hp.y or 0)
-            copy.yaw = -(hp.yaw or 0)
-            copy.group = string.find(hp.group or "", "Backbord", 1, true) and string.gsub(hp.group, "Backbord", "Steuerbord")
-                or (string.find(hp.group or "", "Steuerbord", 1, true) and string.gsub(hp.group, "Steuerbord", "Backbord") or hp.group)
-            Add(copy)
+            local copies = {}
+            for _, i in ipairs(Selected()) do copies[#copies + 1] = Mirror(list[i]) end
+            if #copies > 0 then AddMany(copies) end
         end},
         {"Löschen", function()
-            if not selected then return end
-            table.remove(list, selected)
-            selected = nil
-            FillList()
-            FillFields()
+            local indices = Selected()
+            for k = #indices, 1, -1 do table.remove(list, indices[k]) end
+            Select({})
         end, COL.bad},
+    })
+
+    B.Buttons({
+        {"Alle wählen", function()
+            local all = {}
+            for i = 1, #list do all[i] = i end
+            Select(all, primary)
+        end},
+        {"In Zwischenablage", function()
+            local clip = {}
+            for _, i in ipairs(Selected()) do clip[#clip + 1] = table.Copy(list[i]) end
+            Naval.HardpointClipboard = clip
+            notification.AddLegacy(#clip .. " Stellungen in der Zwischenablage", NOTIFY_GENERIC, 3)
+        end},
+        {"Einfügen", function()
+            local clip = Naval.HardpointClipboard
+            if not clip or #clip == 0 then return end
+            local copies = {}
+            for _, hp in ipairs(clip) do copies[#copies + 1] = table.Copy(hp) end
+            AddMany(copies)
+        end},
     })
 
     -- Map-Schiff: an der Kanone stehen und in Schussrichtung schauen
@@ -319,7 +420,7 @@ function Naval.OpenHardpointEditor()
         local aim = Q.RotateVec(Q.Conj(qbm), V3.FromVector(LocalPlayer():GetAimVector()))
         local len = class.lengthM or 1000
 
-        local hp = selected and list[selected]
+        local hp = primary and list[primary]
         local values = {x = math.Round(body.x / len, 3), y = math.Round(body.y / len, 3), z = math.Round(body.z / len, 3),
             yaw = math.Round(math.deg(math.atan2(aim.y, aim.x))), pitch = math.Round(math.deg(math.asin(math.Clamp(aim.z, -1, 1))))}
         if hp then
@@ -327,7 +428,7 @@ function Naval.OpenHardpointEditor()
             FillFields()
         else
             values.group, values.type, values.count, values.arcH, values.arcV = "", "turbolaser", 1, 90, 60
-            Add(values)
+            AddMany({values})
         end
     end}})[1]
 
@@ -342,7 +443,7 @@ function Naval.OpenHardpointEditor()
     cTarget.OnSelect = function(_, _, _, data)
         target = data
         list = CurrentList(target)
-        selected = nil
+        sel, primary = {}, nil
         SetModelFor()
         FillList()
         FillFields()
