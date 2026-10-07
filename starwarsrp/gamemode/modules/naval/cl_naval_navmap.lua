@@ -305,6 +305,37 @@ local function CreateSystemMap(parent, onSelect)
         local hover, hoverD = nil, 14
         local now = Naval.Now()
 
+        -- Umlaufbahnen (weiss): Mond um Planet, Planet um Stern. Gleiche
+        -- Formel wie Naval.BodyPos, nur ueber den ganzen Umlauf - der Koerper
+        -- liegt so genau auf seiner Bahn (geneigte Bahnen von oben = Ellipse).
+        for _, body in pairs(system.bodiesById) do
+            local orbit = body.orbit
+            local parent = body.parentId and system.bodiesById[body.parentId]
+            if orbit and (orbit.radius or 0) > 0 then
+                local pr = orbit.radius * s.PxPerM
+                if pr > 3 and pr < 200000 then
+                    local center = parent and Naval.BodyPos(parent, system.bodiesById, now) or {x = 0, y = 0, z = 0}
+                    local incl = math.rad(orbit.incl or 0)
+                    local alpha = body.type == "moon" and 45 or 70
+                    surface.SetDrawColor(255, 255, 255, alpha)
+
+                    local segments = math.Clamp(math.floor(pr / 3), 48, 180)
+                    local lx, ly
+                    for i = 0, segments do
+                        local a = i / segments * math.pi * 2
+                        local px2, py2 = ToScreen(s, {
+                            x = center.x + math.cos(a) * orbit.radius,
+                            y = center.y + math.sin(a) * orbit.radius * math.cos(incl),
+                        })
+                        if lx and math.max(lx, px2) >= 0 and math.min(lx, px2) <= w and math.max(ly, py2) >= 0 and math.min(ly, py2) <= h then
+                            surface.DrawLine(lx, ly, px2, py2)
+                        end
+                        lx, ly = px2, py2
+                    end
+                end
+            end
+        end
+
         -- Himmelskoerper
         for _, body in pairs(system.bodiesById) do
             local pos = Naval.BodyPos(body, system.bodiesById, now)
