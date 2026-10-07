@@ -8,6 +8,7 @@
     Meter). Dort Himmelskoerper, Schiffe oder einen freien Punkt waehlen und
     den Autopiloten starten (sv_naval_autopilot.lua): Anflug mit Umweg um
     Planeten, Halten oder Orbit, Sprungpunkt ausserhalb des Massenschattens.
+    Shift+Klick haengt weitere Ziele an (Kette, durchflogen bis zum letzten).
 ]]
 
 PD.Naval = PD.Naval or {}
@@ -255,7 +256,8 @@ local function CreateSystemMap(parent, onSelect)
     local map = vgui.Create("DPanel", parent)
     map.PxPerM = 1 / 20000       -- Pixel je Meter
     map.ViewCenter = nil        -- nil = eigenes Schiff (nicht "Center": das ist eine Panel-Methode)
-    map.Selected = nil          -- {kind, id, pos, name}
+    map.Selected = nil          -- letztes Ziel der Kette {kind, id, pos, name}
+    map.Chain = {}              -- Wegpunkt-Kette (Shift+Klick haengt an)
 
     local function Origin(s)
         if s.ViewCenter then return s.ViewCenter end
@@ -381,17 +383,39 @@ local function CreateSystemMap(parent, onSelect)
         surface.DrawLine(x, y, x + fx * 18, y - fy * 18)
         draw.RoundedBox(4, x - 4, y - 4, 8, 8, COL.ok)
 
-        -- Auswahl
-        local sel = s.Selected
-        if sel then
+        -- Folgeziele einer laufenden Kette
+        if auto and auto.queue and #auto.queue > 0 then
+            local last = auto.path and auto.path[#auto.path]
+            surface.SetDrawColor(COL.ok.r, COL.ok.g, COL.ok.b, 120)
+            for i, q in ipairs(auto.queue) do
+                local qx, qy = ToScreen(s, {x = q.p[1], y = q.p[2]})
+                if last then
+                    local lx, ly = ToScreen(s, {x = last[1], y = last[2]})
+                    surface.DrawLine(lx, ly, qx, qy)
+                end
+                draw.SimpleText(tostring(i + 1), "MLIB.14", qx + 6, qy + 4, COL.ok)
+                last = q.p
+            end
+        end
+
+        -- Gewaehlte Kette (noch nicht gestartet): gestrichelt vom Schiff aus
+        local prevX, prevY = ToScreen(s, view.pos)
+        for i, sel in ipairs(s.Chain) do
             local p = sel.kind == "ship" and view.ships[sel.id] and view.ships[sel.id].pos
                 or (sel.kind == "body" and system.bodiesById[sel.id] and Naval.BodyPos(system.bodiesById[sel.id], system.bodiesById, now))
                 or sel.pos
             if p then
                 local sx, sy = ToScreen(s, p)
+                local len = math.sqrt((sx - prevX) ^ 2 + (sy - prevY) ^ 2)
+                surface.SetDrawColor(COL.warn.r, COL.warn.g, COL.warn.b, 160)
+                for t = 0, len - 6, 12 do
+                    local f1, f2 = t / len, math.min(1, (t + 6) / len)
+                    surface.DrawLine(prevX + (sx - prevX) * f1, prevY + (sy - prevY) * f1, prevX + (sx - prevX) * f2, prevY + (sy - prevY) * f2)
+                end
                 surface.SetDrawColor(COL.warn)
                 surface.DrawOutlinedRect(sx - 8, sy - 8, 17, 17, 2)
-                if sel.kind == "point" then draw.SimpleText("Wegpunkt", "MLIB.14", sx + 10, sy - 8, COL.warn) end
+                draw.SimpleText(i .. (sel.kind == "point" and "  Wegpunkt" or ""), "MLIB.14", sx + 10, sy - 8, COL.warn)
+                prevX, prevY = sx, sy
             end
         end
 
@@ -428,13 +452,20 @@ local function CreateSystemMap(parent, onSelect)
         s.DragStart = nil
         if s.Moved then return end
 
-        if s.Hover then
-            s.Selected = s.Hover
-        else
+        local sel = s.Hover
+        if not sel then
             local mx, my = s:CursorPos()
-            s.Selected = {kind = "point", pos = ToWorld(s, mx, my), name = "Wegpunkt"}
+            sel = {kind = "point", pos = ToWorld(s, mx, my), name = "Wegpunkt"}
         end
-        if onSelect then onSelect(s.Selected) end
+
+        -- Shift: an die Kette anhaengen, sonst neu beginnen
+        if input.IsShiftDown() and #s.Chain < 12 then
+            s.Chain[#s.Chain + 1] = sel
+        else
+            s.Chain = {sel}
+        end
+        s.Selected = sel
+        if onSelect then onSelect(sel) end
     end
 
     map.Think = function(s)
@@ -470,7 +501,7 @@ local function CreateSystemSide(parent, map)
 
     local info = vgui.Create("DPanel", side)
     info:Dock(TOP)
-    info:SetTall(250)
+    info:SetTall(270)
     info.Paint = function(s, w, h)
         draw.RoundedBox(0, 0, 0, w, h, COL.panel)
         local y = 8
@@ -483,7 +514,14 @@ local function CreateSystemSide(parent, map)
         local sel = map.Selected
         local view = C.View and C.View()
         Line("System: " .. Naval.SystemName(C.status and C.status.system), COL.dim)
-        if sel and view then
+        if #map.Chain > 1 then
+            Line(("Kette mit %d Zielen:"):format(#map.Chain), COL.accent)
+            for i = 1, math.min(#map.Chain, 5) do
+                local c = map.Chain[i]
+                Line(("%d. %s%s"):format(i, c.name or "?", i == #map.Chain and state.mode == "orbit" and " (Orbit)" or ""), COL.text)
+            end
+            if #map.Chain > 5 then Line(("... und %d weitere"):format(#map.Chain - 5), COL.dim) end
+        elseif sel and view then
             Line("Ziel: " .. (sel.name or "?"), COL.accent)
             local p = sel.pos
             if sel.kind == "ship" and view.ships[sel.id] then p = view.ships[sel.id].pos end
@@ -495,13 +533,19 @@ local function CreateSystemSide(parent, map)
         else
             Line("Ziel auf der Karte wählen:", COL.dim)
             Line("Planet, Mond, Stern, Schiff", COL.dim)
-            Line("oder freier Punkt", COL.dim)
+            Line("oder freier Punkt.", COL.dim)
+            Line("Shift+Klick hängt weitere an.", COL.dim)
         end
 
         y = y + 8
         local auto = C.status and C.status.auto
         if auto then
             Line("Autopilot: " .. (auto.label or "?"), COL.ok)
+            if auto.queue and #auto.queue > 0 then
+                local names = {}
+                for _, q in ipairs(auto.queue) do names[#names + 1] = q.label or "?" end
+                Line("danach: " .. table.concat(names, " -> "), COL.dim)
+            end
             if auto.arrived then
                 Line(auto.mode == "orbit" and "Im Orbit" or "Ziel erreicht", COL.ok)
             else
@@ -559,18 +603,29 @@ local function CreateSystemSide(parent, map)
 
     local goRow = Row(42)
     local goBtn = UI.Button(goRow, "AUTOPILOT STARTEN", function()
-        local sel = map.Selected
-        if not sel then return end
+        if #map.Chain == 0 then return end
         local km = tonumber(altEntry:GetValue())
-        local args = {kind = sel.kind, mode = state.mode, speed = state.speed, alt = km and km * 1000 or nil}
-        if sel.kind == "point" then
-            args.pos = {x = sel.pos.x, y = sel.pos.y, z = sel.pos.z}
-        else
-            args.id = sel.id
+        local legs = {}
+        for i, sel in ipairs(map.Chain) do
+            local leg = {kind = sel.kind, mode = i == #map.Chain and state.mode or "stop", alt = km and km * 1000 or nil}
+            if sel.kind == "point" then
+                leg.pos = {x = sel.pos.x, y = sel.pos.y, z = sel.pos.z}
+            else
+                leg.id = sel.id
+            end
+            legs[#legs + 1] = leg
         end
-        SendAuto(args)
+        SendAuto({legs = legs, speed = state.speed})
     end, function() return COL.ok end)
     goBtn:Dock(FILL)
+
+    local undoBtn = UI.Button(goRow, "Letztes −", function()
+        table.remove(map.Chain)
+        map.Selected = map.Chain[#map.Chain]
+    end, function() return COL.warn end)
+    undoBtn:Dock(RIGHT)
+    undoBtn:DockMargin(6, 0, 0, 0)
+    undoBtn:SetWide(90)
 
     local jumpRow = Row(38)
     local jumpBtn = UI.Button(jumpRow, "Zum Sprungpunkt (aus dem Massenschatten)", function()
@@ -584,15 +639,17 @@ local function CreateSystemSide(parent, map)
 
     local hintRow = Row(60)
     hintRow.Paint = function(s, w, h)
-        draw.SimpleText("Ziehen = verschieben, Mausrad = zoomen,", "MLIB.12", 0, 4, COL.dim)
-        draw.SimpleText("Rechtsklick = Ansicht aufs Schiff.", "MLIB.12", 0, 20, COL.dim)
+        draw.SimpleText("Shift+Klick = Ziel anhängen, Ziehen = verschieben,", "MLIB.12", 0, 4, COL.dim)
+        draw.SimpleText("Mausrad = zoomen, Rechtsklick = Ansicht aufs Schiff.", "MLIB.12", 0, 20, COL.dim)
         draw.SimpleText("Steuern an der Steuerkonsole schaltet ab.", "MLIB.12", 0, 36, COL.dim)
     end
 
     side.Think = function()
         local st = C.status or {}
-        local sel = map.Selected
+        local sel = map.Chain[#map.Chain]
         goBtn.Disabled = not sel or st.state ~= "normal"
+        undoBtn.Disabled = #map.Chain == 0
+        goBtn.Label = #map.Chain > 1 and ("AUTOPILOT: %d ZIELE"):format(#map.Chain) or "AUTOPILOT STARTEN"
         orbitBtn.Disabled = not sel or sel.kind ~= "body"
         if orbitBtn.Disabled and state.mode == "orbit" then state.mode = "stop" end
         jumpBtn.Disabled = not (st.nav and st.nav.ready and st.nav.valid) or st.state ~= "normal"

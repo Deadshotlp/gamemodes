@@ -10,7 +10,10 @@
 
     Map-Schiff (Navigationscomputer -> Systemkarte), ship.auto:
       {kind = "body"|"point"|"ship"|"jumppoint", id, pos, mode = "stop"|"orbit",
-       alt (m ueber der Oberflaeche bzw. Abstand zum Schiff), speed 0.1..1}
+       alt (m ueber der Oberflaeche bzw. Abstand zum Schiff), speed 0.1..1,
+       via (Zwischenziel: durchfliegen statt anhalten), queue = {weitere Ziele}}
+    Wegpunkt-Kette: Shift+Klick auf der Systemkarte haengt Ziele an; nur das
+    letzte bestimmt "halten" oder "Orbit".
     Steuereingaben an der Steuerkonsole schalten ihn ab.
 
     NPC-Befehle move/patrol nutzen dieselbe Ausweichlogik (Naval.AutoSteer).
@@ -235,6 +238,24 @@ local function TickMapShip(ship)
     end
 
     local tolerance = ((ship:Class() or {}).lengthM or 300) * 2 + 1000
+
+    -- Zwischenziel: ohne Bremsen durchfliegen, dann das naechste Ziel
+    if auto.via then
+        local path = Naval.AvoidPath(ship.systemId, ship.pos, target)
+        auto.path = path
+
+        if V3.Dist(ship.pos, target) <= tolerance * 2 and auto.queue and #auto.queue > 0 then
+            local nextLeg = table.remove(auto.queue, 1)
+            nextLeg.queue = auto.queue
+            ship.auto = nextLeg
+            ship:Log("nav", "", "Autopilot: " .. (auto.label or "?") .. " passiert, weiter nach " .. (nextLeg.label or "?"))
+            return
+        end
+
+        Steer(ship, path[2] or target, math.huge, tolerance, auto.speed)
+        return
+    end
+
     local arrived, path = Naval.AutoSteer(ship, target, tolerance, auto.speed)
     auto.path = path
 
@@ -256,10 +277,8 @@ timer.Create("PD.Naval.Autopilot", 0.25, 0, function()
     end
 end)
 
--- Vom Navigationscomputer (sv_naval_stations.lua, Aktion "auto")
-function Naval.StartAutopilot(ship, args, by)
-    if ship.state ~= S.NORMAL then return false, "Nur im Normalflug" end
-
+-- Ein Ziel aus den Angaben der Systemkarte
+local function BuildLeg(ship, args, by)
     local auto = {
         kind = args.kind, mode = args.mode == "orbit" and "orbit" or "stop",
         speed = math.Clamp(tonumber(args.speed) or 1, 0.1, 1), by = by,
@@ -267,20 +286,20 @@ function Naval.StartAutopilot(ship, args, by)
 
     if args.kind == "body" then
         local body = Naval.Bodies[tostring(args.id or "")]
-        if not body or body.systemId ~= ship.systemId then return false, "Unbekannter Himmelskörper" end
+        if not body or body.systemId ~= ship.systemId then return nil, "Unbekannter Himmelskörper" end
         auto.id = body.id
         auto.label = body.name
         if tonumber(args.alt) then auto.alt = math.Clamp(tonumber(args.alt), 0, body.radius * 50 + 1e7) end
     elseif args.kind == "ship" then
         local other = Naval.Ships[tonumber(args.id) or -1]
-        if not other or other == ship or other.systemId ~= ship.systemId then return false, "Unbekanntes Schiff" end
+        if not other or other == ship or other.systemId ~= ship.systemId then return nil, "Unbekanntes Schiff" end
         auto.id = other.id
         auto.label = (not Naval.IdentLevel or Naval.IdentLevel(ship, other) >= 1) and other.name or "Unbekannter Kontakt"
         auto.alt = math.Clamp(tonumber(args.alt) or 5000, 1000, 500000)
         auto.mode = "stop"
     elseif args.kind == "point" then
         local p = istable(args.pos) and {x = tonumber(args.pos.x), y = tonumber(args.pos.y), z = tonumber(args.pos.z) or ship.pos.z}
-        if not p or not p.x or not p.y then return false, "Ungültiger Punkt" end
+        if not p or not p.x or not p.y then return nil, "Ungültiger Punkt" end
 
         -- Punkt in einem Sicherheitsabstand: nach aussen schieben
         for _, body in ipairs(Naval.BodiesBySystem[ship.systemId] or {}) do
@@ -298,16 +317,48 @@ function Naval.StartAutopilot(ship, args, by)
         auto.mode = "stop"
     elseif args.kind == "jumppoint" then
         local valid, reason = Naval.NavValid(ship)
-        if not valid then return false, reason end
+        if not valid then return nil, reason end
         auto.label = "Sprungpunkt " .. ((Naval.Systems[ship.nav.target] or {}).name or "?")
         auto.mode = "stop"
     else
-        return false, "Unbekanntes Ziel"
+        return nil, "Unbekanntes Ziel"
     end
 
-    ship.auto = auto
+    return auto
+end
+
+-- Vom Navigationscomputer (sv_naval_stations.lua, Aktion "auto"):
+-- ein Ziel oder args.legs = Liste von Zielen (Wegpunkt-Kette)
+function Naval.StartAutopilot(ship, args, by)
+    if ship.state ~= S.NORMAL then return false, "Nur im Normalflug" end
+
+    local list = istable(args.legs) and args.legs or {args}
+    if #list == 0 then return false, "Kein Ziel" end
+
+    local legs = {}
+    for i = 1, math.min(#list, 12) do
+        local a = istable(list[i]) and list[i] or {}
+        a.speed = a.speed or args.speed
+        local leg, reason = BuildLeg(ship, a, by)
+        if not leg then return false, ("Ziel %d: %s"):format(i, reason or "?") end
+        legs[#legs + 1] = leg
+    end
+
+    -- Alle ausser dem letzten werden durchflogen
+    local names = {}
+    for i, leg in ipairs(legs) do
+        if i < #legs then
+            leg.via = true
+            leg.mode = "stop"
+        end
+        names[#names + 1] = leg.label
+    end
+
+    local first = table.remove(legs, 1)
+    first.queue = legs
+    ship.auto = first
     ship.dirty = true
-    ship:Log("nav", by or "", "Autopilot: Kurs auf " .. auto.label)
+    ship:Log("nav", by or "", "Autopilot: Kurs auf " .. table.concat(names, " -> "))
     return true
 end
 
@@ -325,9 +376,26 @@ Naval.StatusExtras.auto = function(ship)
     for i = 2, #(auto.path or {}) do remaining = remaining + V3.Dist(auto.path[i - 1], auto.path[i]) end
     local speed = math.max(ship:Speed(), ship:Stat("maxSpeed") * (auto.speed or 1) * 0.5, 1)
 
+    -- Weitere Ziele der Kette (fuer Anzeige und Restweg)
+    local queue = {}
+    local last = auto.path and auto.path[#auto.path]
+    for _, leg in ipairs(auto.queue or {}) do
+        local p = leg.pos
+        if leg.kind == "body" and Naval.Bodies[leg.id or ""] then p = Naval.BodyPos(Naval.Bodies[leg.id], Naval.Bodies)
+        elseif leg.kind == "ship" and Naval.Ships[leg.id or -1] then p = Naval.Ships[leg.id].pos end
+        if p then
+            queue[#queue + 1] = {label = leg.label, mode = leg.mode, p = {math.Round(p.x), math.Round(p.y), math.Round(p.z)}}
+            if last then remaining = remaining + V3.Dist(last, p) end
+            last = p
+        end
+    end
+
+    local finalMode = auto.mode
+    if #(auto.queue or {}) > 0 then finalMode = auto.queue[#auto.queue].mode end
+
     return {
-        label = auto.label, kind = auto.kind, mode = auto.mode, arrived = auto.arrived == true,
+        label = auto.label, kind = auto.kind, mode = finalMode, arrived = auto.arrived == true,
         path = path, remaining = math.Round(remaining), eta = auto.arrived and 0 or math.Round(remaining / speed),
-        speed = auto.speed,
+        speed = auto.speed, queue = queue,
     }
 end
