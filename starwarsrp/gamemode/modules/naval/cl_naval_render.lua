@@ -157,6 +157,8 @@ end
 -- Himmelskoerper
 --------------------------------------------------------------------------------
 
+local Lighting -- weiter unten
+
 local function DrawBodies(view, M, camOffset, ang, fov)
     local system = C.system
     if not system or system.systemId ~= view.systemId then return nil end
@@ -193,6 +195,10 @@ local function DrawBodies(view, M, camOffset, ang, fov)
     -- der naehere wird danach gezeichnet und deckt ab.
     table.sort(list, function(a, b) return a.real > b.real end)
 
+    -- Eigenes Sonnenlicht setzen: sonst uebernehmen die Planeten die
+    -- Beleuchtung dessen, was zuletzt gezeichnet wurde (z. B. die Waffe)
+    Lighting(sunDir)
+
     for _, e in ipairs(list) do
         local body = e.body
         local seg = math.Clamp(math.floor(e.radius / e.dist * 400), 12, 64)
@@ -207,8 +213,10 @@ local function DrawBodies(view, M, camOffset, ang, fov)
         if body.type == "star" then
             local mat = Mat(body.material)
             if mat then
+                render.ResetModelLighting(1, 1, 1)
                 render.SetMaterial(mat)
                 render.DrawSphere(e.pos, e.radius, seg, seg, color_white)
+                Lighting(sunDir)
             end
             render.SetMaterial(MAT_GLOW)
             render.DrawSprite(e.pos, e.radius * 7, e.radius * 7, Color(255, 230, 190, 255))
@@ -233,6 +241,7 @@ local function DrawBodies(view, M, camOffset, ang, fov)
         cam.End3D()
     end
 
+    render.SuppressEngineLighting(false)
     return sunDir
 end
 
@@ -420,7 +429,7 @@ end
 
 local lastDrawn = 0
 
-local function Lighting(sunDir)
+Lighting = function(sunDir)
     render.SuppressEngineLighting(true)
     render.ResetModelLighting(0.08, 0.08, 0.1)
 
