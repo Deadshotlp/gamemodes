@@ -393,6 +393,24 @@ Actions.alertbtn_remove = function(ply, args)
     Actions.settings_get(ply)
 end
 
+Actions.alertbtn_level = function(ply, args)
+    local list = table.Copy(Naval.AlertButtons())
+    local entry = list[tonumber(args.idx) or -1]
+    if not entry then return end
+    entry.level = tonumber(entry.level) == 1 and 2 or 1
+    Naval.SaveAlertButtons(list)
+    Actions.settings_get(ply)
+end
+
+Actions.alertbtn_leave = function(ply, args)
+    local list = table.Copy(Naval.AlertButtons())
+    local entry = list[tonumber(args.idx) or -1]
+    if not entry then return end
+    entry.leave = not entry.leave
+    Naval.SaveAlertButtons(list)
+    Actions.settings_get(ply)
+end
+
 Actions.alertbtn_test = function(ply, args)
     local entry = Naval.AlertButtons()[tonumber(args.idx) or -1]
     if not entry then return end

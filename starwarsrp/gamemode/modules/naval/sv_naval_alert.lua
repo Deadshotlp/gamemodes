@@ -47,15 +47,46 @@ function Naval.SaveAlertButtons(list)
         .. PD.SQL.EscapeString(ButtonKey()) .. ", " .. PD.SQL.EscapeString(Naval.DB.Encode(list)) .. ")")
 end
 
-function Naval.PressMapButton(entry)
+-- Zustand eines func_button: 0 oben, 1 unten, 2 faehrt hoch, 3 faehrt runter
+local function ButtonInfo(ent)
+    local kv = ent:GetKeyValues() or {}
+    local flags = tonumber(kv.spawnflags) or 0
+    return {
+        state = tonumber(ent:GetInternalVariable("m_toggle_state")) or 0,
+        locked = ent:GetInternalVariable("m_bLocked") == true,
+        toggle = bit.band(flags, 32) ~= 0,
+        wait = tonumber(kv.wait),
+    }
+end
+
+-- Knoepfe ignorieren "Press", solange sie unten sind oder sich bewegen
+-- (Wartezeit nach dem letzten Druck). Dann bis zu 30 s lang erneut versuchen.
+local function Ready(info)
+    if info.state == 2 or info.state == 3 then return false end
+    return info.toggle or info.state == 0
+end
+
+function Naval.PressMapButton(entry, attempt)
     local ent = ents.GetMapCreatedEntity(tonumber(entry.id) or -1)
     if not IsValid(ent) then return false end
 
-    if string.find(ent:GetClass(), "button", 1, true) then
-        ent:Fire("Press")
-    else
+    if not string.find(ent:GetClass(), "button", 1, true) then
         ent:Input("Use", game.GetWorld(), game.GetWorld())
+        return true
     end
+
+    local info = ButtonInfo(ent)
+    attempt = attempt or 0
+
+    if not Ready(info) and attempt < 60 then
+        timer.Simple(0.5, function() Naval.PressMapButton(entry, attempt + 1) end)
+        return true
+    end
+
+    if info.locked then ent:Fire("Unlock") end
+    ent:Fire("Press", "", info.locked and 0.05 or 0)
+    Naval.Log(("Alarm-Knopf %s gedrückt (Zustand %d, gesperrt %s, Umschalter %s, wait %s, nach %.1f s)")
+        :format(tostring(entry.name), info.state, tostring(info.locked), tostring(info.toggle), tostring(info.wait), attempt * 0.5))
     return true
 end
 

@@ -1,8 +1,9 @@
 --[[
     Naval - Alarmstufe und Bordmeldungen (Client).
 
-    Gelb: Hinweis oben, kurzer Gong. Rot: Hinweis, Alarmton fuer
-    alert_alarm_seconds nach dem Wechsel und Rotlicht (alert_red_light):
+    Gelb: Hinweis oben, kurzer Gong. Rot: Hinweis und Rotlicht
+    (alert_red_light; den Alarmton liefert die Map-Sirene ueber die
+    Alarm-Knoepfe, sv_naval_alert.lua):
     roter Farbfilter, bei 1 zusaetzlich abgedunkeltes Map-Licht (Server setzt
     den Lichtstil, hier werden die Lightmaps neu geladen).
     Dazu kurze Bordmeldungen (Hyperraum-Austritt erkannt).
@@ -17,7 +18,6 @@ local C = Naval.C
 local COLORS = {[1] = Color(240, 200, 60), [2] = Color(240, 70, 60)}
 
 local lastLevel
-local nextKlaxon = 0
 local messages = {}
 
 net.Receive("PD.Naval.AlertLight", function()
@@ -48,11 +48,6 @@ hook.Add("RenderScreenspaceEffects", "PD.Naval.Alert", function()
     })
 end)
 
-local function AlarmSeconds()
-    local s = C.static and C.static.settings
-    return tonumber(s and s.alert_alarm_seconds) or 20
-end
-
 function Naval.ShipMessage(text, col)
     table.insert(messages, 1, {text = text, col = col or Color(225, 230, 240), t = CurTime()})
     while #messages > 4 do table.remove(messages) end
@@ -77,10 +72,6 @@ hook.Add("Think", "PD.Naval.Alert", function()
     end
     lastLevel = level
 
-    if level == 2 and CurTime() < GetGlobalFloat("PD.Naval.AlertSince", 0) + AlarmSeconds() and CurTime() >= nextKlaxon then
-        nextKlaxon = CurTime() + 2.4
-        LocalPlayer():EmitSound("ambient/alarms/klaxon1.wav", 75, 100, 0.35)
-    end
 end)
 
 hook.Add("HUDPaint", "PD.Naval.Alert", function()
