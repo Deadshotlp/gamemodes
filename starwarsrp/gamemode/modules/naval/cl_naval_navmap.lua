@@ -253,24 +253,24 @@ local function CreateSystemMap(parent, onSelect)
     local COL = UI.COL
 
     local map = vgui.Create("DPanel", parent)
-    map.Scale = 1 / 20000       -- Pixel je Meter
-    map.Center = nil            -- nil = eigenes Schiff
+    map.PxPerM = 1 / 20000       -- Pixel je Meter
+    map.ViewCenter = nil        -- nil = eigenes Schiff (nicht "Center": das ist eine Panel-Methode)
     map.Selected = nil          -- {kind, id, pos, name}
 
     local function Origin(s)
-        if s.Center then return s.Center end
+        if s.ViewCenter then return s.ViewCenter end
         local view = C.View and C.View()
         return view and view.pos or {x = 0, y = 0, z = 0}
     end
 
     local function ToScreen(s, p)
         local o = Origin(s)
-        return s:GetWide() / 2 + (p.x - o.x) * s.Scale, s:GetTall() / 2 - (p.y - o.y) * s.Scale
+        return s:GetWide() / 2 + (p.x - o.x) * s.PxPerM, s:GetTall() / 2 - (p.y - o.y) * s.PxPerM
     end
 
     local function ToWorld(s, sx, sy)
         local o = Origin(s)
-        return {x = o.x + (sx - s:GetWide() / 2) / s.Scale, y = o.y - (sy - s:GetTall() / 2) / s.Scale, z = o.z}
+        return {x = o.x + (sx - s:GetWide() / 2) / s.PxPerM, y = o.y - (sy - s:GetTall() / 2) / s.PxPerM, z = o.z}
     end
 
     map.Paint = function(s, w, h)
@@ -280,6 +280,17 @@ local function CreateSystemMap(parent, onSelect)
         if not view or not system or not system.bodiesById then
             draw.SimpleText("Keine Systemdaten", "MLIB.18", w / 2, h / 2, COL.dim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
             return
+        end
+
+        -- Beim Oeffnen so zoomen, dass der naechste Himmelskoerper zu sehen ist
+        if not s.Fitted then
+            s.Fitted = true
+            local nearest
+            for _, body in pairs(system.bodiesById) do
+                local d = Naval.V3.Dist(Naval.BodyPos(body, system.bodiesById), view.pos)
+                if not nearest or d < nearest then nearest = d end
+            end
+            if nearest then s.PxPerM = math.min(w, h) * 0.4 / math.max(nearest * 1.3, 50000) end
         end
 
         local px, py = s:LocalToScreen(0, 0)
@@ -296,15 +307,15 @@ local function CreateSystemMap(parent, onSelect)
         for _, body in pairs(system.bodiesById) do
             local pos = Naval.BodyPos(body, system.bodiesById, now)
             local x, y = ToScreen(s, pos)
-            local r = math.max((body.radius or 0) * s.Scale, 3)
+            local r = math.max((body.radius or 0) * s.PxPerM, 3)
             local col = BODY_COLOR[body.type] or Color(150, 160, 170)
 
             if x + r * shadow > 0 and x - r * shadow < w and y + r * shadow > 0 and y - r * shadow < h then
                 -- Massenschatten und Sicherheitsabstand
                 if body.type == "star" or body.type == "planet" or body.type == "moon" then
-                    DrawCircle(x, y, (body.radius or 0) * shadow * s.Scale, Color(240, 190, 70, 40))
+                    DrawCircle(x, y, (body.radius or 0) * shadow * s.PxPerM, Color(240, 190, 70, 40))
                 end
-                DrawCircle(x, y, ((body.radius or 0) * clearF + clearM) * s.Scale, Color(240, 90, 80, 50))
+                DrawCircle(x, y, ((body.radius or 0) * clearF + clearM) * s.PxPerM, Color(240, 90, 80, 50))
 
                 draw.NoTexture()
                 surface.SetDrawColor(col.r, col.g, col.b, 60)
@@ -318,7 +329,7 @@ local function CreateSystemMap(parent, onSelect)
                 end
                 DrawCircle(x, y, r, col)
 
-                if body.type ~= "moon" or s.Scale * (body.radius or 0) > 1 then
+                if body.type ~= "moon" or s.PxPerM * (body.radius or 0) > 1 then
                     draw.SimpleText(body.name, "MLIB.14", x + r + 4, y - 8, col)
                 end
 
@@ -393,15 +404,15 @@ local function CreateSystemMap(parent, onSelect)
 
         render.SetScissorRect(0, 0, 0, 0, false)
 
-        local per100 = 100 / s.Scale
+        local per100 = 100 / s.PxPerM
         draw.SimpleText("100 px = " .. (Naval.FormatDist and Naval.FormatDist(per100) or math.Round(per100 / 1000) .. " km"), "MLIB.14", 8, h - 22, COL.dim)
-        draw.SimpleText(s.Center and "Rechtsklick: zurück zum Schiff" or "Mitte: eigenes Schiff", "MLIB.12", w - 8, h - 20, COL.dim, TEXT_ALIGN_RIGHT)
+        draw.SimpleText(s.ViewCenter and "Rechtsklick: zurück zum Schiff" or "Mitte: eigenes Schiff", "MLIB.12", w - 8, h - 20, COL.dim, TEXT_ALIGN_RIGHT)
         draw.SimpleText("gelb = Massenschatten, rot = Sicherheitsabstand", "MLIB.12", w - 8, 8, COL.dim, TEXT_ALIGN_RIGHT)
     end
 
     map.OnMousePressed = function(s, code)
         if code == MOUSE_RIGHT then
-            s.Center = nil
+            s.ViewCenter = nil
             return
         end
         if code ~= MOUSE_LEFT then return end
@@ -432,17 +443,17 @@ local function CreateSystemMap(parent, onSelect)
         local dx, dy = mx - s.DragStart[1], my - s.DragStart[2]
         if math.abs(dx) + math.abs(dy) > 4 then s.Moved = true end
         if s.Moved then
-            s.Center = {x = s.DragCenter.x - dx / s.Scale, y = s.DragCenter.y + dy / s.Scale, z = s.DragCenter.z}
+            s.ViewCenter = {x = s.DragCenter.x - dx / s.PxPerM, y = s.DragCenter.y + dy / s.PxPerM, z = s.DragCenter.z}
         end
     end
 
     map.OnMouseWheeled = function(s, delta)
         local mx, my = s:CursorPos()
         local before = ToWorld(s, mx, my)
-        s.Scale = math.Clamp(s.Scale * (delta > 0 and 1.3 or 1 / 1.3), 1e-11, 0.05)
+        s.PxPerM = math.Clamp(s.PxPerM * (delta > 0 and 1.3 or 1 / 1.3), 1e-11, 0.05)
         local after = ToWorld(s, mx, my)
         local o = Origin(s)
-        s.Center = {x = o.x + before.x - after.x, y = o.y + before.y - after.y, z = o.z}
+        s.ViewCenter = {x = o.x + before.x - after.x, y = o.y + before.y - after.y, z = o.z}
         return true
     end
 

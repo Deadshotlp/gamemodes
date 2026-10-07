@@ -157,7 +157,7 @@ end
 -- Himmelskoerper
 --------------------------------------------------------------------------------
 
-local function DrawBodies(view, M, camOffset)
+local function DrawBodies(view, M, camOffset, ang, fov)
     local system = C.system
     if not system or system.systemId ~= view.systemId then return nil end
 
@@ -181,16 +181,26 @@ local function DrawBodies(view, M, camOffset)
             dist = far
         end
 
-        list[#list + 1] = {body = body, pos = dir * dist - camOffset, radius = radius, dist = dist}
+        list[#list + 1] = {body = body, pos = dir * dist - camOffset, radius = radius, dist = dist, real = distM}
 
         if body.type == "star" and not sunDir then sunDir = dir end
     end
 
-    table.sort(list, function(a, b) return a.dist > b.dist end)
+    -- Von hinten nach vorn nach echter Entfernung. Jeder Koerper bekommt eine
+    -- eigene Kamera, deren Nah-/Fernebene eng um ihn liegt: volle
+    -- Tiefengenauigkeit (Wolken flackern nicht in die Oberflaeche), und ferne
+    -- Koerper, die alle auf der Projektionskugel liegen, schneiden sich nicht -
+    -- der naehere wird danach gezeichnet und deckt ab.
+    table.sort(list, function(a, b) return a.real > b.real end)
 
     for _, e in ipairs(list) do
         local body = e.body
         local seg = math.Clamp(math.floor(e.radius / e.dist * 400), 12, 64)
+        local d = e.pos:Length()
+        local reach = e.radius * (body.type == "star" and 8 or 1.1)
+
+        render.ClearDepth()
+        cam.Start3D(Vector(0, 0, 0), ang, fov, 0, 0, ScrW(), ScrH(), math.max(1, d - reach), d + reach + 1)
 
         if body.type == "star" then
             local mat = Mat(body.material)
@@ -217,6 +227,8 @@ local function DrawBodies(view, M, camOffset)
                 render.DrawSphere(e.pos, e.radius * 1.012, seg, seg, Color(255, 255, 255, 190))
             end
         end
+
+        cam.End3D()
     end
 
     return sunDir
@@ -466,7 +478,7 @@ function Naval.RenderSpace()
         local camOffset = CameraOffset()
 
         cam.Start3D(Vector(0, 0, 0), ang, fov, 0, 0, ScrW(), ScrH(), ZNEAR, ZFAR)
-            local sunDir = DrawBodies(view, M, camOffset)
+            local sunDir = DrawBodies(view, M, camOffset, ang, fov)
             render.ClearDepth()
 
             Lighting(sunDir)

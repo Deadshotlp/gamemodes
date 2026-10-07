@@ -31,52 +31,81 @@ local function SpawnConsole(row)
     ent:Spawn()
     ent:Activate()
 
-    -- Zusatzdaten (Schadenspunkt: Subsystem und Ortsname)
-    local data = Naval.DB and Naval.DB.DecodeTable and Naval.DB.DecodeTable(row.data) or util.JSONToTable(row.data or "") or {}
-    ent:SetNWString("PD_NavalSub", tostring(data.sub or ""))
-    ent:SetNWString("PD_NavalLabel", tostring(data.label or ""))
-
     return ent
 end
 
-function Naval.SpawnConsoles()
-    for _, ent in ipairs(ents.FindByClass(CLASS)) do ent:Remove() end
+-- Zusatzdaten (Schadenspunkt: Subsystem und Ortsname) und Sperre aus der DB
+local function ApplyRow(ent, row)
+    ent:SetLocked(tonumber(row.locked) == 1)
+    local data = Naval.DB and Naval.DB.DecodeTable and Naval.DB.DecodeTable(row.data) or util.JSONToTable(row.data or "") or {}
+    ent:SetNWString("PD_NavalSub", tostring(data.sub or ""))
+    ent:SetNWString("PD_NavalLabel", tostring(data.label or ""))
+end
 
+-- Abgleich mit der Datenbank: vorhandene Konsolen bleiben stehen (auch bei
+-- jedem Code-Update), fehlende werden aufgestellt, geloeschte und doppelte
+-- entfernt.
+function Naval.SpawnConsoles()
     local map = game.GetMap()
 
     PD.SQL.FetchAll("SELECT * FROM `pd_naval_consoles` WHERE `map` = " .. esc(map), function(rows)
         rows = rows or {}
 
         if #rows == 0 then
-            -- Startpositionen aus dem Profil
+            -- Startpositionen aus dem Profil (nur einmal, auch wenn mehrere
+            -- Aufrufe gleichzeitig laufen)
             local profile = Naval.GetProfile()
             local pending = #((profile and profile.consoles) or {})
-            if pending == 0 then return end
+            if pending == 0 or Naval.ConsolesSeeding then return end
+            Naval.ConsolesSeeding = true
 
             for _, c in ipairs(profile.consoles) do
                 PD.SQL.Query("INSERT INTO `pd_naval_consoles` (`map`, `station`, `px`, `py`, `pz`, `pitch`, `yaw`, `roll`, `locked`, `data`) VALUES ("
                     .. esc(map) .. ", " .. esc(c.station) .. ", " .. c.pos.x .. ", " .. c.pos.y .. ", " .. c.pos.z .. ", "
                     .. c.ang.p .. ", " .. c.ang.y .. ", " .. c.ang.r .. ", 0, '{}')", function()
                     pending = pending - 1
-                    if pending == 0 then Naval.SpawnConsoles() end
+                    if pending == 0 then
+                        Naval.ConsolesSeeding = nil
+                        Naval.SpawnConsoles()
+                    end
                 end)
             end
 
             return
         end
 
-        local count = 0
+        local existing = {}
+        for _, ent in ipairs(ents.FindByClass(CLASS)) do
+            local id = ent:GetConsoleId()
+            if existing[id] then ent:Remove() else existing[id] = ent end
+        end
+
+        local count, spawned = 0, 0
         for _, row in ipairs(rows) do
+            local id = tonumber(row.id) or 0
+            local ent = existing[id]
+            existing[id] = nil
+
             if Naval.Stations[row.station] then
-                SpawnConsole(row)
+                if not IsValid(ent) or ent:GetStation() ~= row.station then
+                    if IsValid(ent) then ent:Remove() end
+                    ent = SpawnConsole(row)
+                    spawned = spawned + 1
+                end
+                if IsValid(ent) then ApplyRow(ent, row) end
                 count = count + 1
             else
+                if IsValid(ent) then ent:Remove() end
                 -- Station gibt es nicht mehr (z. B. alte Taktik-Konsole/Brueckenanzeige)
                 PD.SQL.Query("DELETE FROM `pd_naval_consoles` WHERE `id` = " .. (tonumber(row.id) or 0))
                 Naval.Log("Konsole '" .. tostring(row.station) .. "' entfernt (Station gibt es nicht mehr)")
             end
         end
-        Naval.Log(count .. " Konsolen aufgestellt")
+        for _, ent in pairs(existing) do
+            if IsValid(ent) then ent:Remove() end
+        end
+
+        if spawned > 0 then Naval.Log(count .. " Konsolen, davon " .. spawned .. " neu aufgestellt") end
     end)
 end
 
