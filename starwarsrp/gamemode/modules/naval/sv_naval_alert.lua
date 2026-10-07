@@ -13,8 +13,8 @@
     roter Farbfilter bei den Spielern, 2 = nur Farbfilter, 0 = aus.
 
     Map-Knoepfe (Sirene, rote Lichtpaneele): im Admin-Tab den angeschauten
-    Knopf einer Stufe zuordnen. Beim Wechsel auf diese Stufe wird er
-    eingeschaltet, beim Verlassen auf Wunsch wieder aus. Venator-Knoepfe
+    Knopf einer Stufe zuordnen (gilt ab dieser Stufe: Gelb-Knoepfe auch bei
+    Rot). Beim Erreichen wird er eingeschaltet, darunter auf Wunsch wieder aus. Venator-Knoepfe
     (alarmBut1/alarmbut2): Druck schaltet ein und sperrt den Knopf, Benutzen
     des gesperrten Knopfs (OnUseLocked) schaltet aus - daher nach Sperrzustand.
     Gespeichert als alertbtn_<map> in pd_naval_settings (MapCreationID).
@@ -85,12 +85,14 @@ function Naval.SetMapButton(entry, on)
     return true
 end
 
+-- Stufe eines Knopfs gilt "ab": ein Gelb-Knopf bleibt bei Rot an
 local function Buttons(oldLevel, newLevel)
     for _, entry in ipairs(Naval.AlertButtons()) do
         local level = tonumber(entry.level) or 2
-        if level == newLevel then
+        local wasOn, isOn = oldLevel >= level, newLevel >= level
+        if isOn and not wasOn then
             Naval.SetMapButton(entry, true)
-        elseif level == oldLevel and entry.leave then
+        elseif wasOn and not isOn and entry.leave then
             Naval.SetMapButton(entry, false)
         end
     end

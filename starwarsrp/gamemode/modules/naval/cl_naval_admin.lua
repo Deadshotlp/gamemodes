@@ -302,7 +302,7 @@ function Naval.AdminMenu(base)
 
     R.Header("Alarmstufen und Map-Knöpfe")
     R.Text("Map-Knöpfe (z. B. Venator-Sirene, rote Lichtpaneele) einer Alarmstufe zuordnen: Knopf anschauen und "
-        .. "\"Angeschauter Knopf\" drücken. Beim Wechsel auf die Stufe wird er gedrückt, mit \"Beim Verlassen wieder "
+        .. "\"Angeschauter Knopf\" drücken. Gelb-Knöpfe laufen auch bei Rot weiter. Beim Erreichen der Stufe wird er eingeschaltet, mit \"Beim Verlassen wieder "
         .. "drücken\" auch beim Zurückschalten (Schalter, die an/aus umschalten).")
     R.Buttons({
         {"Normal", function() Send("alert_set", {level = 0}) end, Color(90, 210, 130)},
@@ -346,9 +346,9 @@ function Naval.AdminMenu(base)
             del:Dock(RIGHT) del:SetWide(80)
             local test = UI.Button(row, "Testen", function() Send("alertbtn_test", {idx = i}) end)
             test:Dock(RIGHT) test:DockMargin(0, 0, 4, 0) test:SetWide(64)
-            local lvl = UI.Button(row, tonumber(entry.level) == 1 and "Gelb" or "Rot", function() Send("alertbtn_level", {idx = i}) end,
+            local lvl = UI.Button(row, tonumber(entry.level) == 1 and "ab Gelb" or "bei Rot", function() Send("alertbtn_level", {idx = i}) end,
                 function() return tonumber(entry.level) == 1 and Color(240, 200, 60) or Color(240, 70, 60) end)
-            lvl:Dock(RIGHT) lvl:DockMargin(0, 0, 4, 0) lvl:SetWide(50)
+            lvl:Dock(RIGHT) lvl:DockMargin(0, 0, 4, 0) lvl:SetWide(64)
             local lv = UI.Button(row, entry.leave and "zurück: ja" or "zurück: nein", function() Send("alertbtn_leave", {idx = i}) end)
             lv:Dock(RIGHT) lv:DockMargin(0, 0, 4, 0) lv:SetWide(90)
         end
