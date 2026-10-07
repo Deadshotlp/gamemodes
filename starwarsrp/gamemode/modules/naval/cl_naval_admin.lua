@@ -371,7 +371,7 @@ function Naval.AdminMenu(base)
     R.Text("Neue Konsole: auf die Stelle schauen, an der sie stehen soll, Station wählen, \"Aufstellen\". "
         .. "Ausrichten: mit dem Physgun greifen und drehen (nur Admins) oder mit Links/Rechts/Kippen (je 15°), "
         .. "danach \"Speichern\". \"Hierher\" setzt eine Konsole an deinen Blickpunkt (auch den unsichtbaren "
-        .. "Hologramm-Projektor). Taktik-Hologramm: Projektor auf den Holotisch, dazu Ein/Aus, näher, weiter. "
+        .. "Hologramm-Projektor). Taktik-Hologramm: Projektor auf den Holotisch, daneben die Hologramm-Steuerung. "
         .. "Schadenspunkte: unsichtbare Orte für Funken, Rauch und Feuer - je Punkt Subsystem und Ortsname festlegen. "
         .. "Unsichtbare Punkte siehst du, solange du Physgun oder Toolgun hältst.")
 

@@ -1,8 +1,9 @@
 --[[
     Naval - Taktik-Hologramm (Client).
 
-    Erscheint ueber dem Projektor (Station holo_projector), solange es per
-    Schalter (holo_power) an ist. Zoom ueber die Schalter holo_zoom_in/out.
+    Erscheint ueber dem Projektor (Station holo_projector), solange es an der
+    Hologramm-Steuerung (Station holo_control) eingeschaltet ist; dort auch
+    Zoom, Ansicht, Drehen und Ebenen.
     Zustand: GetGlobalBool("PD.Naval.HoloOn"), GetGlobalInt("PD.Naval.HoloZoom").
 
     Ausgerichtet wie das Schiff: was im Hologramm vorn liegt, liegt auch vor
@@ -10,11 +11,11 @@
     rot = schwach), das Ziel des Waffenleitstands mit rotem Ring, unbekannte
     Kontakte grau.
 
-    Stufe 4d: Schalter holo_mode wechselt Taktik <-> Galaxie (Umkreis um das
-    System aus "Im Hologramm zeigen" am Navigationscomputer, sonst um unsere
-    Position; Routen, Gebiete, Frontlinien, umkaempfte Systeme, geplanter
-    Sprungweg). Schalter holo_tilt stellt das Hologramm als Wand auf: um die
-    Querachse des Projektors gekippt, Norden/Bug oben, Hoehen zum Betrachter. Mitte = Map-Schiff, Ringe in der Schiffsebene, Kontakte in
+    Ansicht Taktik oder Galaxie (Umkreis um das System aus "Im Hologramm
+    zeigen" am Navigationscomputer, sonst um unsere Position; Routen,
+    Gebiete, Frontlinien, umkaempfte Systeme, geplanter Sprungweg). Drehen um
+    die Achsen des Projektors in 45-Grad-Schritten (Kippen 90 = Wand, Norden
+    bzw. Bug oben). Ebenen einzeln abschaltbar (Naval.HoloLayer). Mitte = Map-Schiff, Ringe in der Schiffsebene, Kontakte in
     Fraktions-/Beziehungsfarben mit Hoehenlinie, Himmelskoerper als
     Drahtkugeln; ausserhalb des Bereichs Richtungsmarken am Rand.
 ]]
@@ -203,7 +204,7 @@ local function DrawTactical(center, radius, labels, flicker)
 
     -- Himmelskoerper
     local system = C.system
-    if system and system.systemId == view.systemId and system.bodiesById then
+    if system and system.systemId == view.systemId and system.bodiesById and Naval.HoloLayer("bodies") then
         local now = Naval.Now()
         render.SetMaterial(MAT_WIRE)
 
@@ -250,7 +251,7 @@ local function DrawTactical(center, radius, labels, flicker)
         end
     end
 
-    if #route > 1 then
+    if #route > 1 and Naval.HoloLayer("course") then
         render.SetColorMaterial()
         local function Clip(a, b)
             -- Strecke a->b (relativ zum Schiff) auf die Kugel mit Radius range
@@ -282,7 +283,7 @@ local function DrawTactical(center, radius, labels, flicker)
     end
 
     -- Schildzonen um das eigene Schiff
-    if combat and combat.zones and mapLen > 0 then
+    if combat and combat.zones and mapLen > 0 and Naval.HoloLayer("shields") then
         render.SetMaterial(MAT_GLOW)
         local axes = {front = {1, 0, 0}, back = {-1, 0, 0}, left = {0, 1, 0}, right = {0, -1, 0}, top = {0, 0, 1}, bottom = {0, 0, -1}}
         for zone, a in pairs(axes) do
@@ -361,7 +362,7 @@ local function DrawGalaxy(center, radius, labels, flicker, F, R)
     if gridCache[key] == nil then
         gridCache[key] = Naval.InfluenceGrid and Naval.InfluenceGrid(fx - rangePc, fy - rangePc, fx + rangePc, fy + rangePc, rangePc / 18) or false
     end
-    local grid = gridCache[key]
+    local grid = Naval.HoloLayer("territory") and gridCache[key]
     if grid then
         for _, st in ipairs(grid.strips) do
             local cx, cy = st.x + st.w / 2, st.y + grid.cell / 2
@@ -378,7 +379,7 @@ local function DrawGalaxy(center, radius, labels, flicker, F, R)
     end
 
     -- Hyperraumrouten
-    for _, route in pairs(static.routes or {}) do
+    for _, route in pairs(Naval.HoloLayer("routes") and static.routes or {}) do
         local col = route.major and Color(110, 160, 240, 170 * flicker) or Color(80, 110, 160, 90 * flicker)
         for _, line in ipairs(route.lines or {}) do
             for i = 2, #line do
@@ -405,7 +406,7 @@ local function DrawGalaxy(center, radius, labels, flicker, F, R)
     end
 
     -- Umkaempfte Systeme
-    if territory then
+    if territory and Naval.HoloLayer("territory") then
         render.SetColorMaterial()
         local pulse = 0.5 + math.sin(CurTime() * 4) * 0.5
         for id in pairs(territory.contested) do
@@ -426,7 +427,7 @@ local function DrawGalaxy(center, radius, labels, flicker, F, R)
     -- Geplanter Sprungweg
     local st = C.status or {}
     local path = C.path and st.pathKey == C.path.key and C.path.points
-    if path and #path > 1 then
+    if path and #path > 1 and Naval.HoloLayer("course") then
         render.SetColorMaterial()
         for i = 2, #path do
             local a, b = path[i - 1], path[i]
@@ -461,12 +462,14 @@ local function DrawHolo()
     local radius = settings.holo_radius or 60
     local height = settings.holo_height or 45
     local base = projector:GetPos()
-    local wall = GetGlobalBool("PD.Naval.HoloWall", false)
+    local rp, ry, rr = GetGlobalInt("PD.Naval.HoloRotP", 0), GetGlobalInt("PD.Naval.HoloRotY", 0), GetGlobalInt("PD.Naval.HoloRotR", 0)
+    local rotated = rp ~= 0 or ry ~= 0 or rr ~= 0
     local galaxy = GetGlobalInt("PD.Naval.HoloMode", 0) == 1
     local flicker = 0.85 + math.sin(CurTime() * 23) * 0.04 + math.sin(CurTime() * 3.1) * 0.05
 
-    -- Als Wand steht die Karte hoeher (Unterkante etwa auf Hoehe der liegenden)
-    local center = base + Vector(0, 0, height + (wall and radius or 0))
+    -- Gekippt steht die Karte hoeher, damit sie nicht in den Tisch ragt
+    local lift = radius * math.max(math.abs(math.sin(math.rad(rp))), math.abs(math.sin(math.rad(rr))))
+    local center = base + Vector(0, 0, height + lift)
 
     -- Achsen des Projektors (waagerecht)
     local F = projector:GetForward()
@@ -482,21 +485,25 @@ local function DrawHolo()
     render.SetMaterial(MAT_GLOW)
     render.DrawSprite(base + Vector(0, 0, 2), radius * 0.6, radius * 0.6, Color(60, 150, 255, 60))
 
-    -- Wand: v' = R(v.R) + U(v.F) - F(v.U) um den Mittelpunkt (Norden/Bug nach
-    -- oben, Hoehen zum Betrachter auf der Vorderseite)
+    -- Drehung in den Achsen des Projektors (vorn, links, oben): Kippen +90
+    -- stellt die Karte als Wand auf (vorn/Norden nach oben)
+    local L = -R
+    local P = Matrix({
+        {F.x, L.x, U.x, 0},
+        {F.y, L.y, U.y, 0},
+        {F.z, L.z, U.z, 0},
+        {0, 0, 0, 1},
+    })
+    local Rot = Matrix()
+    Rot:SetAngles(Angle(-rp, ry, rr))
+    local B = P * Rot * P:GetTransposed()
+
     local function Tilt(p)
-        if not wall then return p end
-        local v = p - center
-        return center + R * v:Dot(R) + U * v:Dot(F) - F * v:Dot(U)
+        if not rotated then return p end
+        return center + B * (p - center)
     end
 
-    if wall then
-        local B = Matrix({
-            {R.x * R.x + U.x * F.x - F.x * U.x, R.x * R.y + U.x * F.y - F.x * U.y, R.x * R.z + U.x * F.z - F.x * U.z, 0},
-            {R.y * R.x + U.y * F.x - F.y * U.x, R.y * R.y + U.y * F.y - F.y * U.y, R.y * R.z + U.y * F.z - F.y * U.z, 0},
-            {R.z * R.x + U.z * F.x - F.z * U.x, R.z * R.y + U.z * F.y - F.z * U.y, R.z * R.z + U.z * F.z - F.z * U.z, 0},
-            {0, 0, 0, 1},
-        })
+    if rotated then
         local M = Matrix()
         M:Translate(center)
         M = M * B
@@ -511,11 +518,11 @@ local function DrawHolo()
         else DrawTactical(center, radius, labels, flicker) end
     end)
 
-    if wall then cam.PopModelMatrix() end
+    if rotated then cam.PopModelMatrix() end
     tilt = nil
     if not ok then error(err, 0) end
 
-    if EyePos():DistToSqr(center) < 900 * 900 then
+    if EyePos():DistToSqr(center) < 900 * 900 and Naval.HoloLayer("labels") then
         for _, l in ipairs(labels) do Label(Tilt(l.pos) + Vector(0, 0, 1.5), l.text, l.col, l.size or 0.03) end
     end
 end

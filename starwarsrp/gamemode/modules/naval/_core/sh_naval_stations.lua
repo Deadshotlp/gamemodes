@@ -51,37 +51,13 @@ PD.Naval.Stations.engineering = {
     desc = "Reaktor, Energieverteilung, Schäden",
 }
 
--- Taktik-Hologramm: Schalter loesen direkt eine Aktion aus (kein Fenster),
--- der Projektor markiert nur den Ort, an dem das Hologramm erscheint.
-PD.Naval.Stations.holo_power = {
-    name = "Taktik-Hologramm",
-    model = "models/kingpommes/starwars/misc/misc_panel_1.mdl",
-    desc = "Ein / Aus",
-    action = "holo_toggle",
-}
-PD.Naval.Stations.holo_zoom_in = {
-    name = "Hologramm: näher",
-    model = "models/kingpommes/starwars/misc/misc_panel_2.mdl",
-    desc = "Hineinzoomen",
-    action = "holo_zoom_in",
-}
-PD.Naval.Stations.holo_zoom_out = {
-    name = "Hologramm: weiter",
-    model = "models/kingpommes/starwars/misc/misc_panel_2.mdl",
-    desc = "Herauszoomen",
-    action = "holo_zoom_out",
-}
-PD.Naval.Stations.holo_mode = {
-    name = "Hologramm: Taktik / Galaxie",
-    model = "models/kingpommes/starwars/misc/misc_panel_1.mdl",
-    desc = "Ansicht umschalten",
-    action = "holo_mode",
-}
-PD.Naval.Stations.holo_tilt = {
-    name = "Hologramm: liegend / Wand",
-    model = "models/kingpommes/starwars/misc/misc_panel_2.mdl",
-    desc = "Ausrichtung umschalten",
-    action = "holo_tilt",
+-- Taktik-Hologramm: eine Steuerkonsole (Fenster: an/aus, Taktik/Galaxie,
+-- Zoom, Drehen in 45-Grad-Schritten, Ebenen); der Projektor markiert nur den
+-- Ort, an dem das Hologramm erscheint.
+PD.Naval.Stations.holo_control = {
+    name = "Hologramm-Steuerung",
+    model = "models/lordtrilobite/starwars/isd/imp_console_medium03.mdl",
+    desc = "Ansicht, Zoom, Drehen, Ebenen",
 }
 PD.Naval.Stations.holo_projector = {
     name = "Hologramm-Projektor",
@@ -98,6 +74,25 @@ PD.Naval.HoloDefaultZoom = 4
 -- Galaxie-Ansicht des Hologramms: Umkreis in Parsec
 PD.Naval.HoloGalaxyRanges = {100, 200, 400, 800, 1500, 3000, 6000, 12000, 25000}
 PD.Naval.HoloGalaxyDefaultZoom = 4
+
+-- Ebenen des Hologramms (Bitmaske in GetGlobalInt("PD.Naval.HoloLayers"))
+PD.Naval.HoloLayers = {
+    {id = "territory", bit = 1, name = "Gebiete und Frontlinien"},
+    {id = "routes", bit = 2, name = "Hyperraumrouten"},
+    {id = "bodies", bit = 4, name = "Himmelskörper"},
+    {id = "course", bit = 8, name = "Kurs"},
+    {id = "shields", bit = 16, name = "Schildzonen"},
+    {id = "labels", bit = 32, name = "Beschriftungen"},
+}
+PD.Naval.HoloLayersDefault = 63
+
+function PD.Naval.HoloLayer(id)
+    local mask = GetGlobalInt("PD.Naval.HoloLayers", PD.Naval.HoloLayersDefault)
+    for _, l in ipairs(PD.Naval.HoloLayers) do
+        if l.id == id then return bit.band(mask, l.bit) ~= 0 end
+    end
+    return true
+end
 
 PD.Naval.StationUseRange = 160
 

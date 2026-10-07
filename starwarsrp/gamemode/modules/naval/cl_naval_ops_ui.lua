@@ -363,7 +363,105 @@ local function OpenAlert(console)
     end
 end
 
+--------------------------------------------------------------------------------
+-- Hologramm-Steuerung (ersetzt die einzelnen Schalter)
+--------------------------------------------------------------------------------
+
+local function OpenHoloControl(console)
+    local UI = Naval.UI
+    local COL = UI.COL
+    local frame = UI.Frame("HOLOGRAMM-STEUERUNG", 780, 600)
+    frame.Console = console
+
+    local function Galaxy() return GetGlobalInt("PD.Naval.HoloMode", 0) == 1 end
+
+    local function Section(y, h, title)
+        local p = vgui.Create("DPanel", frame)
+        p:SetPos(20, y)
+        p:SetSize(frame:GetWide() - 40, h)
+        p.Paint = function(s, w, hh)
+            draw.RoundedBox(0, 0, 0, w, hh, COL.panel)
+            draw.SimpleText(title, "MLIB.14", 10, 6, COL.dim)
+        end
+        return p
+    end
+
+    local function Btn(parent, label, x, y, w, fn, colFn)
+        local b = UI.Button(parent, label, fn, colFn)
+        b:SetPos(x, y)
+        b:SetSize(w, 34)
+        return b
+    end
+
+    -- An/aus und Ansicht
+    local top = Section(55, 70, "HOLOGRAMM")
+    local power = Btn(top, "", 10, 28, 220, function() Naval.CombatCmd("holo_control", "power", {on = not GetGlobalBool("PD.Naval.HoloOn", false)}) end,
+        function() return GetGlobalBool("PD.Naval.HoloOn", false) and COL.ok or COL.bad end)
+    power.Think = function(b) b.Label = GetGlobalBool("PD.Naval.HoloOn", false) and "AN  (ausschalten)" or "AUS  (einschalten)" end
+    Btn(top, "Taktik (System)", 250, 28, 200, function() Naval.CombatCmd("holo_control", "mode", {id = "tactical"}) end,
+        function() return Galaxy() and COL.dim or COL.ok end)
+    Btn(top, "Galaxie", 460, 28, 200, function() Naval.CombatCmd("holo_control", "mode", {id = "galaxy"}) end,
+        function() return Galaxy() and COL.ok or COL.dim end)
+
+    -- Zoom und Ausschnitt
+    local zoom = Section(135, 70, "ZOOM UND AUSSCHNITT")
+    Btn(zoom, "− weiter", 10, 28, 110, function() Naval.CombatCmd("holo_control", "zoom", {delta = 1}) end)
+    Btn(zoom, "+ näher", 240, 28, 110, function() Naval.CombatCmd("holo_control", "zoom", {delta = -1}) end)
+    local zl = vgui.Create("DPanel", zoom)
+    zl:SetPos(124, 28) zl:SetSize(112, 34)
+    zl.Paint = function(s, w, h)
+        local text
+        if Galaxy() then
+            text = (Naval.HoloGalaxyRanges[GetGlobalInt("PD.Naval.HoloGalaxyZoom", Naval.HoloGalaxyDefaultZoom)] or 0) .. " pc"
+        else
+            local r = Naval.HoloRanges[GetGlobalInt("PD.Naval.HoloZoom", Naval.HoloDefaultZoom)] or 0
+            text = Naval.FormatDist and Naval.FormatDist(r) or (math.Round(r / 1000) .. " km")
+        end
+        draw.SimpleText(text, "MLIB.16", w / 2, h / 2, COL.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    end
+    local focusInfo = vgui.Create("DPanel", zoom)
+    focusInfo:SetPos(370, 28) focusInfo:SetSize(200, 34)
+    focusInfo.Paint = function(s, w, h)
+        local id = GetGlobalString("PD.Naval.HoloFocus", "")
+        draw.SimpleText("Mitte: " .. (id ~= "" and Naval.SystemName(id) or "unsere Position"), "MLIB.14", 0, h / 2, COL.text, nil, TEXT_ALIGN_CENTER)
+    end
+    Btn(zoom, "Unsere Position", zoom:GetWide() - 170, 28, 160, function() Naval.CombatCmd("holo_control", "focus", {}) end)
+
+    -- Drehen
+    local rot = Section(215, 170, "DREHEN (45°-SCHRITTE, UM DIE ACHSEN DES PROJEKTORS)")
+    local axes = {{"p", "Kippen (90° = Wand)", "PD.Naval.HoloRotP"}, {"y", "Drehen", "PD.Naval.HoloRotY"}, {"r", "Rollen", "PD.Naval.HoloRotR"}}
+    for i, a in ipairs(axes) do
+        local y = 28 + (i - 1) * 42
+        local lbl = vgui.Create("DPanel", rot)
+        lbl:SetPos(10, y) lbl:SetSize(260, 34)
+        lbl.Paint = function(s, w, h)
+            draw.SimpleText(a[2], "MLIB.16", 0, h / 2, COL.text, nil, TEXT_ALIGN_CENTER)
+            draw.SimpleText(GetGlobalInt(a[3], 0) .. "°", "MLIB.16", w, h / 2, COL.accent, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+        end
+        Btn(rot, "− 45°", 290, y, 100, function() Naval.CombatCmd("holo_control", "rotate", {axis = a[1], delta = -1}) end)
+        Btn(rot, "+ 45°", 400, y, 100, function() Naval.CombatCmd("holo_control", "rotate", {axis = a[1], delta = 1}) end)
+    end
+    Btn(rot, "Zurücksetzen", rot:GetWide() - 170, 28, 160, function() Naval.CombatCmd("holo_control", "reset", {}) end, function() return COL.warn end)
+    Btn(rot, "Als Wand", rot:GetWide() - 170, 70, 160, function()
+        Naval.CombatCmd("holo_control", "reset", {})
+        timer.Simple(0.2, function() Naval.CombatCmd("holo_control", "rotate", {axis = "p", delta = 1}) end)
+        timer.Simple(0.4, function() Naval.CombatCmd("holo_control", "rotate", {axis = "p", delta = 1}) end)
+    end)
+
+    -- Ebenen
+    local layers = Section(395, 130, "EBENEN")
+    for i, l in ipairs(Naval.HoloLayers) do
+        local col = (i - 1) % 3
+        local row = math.floor((i - 1) / 3)
+        local b = Btn(layers, l.name, 10 + col * 240, 28 + row * 44, 230, function()
+            Naval.CombatCmd("holo_control", "layer", {id = l.id, on = not Naval.HoloLayer(l.id)})
+        end, function() return Naval.HoloLayer(l.id) and COL.ok or COL.dim end)
+        b.Think = function(btn) btn.Label = (Naval.HoloLayer(l.id) and "[x] " or "[ ] ") .. l.name end
+    end
+end
+
 Naval.StationUI = Naval.StationUI or {}
 Naval.StationUI.damagecontrol = OpenDamageControl
+Naval.StationUI.holo_control = OpenHoloControl
 Naval.StationUI.sensors = OpenSensors
 Naval.StationUI.alert = OpenAlert

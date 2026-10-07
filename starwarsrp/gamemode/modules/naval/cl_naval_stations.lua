@@ -55,15 +55,6 @@ function Naval.ConsoleSummary(station)
     local now = Naval.Now()
     local lines = {}
 
-    if station == "holo_power" or station == "holo_zoom_in" or station == "holo_zoom_out" then
-        local range = Naval.HoloRanges[GetGlobalInt("PD.Naval.HoloZoom", Naval.HoloDefaultZoom)] or 0
-        if station == "holo_power" then
-            lines[1] = GetGlobalBool("PD.Naval.HoloOn", false) and "Hologramm AN" or "Hologramm AUS"
-        end
-        lines[#lines + 1] = "Bereich: " .. (Naval.FormatDist and Naval.FormatDist(range) or math.Round(range / 1000) .. " km")
-        return lines
-    end
-
     if station == "helm" or station == "bridgescreen" then
         lines[#lines + 1] = ("%s - %d m/s (%d%%)"):format(Naval.SystemName(st.system), st.speed or 0, math.Round((st.throttle or 0) * 100))
     end

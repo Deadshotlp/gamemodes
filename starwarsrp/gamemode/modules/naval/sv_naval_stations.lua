@@ -108,32 +108,49 @@ local function HoloZoom(delta)
     return Naval.HoloRanges[zoom]
 end
 
-Naval.StationActions.holo_mode = function(ply, ent)
-    local mode = GetGlobalInt("PD.Naval.HoloMode", 0) == 1 and 0 or 1
-    SetGlobalInt("PD.Naval.HoloMode", mode)
-    ent:EmitSound("buttons/button14.wav", 60, mode == 1 and 110 or 95)
+-- Hologramm-Steuerung (Konsole holo_control, Befehle ueber PD.Naval.CombatCmd)
+Naval.CombatCommands = Naval.CombatCommands or {}
+local HC = {}
+Naval.CombatCommands.holo_control = HC
+
+HC.power = function(ply, ship, args)
+    SetGlobalBool("PD.Naval.HoloOn", args.on == true)
 end
 
-Naval.StationActions.holo_tilt = function(ply, ent)
-    local wall = not GetGlobalBool("PD.Naval.HoloWall", false)
-    SetGlobalBool("PD.Naval.HoloWall", wall)
-    ent:EmitSound("buttons/lever7.wav", 60)
+HC.mode = function(ply, ship, args)
+    SetGlobalInt("PD.Naval.HoloMode", args.id == "galaxy" and 1 or 0)
 end
 
-Naval.StationActions.holo_toggle = function(ply, ent)
-    local on = not GetGlobalBool("PD.Naval.HoloOn", false)
-    SetGlobalBool("PD.Naval.HoloOn", on)
-    ent:EmitSound(on and "buttons/button24.wav" or "buttons/button18.wav", 65)
+HC.zoom = function(ply, ship, args)
+    HoloZoom(math.Clamp(math.floor(tonumber(args.delta) or 0), -3, 3))
 end
 
-Naval.StationActions.holo_zoom_in = function(ply, ent)
-    HoloZoom(-1)
-    ent:EmitSound("buttons/button16.wav", 60)
+-- Drehen um die Achsen des Projektors in 45-Grad-Schritten
+HC.rotate = function(ply, ship, args)
+    local key = ({p = "PD.Naval.HoloRotP", y = "PD.Naval.HoloRotY", r = "PD.Naval.HoloRotR"})[args.axis or ""]
+    if not key then return end
+    local step = (tonumber(args.delta) or 0) >= 0 and 45 or -45
+    SetGlobalInt(key, (GetGlobalInt(key, 0) + step) % 360)
 end
 
-Naval.StationActions.holo_zoom_out = function(ply, ent)
-    HoloZoom(1)
-    ent:EmitSound("buttons/button16.wav", 60, 90)
+HC.reset = function()
+    SetGlobalInt("PD.Naval.HoloRotP", 0)
+    SetGlobalInt("PD.Naval.HoloRotY", 0)
+    SetGlobalInt("PD.Naval.HoloRotR", 0)
+end
+
+HC.layer = function(ply, ship, args)
+    for _, l in ipairs(Naval.HoloLayers) do
+        if l.id == args.id then
+            local mask = GetGlobalInt("PD.Naval.HoloLayers", Naval.HoloLayersDefault)
+            mask = args.on and bit.bor(mask, l.bit) or bit.band(mask, bit.bnot(l.bit))
+            SetGlobalInt("PD.Naval.HoloLayers", mask)
+        end
+    end
+end
+
+HC.focus = function()
+    SetGlobalString("PD.Naval.HoloFocus", "")
 end
 
 --------------------------------------------------------------------------------
