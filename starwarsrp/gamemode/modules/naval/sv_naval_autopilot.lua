@@ -14,6 +14,11 @@
        via (Zwischenziel: durchfliegen statt anhalten), queue = {weitere Ziele}}
     Wegpunkt-Kette: Shift+Klick auf der Systemkarte haengt Ziele an; nur das
     letzte bestimmt "halten" oder "Orbit".
+
+    Gespeichert in ship.orders (Spalte orders, das Map-Schiff hat keine
+    KI-Befehle): orders.navPlan = geplanter Kurs der Systemkarte (fuer jeden,
+    der die Konsole oeffnet), orders.auto = laufender Autopilot (uebersteht
+    Code-Updates und Neustarts).
     Steuereingaben an der Steuerkonsole schalten ihn ab.
 
     NPC-Befehle move/patrol nutzen dieselbe Ausweichlogik (Naval.AutoSteer).
@@ -202,6 +207,7 @@ end
 
 local function Stop(ship, reason)
     ship.auto = nil
+    if ship.orders then ship.orders.auto = nil end
     ship.ctrl.autopilot = nil
     ship.dirty = true
     if reason then ship:Log("nav", "", "Autopilot: " .. reason) end
@@ -275,7 +281,50 @@ timer.Create("PD.Naval.Autopilot", 0.25, 0, function()
         ship.auto = nil
         ErrorNoHalt("[Naval] Autopilot: " .. tostring(err) .. "\n")
     end
+
+    ship.orders = ship.orders or {queue = {}}
+    ship.orders.auto = ship.auto
 end)
+
+-- Nach Neustart / Code-Update: laufenden Autopiloten wieder aufnehmen
+hook.Add("PD.Naval.SimStarted", "PD.Naval.Autopilot", function()
+    local ship = Naval.GetMapShip()
+    if ship and ship.orders and istable(ship.orders.auto) and ship.state == S.NORMAL then
+        ship.auto = ship.orders.auto
+        if istable(ship.auto.queue) then
+            -- JSON macht aus leeren Listen ggf. Objekte
+            local list = {}
+            for _, leg in SortedPairs(ship.auto.queue) do list[#list + 1] = leg end
+            ship.auto.queue = list
+        end
+    end
+end)
+
+-- Geplanter Kurs (noch nicht gestartet oder laufend) fuer die Systemkarte
+function Naval.SetNavPlan(ship, args)
+    local legs = {}
+    for i, leg in ipairs(istable(args.legs) and args.legs or {}) do
+        if i > 12 then break end
+        if istable(leg) and (leg.kind == "body" or leg.kind == "point" or leg.kind == "ship") then
+            local entry = {kind = leg.kind, name = string.sub(tostring(leg.name or ""), 1, 40)}
+            if leg.kind == "point" and istable(leg.pos) then
+                entry.pos = {x = tonumber(leg.pos.x) or 0, y = tonumber(leg.pos.y) or 0, z = tonumber(leg.pos.z) or 0}
+            else
+                entry.id = leg.kind == "ship" and tonumber(leg.id) or tostring(leg.id or "")
+            end
+            legs[#legs + 1] = entry
+        end
+    end
+
+    ship.orders = ship.orders or {queue = {}}
+    ship.orders.navPlan = #legs > 0 and {
+        legs = legs,
+        mode = args.mode == "orbit" and "orbit" or "stop",
+        speed = math.Clamp(tonumber(args.speed) or 1, 0.1, 1),
+        alt = tonumber(args.alt),
+    } or nil
+    ship.dirty = true
+end
 
 -- Ein Ziel aus den Angaben der Systemkarte
 local function BuildLeg(ship, args, by)
@@ -363,6 +412,10 @@ function Naval.StartAutopilot(ship, args, by)
 end
 
 Naval.StatusExtras = Naval.StatusExtras or {}
+Naval.StatusExtras.navPlan = function(ship)
+    return ship.orders and ship.orders.navPlan or nil
+end
+
 Naval.StatusExtras.auto = function(ship)
     local auto = ship.auto
     if not auto then return nil end

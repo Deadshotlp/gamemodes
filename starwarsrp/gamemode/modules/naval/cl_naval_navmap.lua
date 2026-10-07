@@ -24,9 +24,9 @@ local function SendNav(action, systemId)
     net.SendToServer()
 end
 
-local function SendAuto(args)
+local function SendAuto(args, action)
     net.Start("PD.Naval.Nav")
-    net.WriteString("auto")
+    net.WriteString(action or "auto")
     net.WriteString(util.TableToJSON(args) or "{}")
     net.SendToServer()
 end
@@ -496,6 +496,7 @@ local function CreateSystemMap(parent, onSelect)
             s.Chain = {sel}
         end
         s.Selected = sel
+        if s.OnChainChanged then s:OnChainChanged() end
         if onSelect then onSelect(sel) end
     end
 
@@ -599,9 +600,25 @@ local function CreateSystemSide(parent, map)
 
     -- Ankunft: halten oder Orbit
     local modeRow = Row(34)
-    local stopBtn = UI.Button(modeRow, "Anfliegen + halten", function() state.mode = "stop" end,
+    -- Geplanten Kurs am Schiff speichern (kurz verzoegert, Server begrenzt
+    -- auf 2 Nachrichten pro Sekunde); jeder an der Konsole sieht ihn wieder.
+    local altEntry
+    local function SavePlan()
+        timer.Create("PD.Naval.NavPlan", 0.7, 1, function()
+            local legs = {}
+            for _, c in ipairs(map.Chain) do
+                legs[#legs + 1] = {kind = c.kind, id = c.id, name = c.name,
+                    pos = c.kind == "point" and c.pos and {x = c.pos.x, y = c.pos.y, z = c.pos.z} or nil}
+            end
+            local km = IsValid(altEntry) and tonumber(altEntry:GetValue())
+            SendAuto({legs = legs, mode = state.mode, speed = state.speed, alt = km and km * 1000 or nil}, "plan")
+        end)
+    end
+    map.OnChainChanged = SavePlan
+
+    local stopBtn = UI.Button(modeRow, "Anfliegen + halten", function() state.mode = "stop" SavePlan() end,
         function() return state.mode == "stop" and COL.ok or COL.dim end)
-    local orbitBtn = UI.Button(modeRow, "Orbit", function() state.mode = "orbit" end,
+    local orbitBtn = UI.Button(modeRow, "Orbit", function() state.mode = "orbit" SavePlan() end,
         function() return state.mode == "orbit" and COL.ok or COL.dim end)
     modeRow.PerformLayout = function(s, w, h)
         stopBtn:SetPos(0, 0) stopBtn:SetSize(w * 0.6 - 3, h)
@@ -613,7 +630,7 @@ local function CreateSystemSide(parent, map)
     local speeds = {{"25 %", 0.25}, {"50 %", 0.5}, {"75 %", 0.75}, {"Voll", 1}}
     local speedBtns = {}
     for i, sp in ipairs(speeds) do
-        speedBtns[i] = UI.Button(speedRow, sp[1], function() state.speed = sp[2] end,
+        speedBtns[i] = UI.Button(speedRow, sp[1], function() state.speed = sp[2] SavePlan() end,
             function() return state.speed == sp[2] and COL.ok or COL.dim end)
     end
     speedRow.PerformLayout = function(s, w, h)
@@ -626,11 +643,12 @@ local function CreateSystemSide(parent, map)
     altRow.Paint = function(s, w, h)
         draw.SimpleText("Abstand (km, leer = automatisch)", "MLIB.14", 0, h / 2, COL.dim, nil, TEXT_ALIGN_CENTER)
     end
-    local altEntry = vgui.Create("DTextEntry", altRow)
+    altEntry = vgui.Create("DTextEntry", altRow)
     altEntry:Dock(RIGHT)
     altEntry:SetWide(90)
     altEntry:SetFont("MLIB.16")
     altEntry:SetNumeric(true)
+    altEntry.OnChange = SavePlan
 
     local goRow = Row(42)
     local goBtn = UI.Button(goRow, "AUTOPILOT STARTEN", function()
@@ -653,6 +671,7 @@ local function CreateSystemSide(parent, map)
     local undoBtn = UI.Button(goRow, "Letztes −", function()
         table.remove(map.Chain)
         map.Selected = map.Chain[#map.Chain]
+        SavePlan()
     end, function() return COL.warn end)
     undoBtn:Dock(RIGHT)
     undoBtn:DockMargin(6, 0, 0, 0)
@@ -682,9 +701,21 @@ local function CreateSystemSide(parent, map)
         undoBtn.Disabled = #map.Chain == 0
         goBtn.Label = #map.Chain > 1 and ("AUTOPILOT: %d ZIELE"):format(#map.Chain) or "AUTOPILOT STARTEN"
         orbitBtn.Disabled = not sel or sel.kind ~= "body"
-        if orbitBtn.Disabled and state.mode == "orbit" then state.mode = "stop" end
+        if orbitBtn.Disabled and state.mode == "orbit" and #map.Chain > 0 then state.mode = "stop" end
         jumpBtn.Disabled = not (st.nav and st.nav.ready and st.nav.valid) or st.state ~= "normal"
         offBtn.Disabled = st.auto == nil
+    end
+
+    -- Gespeicherten Kurs wiederherstellen
+    local plan = C.status and C.status.navPlan
+    if plan and istable(plan.legs) then
+        for _, leg in ipairs(plan.legs) do
+            map.Chain[#map.Chain + 1] = {kind = leg.kind, id = leg.id, pos = leg.pos, name = leg.name ~= "" and leg.name or "Wegpunkt"}
+        end
+        map.Selected = map.Chain[#map.Chain]
+        state.mode = plan.mode == "orbit" and "orbit" or "stop"
+        state.speed = tonumber(plan.speed) or 1
+        if tonumber(plan.alt) then altEntry:SetValue(tostring(math.Round(plan.alt / 1000))) end
     end
 
     return side
@@ -834,7 +865,7 @@ local function OpenNavcomputer(console)
     toggle:SetSize(270, 32)
 
     -- Mit laufendem Autopiloten direkt die Systemkarte zeigen
-    SetMode(C.status and C.status.auto and "system" or "galaxy")
+    SetMode(C.status and (C.status.auto or C.status.navPlan) and "system" or "galaxy")
 
     frame.Think = function(s)
         if IsValid(s.Console) and LocalPlayer():GetPos():Distance(s.Console:GetPos()) > (Naval.StationUseRange or 160) * 1.5 then

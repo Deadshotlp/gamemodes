@@ -209,6 +209,11 @@ net.Receive("PD.Naval.Nav", function(_, ply)
         local ok, reason = Naval.StartAutopilot(ship, args, Who(ply))
         Notify(ply, ok and "Autopilot aktiv" or reason, ok)
         return
+    elseif action == "plan" then
+        -- Geplanter Kurs der Systemkarte (bleibt fuer alle an der Konsole stehen)
+        local args = util.JSONToTable(net.ReadString() or "") or {}
+        if Naval.SetNavPlan then Naval.SetNavPlan(ship, args) end
+        return
     elseif action == "auto_off" then
         if ship.auto and Naval.StopAutopilot then
             Naval.StopAutopilot(ship, "abgeschaltet von " .. Who(ply))
