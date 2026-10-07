@@ -175,9 +175,10 @@ function Naval.SupplyCheck(ship)
     return true, source
 end
 
-local function Deliver(ship)
-    local order = ship.subs.supply
-    ship.subs.supply = nil
+-- gift: Lieferung ausserhalb der Anforderung (Szenario), sonst die bestellte
+local function Deliver(ship, gift)
+    local order = gift or ship.subs.supply
+    if not gift then ship.subs.supply = nil end
     ship.dirty = true
     if not order then return end
 
@@ -296,6 +297,17 @@ timer.Create("PD.Naval.Supply", 1, 0, function()
 end)
 
 Naval.SupplyApplyForTest = Apply
+
+-- Kisten sofort an die Anlieferung (Szenarien)
+function Naval.SupplyDeliver(ship, crates)
+    local clean = {}
+    for _, kind in ipairs(Naval.SupplyOrder) do
+        local n = math.Clamp(math.floor(tonumber(crates[kind]) or 0), 0, 20)
+        if n > 0 then clean[kind] = n end
+    end
+    if Naval.Combat then Naval.Combat(ship) end
+    Deliver(ship, {crates = clean})
+end
 
 --------------------------------------------------------------------------------
 -- Logistik-Leitstand
