@@ -91,6 +91,14 @@ D.Settings = {
     boarding_cooldown = 120,      -- s nach einem abgewehrten Enterversuch
     boarding_live = 0,            -- 1 = Spielleitung entscheidet den Ausgang beim Entern durch das Map-Schiff
     boarding_ai = 1,              -- KI-Schiffe entern kapitulierte Feinde in Reichweite
+    field_procedural = 1,         -- Asteroidenfelder/Nebel automatisch erzeugen (0 = nur eigene aus pd_naval_fields)
+    field_asteroid_safe = 0.35,   -- sichere Fahrt in Asteroidenfeldern (Anteil der Hoechstfahrt)
+    field_asteroid_damage = 1,    -- Faktor fuer Einschlagschaden
+    field_asteroid_sensors = 0.7, -- Sensorreichweite im Asteroidenfeld
+    field_asteroid_hide = 40000,  -- m: Schiffe im Asteroidenfeld erst ab hier sichtbar
+    field_nebula_sensors = 0.35,  -- Sensorreichweite im Nebel
+    field_nebula_shields = 0.4,   -- Schildladung im Nebel
+    field_nebula_hide = 20000,    -- m: Schiffe im Nebel erst ab hier sichtbar
 }
 
 --------------------------------------------------------------------------------

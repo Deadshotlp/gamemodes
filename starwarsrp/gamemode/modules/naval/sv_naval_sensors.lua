@@ -169,7 +169,8 @@ Naval.StatusExtras.sensors = function(ship)
 
     for id, other in pairs(Naval.Ships) do
         if other ~= ship and other.systemId == ship.systemId and other.state ~= S.HYPERSPACE
-            and not (other.flags and other.flags.hidden) and V3.Dist(other.pos, ship.pos) <= range then
+            and not (other.flags and other.flags.hidden) and V3.Dist(other.pos, ship.pos) <= range
+            and not (Naval.Concealed and Naval.Concealed(ship, other)) then
             local level = Naval.IdentLevel(ship, other)
             local c = {level = level, surrendered = other.flags and other.flags.surrendered or nil}
 

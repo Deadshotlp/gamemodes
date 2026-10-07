@@ -126,6 +126,18 @@ local function Marker(pos, size, col, flicker, hollow, round)
     end
 end
 
+-- Kante eines Asteroidenguertels (gestrichelt, nur im Holo-Bereich)
+local function BeltEdge(c, r, from, range, toHolo, col)
+    local last
+    for i = 0, 360 do
+        local a = math.rad(i)
+        local rel = Naval.V3.Sub({x = c.x + math.cos(a) * r, y = c.y + math.sin(a) * r, z = c.z or 0}, from)
+        local p = Naval.V3.Len(rel) <= range and toHolo(rel) or nil
+        if p and last and i % 2 == 0 then render.DrawLine(last, p, col, true) end
+        last = p
+    end
+end
+
 local function DrawTactical(center, radius, labels, flicker)
     local view = C.View and C.View()
     local static = C.static
@@ -218,6 +230,29 @@ local function DrawTactical(center, radius, labels, flicker)
                 local relation = Naval.ClientRelation and Naval.ClientRelation(myFaction, sq.factionId) or "neutral"
                 local col = REL_COLOR[relation] or COL_HOLO
                 Marker(ToHolo(rel), radius * (sq.bomber and 0.014 or 0.01), col, flicker)
+            end
+        end
+    end
+
+    -- Asteroidenfelder und Nebel (cl_naval_fields.lua)
+    if C.system and C.system.systemId == view.systemId and C.system.fields and Naval.HoloLayer("bodies") then
+        render.SetColorMaterial()
+        for _, f in ipairs(C.system.fields) do
+            local fc = f.kind == "nebula" and (f.color or {150, 90, 255}) or {190, 160, 120}
+            local col = Color(fc[1], fc[2], fc[3], 170 * flicker)
+            local c = f.pos or {x = 0, y = 0, z = 0}
+            if f.kind == "belt" then
+                BeltEdge(c, f.radius - f.width * 0.5, view.pos, range, ToHolo, col)
+                BeltEdge(c, f.radius + f.width * 0.5, view.pos, range, ToHolo, col)
+            else
+                local rel = Naval.V3.Sub(c, view.pos)
+                local dist = Naval.V3.Len(rel)
+                if dist - f.radius <= range then
+                    local r = math.min(f.radius * scale, radius * 1.2)
+                    local p = dist <= range and ToHolo(rel) or ToHolo(Naval.V3.Scale(rel, range / dist))
+                    render.DrawWireframeSphere(p, r, 12, 8, col, true)
+                    labels[#labels + 1] = {pos = p + Vector(0, 0, math.min(r, radius * 0.5)), text = f.name, col = col}
+                end
             end
         end
     end

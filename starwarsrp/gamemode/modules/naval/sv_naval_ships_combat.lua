@@ -407,7 +407,8 @@ local function PickTarget(ship, bySystem)
     local range = Naval.MaxWeaponRange(ship) * 1.3
     local best, bestD = nil, range * range
     for _, other in ipairs(bySystem[ship.systemId] or {}) do
-        if Valid(other, ship) and other.state ~= S.DISABLED and Hostile(ship, other) then
+        if Valid(other, ship) and other.state ~= S.DISABLED and Hostile(ship, other)
+            and not (Naval.Concealed and Naval.Concealed(ship, other)) then
             local d = V3.LenSqr(V3.Sub(other.pos, ship.pos))
             if d < bestD then best, bestD = other, d end
         end
@@ -422,6 +423,7 @@ function Naval.HitChance(ship, target, wt, dist)
     local size = math.Clamp(ShipLength(target) / math.max(dist * 0.004, 1), 0.15, 1)
     local evade = 1 - math.min(0.35, target:Speed() / 20000)
     local chance = wt.accuracy * size * evade * math.max(0.4, Naval.SubFactor(ship, "sensors"))
+    if Naval.FieldHitFactor then chance = chance * Naval.FieldHitFactor(ship, target) end
 
     -- Punktverteidigung des Ziels gegen Raketen/Torpedos
     if wt.dmgType == "matter" then
@@ -509,6 +511,7 @@ Naval.CombatFire = function(ship, target, dt, sink) return Fire(ship, target, dt
 local function Regen(ship, dt)
     local _, sh, cc = Naval.Combat(ship)
     local f = Naval.PowerFactors(ship).shields * Naval.SubFactor(ship, "shieldgen") * (Naval.Settings.combat_shield_regen_mult or 1)
+    if Naval.FieldShieldFactor then f = f * Naval.FieldShieldFactor(ship) end
 
     for _, zone in ipairs(Naval.Zones) do
         local z = sh.zones[zone]

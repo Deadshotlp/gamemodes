@@ -206,6 +206,16 @@ Naval.SettingInfo = {
         {"boarding_live", "Spielleitung entscheidet Entern", "1 = an"},
         {"boarding_ai", "KI entert kapitulierte Feinde", "1 = an"},
     }},
+    {"Asteroidenfelder und Nebel", {
+        {"field_procedural", "Felder automatisch erzeugen", "1 = an"},
+        {"field_asteroid_safe", "Sichere Fahrt im Asteroidenfeld", "Anteil"},
+        {"field_asteroid_damage", "Einschlagschaden", "Faktor"},
+        {"field_asteroid_sensors", "Sensoren im Asteroidenfeld", "Faktor"},
+        {"field_asteroid_hide", "Im Asteroidenfeld sichtbar bis", "m"},
+        {"field_nebula_sensors", "Sensoren im Nebel", "Faktor"},
+        {"field_nebula_shields", "Schildladung im Nebel", "Faktor"},
+        {"field_nebula_hide", "Im Nebel sichtbar bis", "m"},
+    }},
     {"Autopilot", {
         {"autopilot_clearance", "Sicherheitsabstand", "× Radius"},
         {"autopilot_margin", "Sicherheitsabstand zusätzlich", "m"},

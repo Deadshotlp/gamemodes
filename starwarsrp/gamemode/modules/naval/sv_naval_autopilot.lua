@@ -266,6 +266,9 @@ local function Steer(ship, points, speeds, tolerance, speedCap)
         allowed = math.min(allowed, math.max(80, omega * math.max(impact, 0) * 0.8))
     end
 
+    -- Asteroidenfelder: nur sichere Fahrt (sv_naval_fields.lua)
+    if Naval.FieldSpeedLimit then allowed = math.min(allowed, Naval.FieldSpeedLimit(ship)) end
+
     local throttle = math.Clamp(allowed / maxSpeed, 0.02, speedCap)
     -- Bug zeigt noch nicht zum Punkt: erst drehen, kaum Fahrt
     if err > 25 then throttle = math.min(throttle, 0.1) end

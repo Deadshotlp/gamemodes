@@ -486,6 +486,23 @@ local function CreateSystemMap(parent, onSelect)
 
         for _, body in pairs(system.bodiesById) do DrawOrbit(body) end
 
+        -- Asteroidenfelder (braun) und Nebel (farbig)
+        for _, f in ipairs(system.fields or {}) do
+            local c = f.pos or {x = 0, y = 0, z = 0}
+            local fx, fy = ToScreen(s, c)
+            if f.kind == "belt" then
+                local col = Color(190, 160, 120, 90)
+                for k = -2, 2 do DrawCircle(fx, fy, (f.radius + f.width * k / 4) * s.PxPerM, col) end
+                draw.SimpleText(f.name, "MLIB.12", fx, fy - (f.radius + f.width * 0.5) * s.PxPerM - 12, Color(190, 160, 120), TEXT_ALIGN_CENTER)
+            else
+                local fc = f.kind == "nebula" and (f.color or {150, 90, 255}) or {190, 160, 120}
+                local pr = f.radius * s.PxPerM
+                local rings = f.kind == "nebula" and 6 or 3
+                for k = 1, rings do DrawCircle(fx, fy, pr * k / rings, Color(fc[1], fc[2], fc[3], 60)) end
+                draw.SimpleText(f.name, "MLIB.12", fx, fy - pr - 12, Color(fc[1], fc[2], fc[3]), TEXT_ALIGN_CENTER)
+            end
+        end
+
         -- Himmelskoerper
         for _, body in pairs(system.bodiesById) do
             local pos = Naval.BodyPos(body, system.bodiesById, now)

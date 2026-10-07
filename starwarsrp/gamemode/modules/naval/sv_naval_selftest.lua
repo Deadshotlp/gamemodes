@@ -311,6 +311,36 @@ function Naval.SimSelfTest()
             ok and ("Abstand %.0f m, Fraktion %s -> %s"):format(dist, fromFaction, prize.factionId) or tostring(runErr))
     end
 
+    -- 16. Asteroidenfeld: zu schnell -> Einschlaege, sichere Fahrt -> keine
+    if Naval.FieldStepForTest and Naval.FieldCache then
+        local fship = TestShip("venator")
+        fship.id = 64041
+        fship.flags = {test = true, hidden = true}
+        fship.systemId = "__test__"
+        Naval.FieldCache.__test__ = {{id = "t1", kind = "cluster", name = "Testfeld", pos = {x = 0, y = 0, z = 0}, radius = 50000, density = 1}}
+        Naval.Ships[fship.id] = fship
+        Naval.Combat(fship)
+        local hull0 = fship.hull
+        local fmax = fship:Stat("fmax")
+
+        local ok, runErr = pcall(function()
+            fship.vel = {x = fmax, y = 0, z = 0}
+            for _ = 1, 60 do Naval.FieldStepForTest(fship) end
+            fship.fastHull = fship.hull
+            fship.hull = hull0
+            fship.vel = {x = fmax * 0.2, y = 0, z = 0}
+            for _ = 1, 60 do Naval.FieldStepForTest(fship) end
+        end)
+
+        local limit = Naval.FieldSpeedLimit(fship)
+        Naval.Ships[fship.id] = nil
+        Naval.FieldCache.__test__ = nil
+
+        check("Asteroidenfeld: Einschläge nur bei zu hoher Fahrt, Autopilot bremst",
+            ok and fship.fastHull < hull0 and fship.hull == hull0 and limit < fmax,
+            ok and ("Hülle schnell %d -> %d, langsam %d -> %d, Autopilot max %.0f von %.0f m/s"):format(hull0, fship.fastHull, hull0, fship.hull, limit, fmax) or tostring(runErr))
+    end
+
     -- 12. Moral: schwer beschaedigtes Schiff will fliehen
     if Naval.MoraleTarget then
         local probe = TestShip("munificent")

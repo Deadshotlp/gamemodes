@@ -159,7 +159,7 @@ local function BuildSystem(systemId)
         }
     end
 
-    return {systemId = systemId, bodies = bodies}
+    return {systemId = systemId, bodies = bodies, fields = Naval.SystemFields and Naval.SystemFields(systemId) or nil}
 end
 
 Naval.BuildStaticForTest = BuildStatic
@@ -193,7 +193,8 @@ local function VisibleShips(mapShip)
     for id, ship in pairs(Naval.Ships) do
         if ship ~= mapShip and ship.systemId == mapShip.systemId and ship.state ~= Naval.State.HYPERSPACE
             and not (ship.flags and ship.flags.hidden)
-            and V3.LenSqr(V3.Sub(ship.pos, mapShip.pos)) <= rangeSqr then
+            and V3.LenSqr(V3.Sub(ship.pos, mapShip.pos)) <= rangeSqr
+            and not (Naval.Concealed and Naval.Concealed(mapShip, ship)) then
             list[#list + 1] = ship
         end
     end
