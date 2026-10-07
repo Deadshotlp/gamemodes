@@ -213,6 +213,59 @@ local function DrawHolo()
         end
     end
 
+    -- Kurs aus dem Navigationscomputer: laufender Autopilot gruen, nur
+    -- geplanter Kurs gelb. Auf die Hologramm-Kugel zugeschnitten.
+    local route, routeCol = {}, Color(90, 235, 140, 220 * flicker)
+    local st = C.status or {}
+    if st.auto then
+        for _, p in ipairs(st.auto.path or {}) do route[#route + 1] = {x = p[1], y = p[2], z = p[3]} end
+        for _, q in ipairs(st.auto.queue or {}) do route[#route + 1] = {x = q.p[1], y = q.p[2], z = q.p[3], mark = q.label} end
+        if #route > 0 then route[1] = view.pos end
+    elseif st.navPlan and istable(st.navPlan.legs) then
+        routeCol = Color(240, 200, 70, 200 * flicker)
+        route[1] = view.pos
+        for _, leg in ipairs(st.navPlan.legs) do
+            local p = leg.pos
+            if leg.kind == "body" and system and system.bodiesById and system.bodiesById[leg.id] then
+                p = Naval.BodyPos(system.bodiesById[leg.id], system.bodiesById, Naval.Now())
+            elseif leg.kind == "ship" and view.ships[leg.id] then
+                p = view.ships[leg.id].pos
+            end
+            if p then route[#route + 1] = {x = p.x, y = p.y, z = p.z or view.pos.z, mark = leg.name} end
+        end
+    end
+
+    if #route > 1 then
+        render.SetColorMaterial()
+        local function Clip(a, b)
+            -- Strecke a->b (relativ zum Schiff) auf die Kugel mit Radius range
+            local d = Naval.V3.Sub(b, a)
+            local A = Naval.V3.Dot(d, d)
+            if A < 1 then return nil end
+            local B = 2 * Naval.V3.Dot(a, d)
+            local Cc = Naval.V3.Dot(a, a) - range * range
+            local disc = B * B - 4 * A * Cc
+            if disc <= 0 then return nil end
+            local sq = math.sqrt(disc)
+            local t0, t1 = math.max(0, (-B - sq) / (2 * A)), math.min(1, (-B + sq) / (2 * A))
+            if t0 >= t1 then return nil end
+            return Naval.V3.Add(a, Naval.V3.Scale(d, t0)), Naval.V3.Add(a, Naval.V3.Scale(d, t1)), t1 >= 1
+        end
+
+        for i = 2, #route do
+            local a, b, endInside = Clip(Naval.V3.Sub(route[i - 1], view.pos), Naval.V3.Sub(route[i], view.pos))
+            if a then
+                local ha, hb = ToHolo(a), ToHolo(b)
+                render.DrawLine(ha, hb, routeCol, true)
+                render.DrawLine(ha + Vector(0, 0, 0.15), hb + Vector(0, 0, 0.15), routeCol, true)
+                if endInside and route[i].mark then
+                    render.DrawSphere(hb, 0.5, 8, 6, routeCol)
+                    labels[#labels + 1] = {pos = hb, text = route[i].mark, col = routeCol}
+                end
+            end
+        end
+    end
+
     -- Schildzonen um das eigene Schiff
     if combat and combat.zones and mapLen > 0 then
         render.SetMaterial(MAT_GLOW)

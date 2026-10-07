@@ -144,6 +144,22 @@ function Naval.SimSelfTest()
             damagedSubs .. " Subsysteme beschädigt")
     end
 
+    -- 10. Autopilot: Anflug auf 150 km bremst rechtzeitig, kein Ueberschiessen
+    if Naval.AutoSteer then
+        local probe = TestShip("venator")
+        local approachPoint = {x = 150000, y = 0, z = 0}
+        local tol = probe:Class().lengthM * 2 + 1000
+        local arrivedAt, overshoot, tt = nil, 0, 0
+        while tt < 900 and not arrivedAt do
+            if Naval.AutoSteer(probe, approachPoint, tol) then arrivedAt = tt end
+            Naval.StepShip(probe, 0.1)
+            overshoot = math.max(overshoot, probe.pos.x - approachPoint.x)
+            tt = tt + 0.1
+        end
+        check("Autopilot hält am Ziel ohne Überschießen", arrivedAt ~= nil and overshoot < tol,
+            ("angekommen nach %s s, %.0f m über das Ziel hinaus"):format(arrivedAt and math.Round(arrivedAt) or "-", overshoot))
+    end
+
     -- 9. Autopilot: Weg quer durch den Hauptplaneten fuehrt aussen herum
     if Naval.AvoidPath then
         local sysId = Naval.StartSystemId()

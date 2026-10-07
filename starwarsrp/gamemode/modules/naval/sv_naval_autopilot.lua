@@ -104,35 +104,69 @@ function Naval.AvoidPath(systemId, from, to)
     return points
 end
 
-local function PathLength(points)
-    local len = 0
-    for i = 2, #points do len = len + V3.Dist(points[i - 1], points[i]) end
-    return len
+--[[
+    Geschwindigkeitsplanung ueber den ganzen Weg (points[1] = Schiff):
+    An jedem Knick darf das Schiff nur so schnell sein, dass es die Drehung
+    mit seiner Drehrate schafft, ohne weiter als 2 x Toleranz aus der Bahn
+    zu tragen: v = Drehrate x 2 x Toleranz / (1 - cos Knickwinkel). Am letzten
+    Punkt 0. Erlaubt ist jetzt das Minimum aus sqrt(v_k^2 + 2 x Bremsung x
+    Abstand bis Punkt k) ueber alle folgenden Punkte - so wird rechtzeitig
+    vor Kurven und vor dem Ziel gebremst.
+]]
+local function CornerSpeeds(ship, points, tolerance, finalSpeed)
+    local rates = ship:Rates()
+    local omega = math.max(math.min(rates.y, rates.z), 1e-3)
+    local maxSpeed = math.max(ship:Stat("maxSpeed"), 1)
+    local speeds = {}
+
+    for i = 2, #points - 1 do
+        local a = V3.Normalize(V3.Sub(points[i], points[i - 1]))
+        local b = V3.Normalize(V3.Sub(points[i + 1], points[i]))
+        local bend = 1 - math.Clamp(V3.Dot(a, b), -1, 1)
+        speeds[i] = math.Clamp(omega * tolerance * 2 / math.max(bend, 1e-4), 80, maxSpeed)
+    end
+    speeds[#points] = finalSpeed or 0
+
+    return speeds
 end
 
--- Auf den naechsten Wegpunkt zu, Bremsweg nach der Restlaenge
-local function Steer(ship, aim, remaining, tolerance, speedCap)
+local function PlannedSpeed(ship, points, speeds)
+    local decel = math.max(ship:Stat("decel"), 1) * 0.85
+    local allowed = math.huge
+    local along = 0
+
+    for k = 2, #points do
+        along = along + V3.Dist(points[k - 1], points[k])
+        if speeds[k] then
+            allowed = math.min(allowed, math.sqrt(speeds[k] * speeds[k] + 2 * decel * along))
+        end
+    end
+
+    return allowed, along
+end
+
+-- Auf den naechsten Punkt zu, mit geplanter Geschwindigkeit. Gibt true
+-- zurueck, wenn das Schiff am letzten Punkt steht.
+local function Steer(ship, points, speeds, tolerance, speedCap)
     local speed = ship:Speed()
     speedCap = math.Clamp(speedCap or 1, 0.05, 1)
 
+    local allowed, remaining = PlannedSpeed(ship, points, speeds)
     if remaining <= tolerance then
         ship.ctrl.throttle = 0
         ship.ctrl.autopilot = nil
         return speed < 50
     end
 
-    local toAim = V3.Sub(aim, ship.pos)
+    local toAim = V3.Sub(points[2], ship.pos)
     ship.ctrl.autopilot = {dir = toAim}
 
     local _, _, _, err = Naval.FaceRates(ship, toAim)
     local maxSpeed = math.max(ship:Stat("maxSpeed"), 1)
-    local decel = math.max(ship:Stat("decel"), 1)
-    local brake = speed * speed / (2 * decel)
 
-    local throttle = err > 25 and 0.1 or speedCap
-    if remaining < brake * 1.3 then
-        throttle = math.Clamp(math.sqrt(2 * decel * remaining) / maxSpeed * 0.8, 0.02, speedCap)
-    end
+    local throttle = math.Clamp(allowed / maxSpeed, 0.02, speedCap)
+    -- Bug zeigt noch nicht zum Punkt: erst drehen, kaum Fahrt
+    if err > 25 then throttle = math.min(throttle, 0.1) end
 
     ship.ctrl.throttle = throttle
     return false
@@ -142,7 +176,7 @@ end
 function Naval.AutoSteer(ship, target, tolerance, speedCap)
     tolerance = tolerance or (((ship:Class() or {}).lengthM or 300) * 3 + 1000)
     local path = Naval.AvoidPath(ship.systemId, ship.pos, target)
-    return Steer(ship, path[2] or target, PathLength(path), tolerance, speedCap), path
+    return Steer(ship, path, CornerSpeeds(ship, path, tolerance, 0), tolerance, speedCap), path
 end
 
 --------------------------------------------------------------------------------
@@ -205,6 +239,40 @@ local function AutoTarget(ship, auto)
     end
 end
 
+-- Zielpunkt eines spaeteren Ziels der Kette, angeflogen von "from"
+local function PreviewTarget(ship, leg, from)
+    if leg.kind == "body" then
+        local body = Naval.Bodies[leg.id or ""]
+        if not body then return nil end
+        local c = Naval.BodyPos(body, Naval.Bodies)
+        local r = math.max(body.radius + (leg.alt or body.radius * 0.6), Clearance(body) * 1.02)
+        local dir = leg.dir or V3.Sub(from, c)
+        if V3.LenSqr(dir) < 1 then dir = {x = 1, y = 0, z = 0} end
+        return V3.Add(c, V3.Scale(V3.Normalize(dir), r))
+    elseif leg.kind == "ship" then
+        local other = Naval.Ships[leg.id or -1]
+        return other and other.pos
+    end
+    return leg.pos
+end
+
+-- Ganzer Weg: aktuelles Ziel und alle weiteren der Kette, mit Umwegen
+local function RoutePoints(ship, auto, target)
+    local points = Naval.AvoidPath(ship.systemId, ship.pos, target)
+    local legEnd = #points
+    local last = target
+
+    for _, leg in ipairs(auto.queue or {}) do
+        local p = PreviewTarget(ship, leg, last)
+        if not p then break end
+        local seg = Naval.AvoidPath(ship.systemId, last, p)
+        for i = 2, #seg do points[#points + 1] = seg[i] end
+        last = p
+    end
+
+    return points, legEnd
+end
+
 local function Stop(ship, reason)
     ship.auto = nil
     if ship.orders then ship.orders.auto = nil end
@@ -245,25 +313,23 @@ local function TickMapShip(ship)
 
     local tolerance = ((ship:Class() or {}).lengthM or 300) * 2 + 1000
 
-    -- Zwischenziel: ohne Bremsen durchfliegen, dann das naechste Ziel
-    if auto.via then
-        local path = Naval.AvoidPath(ship.systemId, ship.pos, target)
-        auto.path = path
+    -- Ganzer restlicher Weg mit Geschwindigkeit je Knick: vor Kurven und
+    -- vor dem letzten Ziel rechtzeitig bremsen
+    local points, legEnd = RoutePoints(ship, auto, target)
+    local speeds = CornerSpeeds(ship, points, tolerance, 0)
+    auto.path = {unpack(points, 1, legEnd)}
 
-        if V3.Dist(ship.pos, target) <= tolerance * 2 and auto.queue and #auto.queue > 0 then
-            local nextLeg = table.remove(auto.queue, 1)
-            nextLeg.queue = auto.queue
-            ship.auto = nextLeg
-            ship:Log("nav", "", "Autopilot: " .. (auto.label or "?") .. " passiert, weiter nach " .. (nextLeg.label or "?"))
-            return
-        end
-
-        Steer(ship, path[2] or target, math.huge, tolerance, auto.speed)
+    -- Zwischenziel: durchfliegen, dann das naechste Ziel
+    if auto.via and auto.queue and #auto.queue > 0 and V3.Dist(ship.pos, target) <= tolerance * 2 then
+        local nextLeg = table.remove(auto.queue, 1)
+        nextLeg.queue = auto.queue
+        ship.auto = nextLeg
+        ship:Log("nav", "", "Autopilot: " .. (auto.label or "?") .. " passiert, weiter nach " .. (nextLeg.label or "?"))
         return
     end
 
-    local arrived, path = Naval.AutoSteer(ship, target, tolerance, auto.speed)
-    auto.path = path
+    local arrived = Steer(ship, points, speeds, tolerance, auto.speed)
+    if auto.via then arrived = false end
 
     if arrived then
         auto.arrived = true
