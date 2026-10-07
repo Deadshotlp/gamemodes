@@ -56,9 +56,22 @@ local function HoloModel(key, path)
     return m
 end
 
+-- Wand-Stellung (DrawHolo setzt es): Modelle uebernehmen die gekippte
+-- Modellmatrix nicht, daher Lage und Ausrichtung hier selbst kippen und
+-- ausserhalb der Matrix zeichnen
+local tilt
+
 local function DrawShipModel(key, path, pos, ang, length, col, alpha)
     local m = HoloModel(key, path)
     if not m then return end
+
+    if tilt then
+        pos = tilt.Tilt(pos)
+        local am = Matrix()
+        am:SetAngles(ang)
+        ang = (tilt.B * am):GetAngles()
+        cam.PopModelMatrix()
+    end
 
     local f = length / m.PD_Length
     local mat = Matrix()
@@ -71,6 +84,8 @@ local function DrawShipModel(key, path, pos, ang, length, col, alpha)
     render.SetColorModulation(col.r / 255, col.g / 255, col.b / 255)
     render.SetBlend(alpha)
     m:DrawModel()
+
+    if tilt then cam.PushModelMatrix(tilt.M, true) end
 end
 
 local function Label(pos, text, col, size)
@@ -487,6 +502,7 @@ local function DrawHolo()
         M = M * B
         M:Translate(-center)
         cam.PushModelMatrix(M, true)
+        tilt = {M = M, B = B, Tilt = Tilt}
     end
 
     local labels = {}
@@ -496,6 +512,7 @@ local function DrawHolo()
     end)
 
     if wall then cam.PopModelMatrix() end
+    tilt = nil
     if not ok then error(err, 0) end
 
     if EyePos():DistToSqr(center) < 900 * 900 then
