@@ -219,6 +219,17 @@ local TABLES = {
         PRIMARY KEY (`server_key`, `id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
+    -- Planeten-Texturen mit Vorschau fuers Web-Panel (Stufe 4b; gefuellt von
+    -- _tools/naval_galaxy/textures.js aus dem SWU-Addon)
+    [[CREATE TABLE IF NOT EXISTS `pd_naval_textures` (
+        `id` VARCHAR(160) NOT NULL,
+        `kind` VARCHAR(16) NOT NULL DEFAULT 'terrain',
+        `planet_type` VARCHAR(32) NOT NULL DEFAULT '',
+        `name` VARCHAR(128) NOT NULL DEFAULT '',
+        `preview` MEDIUMTEXT NOT NULL,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
     [[CREATE TABLE IF NOT EXISTS `pd_naval_log` (
         `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         `server_key` VARCHAR(64) NOT NULL DEFAULT 'main',
@@ -415,6 +426,25 @@ function Naval.GetRelation(a, b)
     return row and row[b] or Naval.Relation.NEUTRAL
 end
 
+-- Textur-Ueberschreibungen aus dem Web-Panel (Einstellung texture_overrides =
+-- {bodyId = {material, cloud}}); getrennt gespeichert, damit ein Neu-Import
+-- der Galaxie sie nicht loescht
+local function ApplyTextureOverrides(bodies)
+    PD.SQL.FetchOne("SELECT `config_value` FROM `pd_naval_settings` WHERE `config_key` = 'texture_overrides'", function(row)
+        local overrides = row and DB.DecodeTable(row.config_value) or {}
+        local count = 0
+        for id, o in pairs(overrides) do
+            local body = bodies[id]
+            if body and istable(o) then
+                if isstring(o.material) and o.material ~= "" then body.material = o.material end
+                if o.cloud ~= nil then body.cloud = (isstring(o.cloud) and o.cloud ~= "") and o.cloud or nil end
+                count = count + 1
+            end
+        end
+        if count > 0 then Naval.Log(count .. " Textur-Überschreibungen") end
+    end)
+end
+
 function DB.LoadGalaxy(callback)
     PD.SQL.FetchAll("SELECT * FROM `pd_naval_systems`", function(systemRows)
         PD.SQL.FetchAll("SELECT * FROM `pd_naval_bodies`", function(bodyRows)
@@ -460,6 +490,8 @@ function DB.LoadGalaxy(callback)
             Naval.Systems = systems
             Naval.Bodies = bodies
             Naval.BodiesBySystem = bySystem
+
+            ApplyTextureOverrides(bodies)
 
             -- Zusatzangaben (Sektor, Planquadrat, Kanon) und Hyperraumrouten
             PD.SQL.FetchAll("SELECT * FROM `pd_naval_system_info`", function(infoRows)
