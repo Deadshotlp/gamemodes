@@ -161,3 +161,10 @@ PD.Naval.FleetModes = {
     {id = "engage", name = "Angreifen"},
     {id = "hold", name = "Position halten"},
 }
+
+-- Stufe 4e: Hangar-Leitstand (Staffeln starten, Aufgaben, zurueckrufen)
+PD.Naval.Stations.hangar = {
+    name = "Hangar-Leitstand",
+    model = "models/lordtrilobite/starwars/isd/imp_console_large01.mdl",
+    desc = "Staffeln starten, einsetzen, zurückrufen",
+}

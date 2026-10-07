@@ -568,18 +568,18 @@ function Naval.RenderSpace()
             DrawShips(view, M, camOffset)
             render.SuppressEngineLighting(false)
 
-            -- Kampfeffekte (cl_naval_fx.lua)
-            if Naval.DrawFX then
-                local scale, far = Scale(), Far()
-                Naval.DrawFX(view, function(p)
-                    local rel = V3.Sub(p, view.pos)
-                    local len = V3.Len(rel)
-                    if len < 1 then return nil end
-                    local dir = ToMapVector(M, rel)
-                    dir:Normalize()
-                    return dir * math.min(len / scale, far) - camOffset
-                end)
+            -- Kampfeffekte (cl_naval_fx.lua) und Staffeln (cl_naval_hangar.lua)
+            local scale, far = Scale(), Far()
+            local function toRender(p)
+                local rel = V3.Sub(p, view.pos)
+                local len = V3.Len(rel)
+                if len < 1 then return nil end
+                local dir = ToMapVector(M, rel)
+                dir:Normalize()
+                return dir * math.min(len / scale, far) - camOffset
             end
+            if Naval.DrawFX then Naval.DrawFX(view, toRender) end
+            if Naval.DrawSquadrons then Naval.DrawSquadrons(view, toRender) end
         cam.End3D()
     end
 

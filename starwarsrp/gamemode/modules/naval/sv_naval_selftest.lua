@@ -239,6 +239,39 @@ function Naval.SimSelfTest()
             ("Bug vorn %d, Bug hinten %d, Heck hinten %d, Bug zerstört %d"):format(bugFront, bugBack, heckBack, bugDead))
     end
 
+    -- 14. Staffeln: Bomber greifen an, Punktverteidigung kostet Maschinen
+    if Naval.SquadronStepForTest and Naval.LaunchSquadron then
+        local carrier, enemy = TestShip("venator"), TestShip("munificent")
+        carrier.id, enemy.id = 64021, 64022
+        carrier.flags = {test = true, hidden = true}
+        enemy.flags = {test = true, hidden = true}
+        carrier.systemId, enemy.systemId = "__test__", "__test__"
+        enemy.pos = {x = 20000, y = 0, z = 0}
+        Naval.Ships[carrier.id], Naval.Ships[enemy.id] = carrier, enemy
+        Naval.Combat(carrier)
+        local _, esh = Naval.Combat(enemy)
+        esh.up = false
+        for _, z in ipairs(Naval.Zones) do esh.zones[z] = {e = 0, m = 0} end
+        local hull0 = enemy.hull
+
+        local ok, runErr = pcall(function()
+            local sq = Naval.LaunchSquadron(carrier, "bomber", "attack", enemy.id)
+            sq.state = "active"
+            for _ = 1, 240 do -- 120 s
+                if Naval.Squadrons[sq.id] then Naval.SquadronStepForTest(sq, 0.5) end
+            end
+            carrier.testSquad = sq
+        end)
+
+        local sq = carrier.testSquad
+        local craftLeft = sq and math.max(0, sq.craft) or -1
+        if sq then Naval.Squadrons[sq.id] = nil end
+        Naval.Ships[carrier.id], Naval.Ships[enemy.id] = nil, nil
+
+        check("Staffeln: Bomber treffen, Punktverteidigung wirkt", ok and enemy.hull < hull0 and craftLeft < 12,
+            ok and ("Hülle %d -> %d, Bomber übrig %.1f von 12"):format(hull0, enemy.hull, craftLeft) or tostring(runErr))
+    end
+
     -- 12. Moral: schwer beschaedigtes Schiff will fliehen
     if Naval.MoraleTarget then
         local probe = TestShip("munificent")

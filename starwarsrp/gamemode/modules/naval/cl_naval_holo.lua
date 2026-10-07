@@ -195,6 +195,20 @@ local function DrawTactical(center, radius, labels, flicker)
     render.SetBlend(1)
     render.SuppressEngineLighting(false)
 
+    -- Staffeln (cl_naval_hangar.lua)
+    if C.squadrons and Naval.SquadronPos then
+        render.SetMaterial(MAT_GLOW)
+        for _, sq in ipairs(C.squadrons) do
+            local rel = Naval.V3.Sub(Naval.SquadronPos(sq), view.pos)
+            if Naval.V3.Len(rel) <= range then
+                local relation = Naval.ClientRelation and Naval.ClientRelation(myFaction, sq.factionId) or "neutral"
+                local col = REL_COLOR[relation] or COL_HOLO
+                local size = radius * (sq.bomber and 0.035 or 0.025)
+                render.DrawSprite(ToHolo(rel), size, size, Color(col.r, col.g, col.b, 220 * flicker))
+            end
+        end
+    end
+
     for key, m in pairs(models) do
         if not seen[key] then
             if IsValid(m) then m:Remove() end

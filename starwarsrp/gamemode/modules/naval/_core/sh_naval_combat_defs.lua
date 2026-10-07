@@ -164,3 +164,42 @@ function Naval.ZoneOf(dir)
     if ay >= az then return dir.y >= 0 and "left" or "right" end
     return dir.z >= 0 and "top" or "bottom"
 end
+
+--[[
+    Hangar und Staffeln (Stufe 4e). Eine Staffel = 12 Maschinen.
+      fighter  Jaeger: gegen Staffeln, Begleitschutz, wenig gegen Schiffe
+      bomber   Bomber: Torpedos gegen Schiffe, schwach gegen Jaeger
+    Staffeln je Klasse: class.hangar = {fighter = n, bomber = m} (Panel),
+    sonst Naval.HangarDefaults.
+]]
+
+Naval.SquadronTypes = {
+    fighter = {name = "Jägerstaffel", craft = 12, speed = 900, vsCraft = 0.05, vsShip = 0.6, dmgType = "laser", pdHit = 1},
+    bomber = {name = "Bomberstaffel", craft = 12, speed = 600, vsCraft = 0.015, vsShip = 9, dmgType = "torpedo", pdHit = 1.4},
+}
+
+Naval.SquadronTasks = {
+    {id = "escort", name = "Begleitschutz"},
+    {id = "attack", name = "Ziel angreifen"},
+    {id = "intercept", name = "Staffeln abfangen"},
+}
+
+Naval.HangarDefaults = {
+    venator = {fighter = 4, bomber = 2},
+    acclamator = {fighter = 1},
+    providence = {fighter = 6, bomber = 4},
+    lucrehulk = {fighter = 12, bomber = 4},
+    recusant = {fighter = 1},
+    munificent = {fighter = 1},
+    bulwark = {fighter = 2},
+}
+
+function Naval.ClassHangar(class)
+    if not class then return {} end
+    local h = istable(class.hangar) and class.hangar or {}
+    if tonumber(h.fighter) or tonumber(h.bomber) then
+        return {fighter = tonumber(h.fighter) or 0, bomber = tonumber(h.bomber) or 0}
+    end
+    local d = Naval.HangarDefaults[class.id] or {}
+    return {fighter = d.fighter or 0, bomber = d.bomber or 0}
+end
