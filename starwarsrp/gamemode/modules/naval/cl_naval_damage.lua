@@ -114,7 +114,7 @@ local function Effects(inc, pos, now)
 end
 
 hook.Add("Think", "PD.Naval.DamageFX", function()
-    if not next(incidents) then return end
+    if Naval.ClientShutdown or not next(incidents) then return end
 
     local eye = EyePos()
     local now = CurTime()
@@ -166,6 +166,17 @@ hook.Add("HUDPaint", "PD.Naval.DamageHint", function()
     draw.SimpleText((kind.name or "Schaden") .. " - E gedrückt halten", "MLIB.16", ScrW() / 2, y + 8, Color(225, 230, 240), TEXT_ALIGN_CENTER)
     draw.RoundedBox(0, x + 12, y + 34, w - 24, 10, Color(40, 46, 56))
     draw.RoundedBox(0, x + 12, y + 34, (w - 24) * math.Clamp(best.progress or 0, 0, 1), 10, Color(90, 210, 130))
+end)
+
+-- Beim Verlassen der Map: Emitter abschliessen, Toene stoppen
+hook.Add("ShutDown", "PD.Naval.DamageFX", function()
+    Naval.ClientShutdown = true
+    for _, inc in pairs(incidents) do StopSound(inc) end
+    incidents = {}
+    if emitter then
+        pcall(emitter.Finish, emitter)
+        emitter = nil
+    end
 end)
 
 -- Beim Lua-Refresh keine Endlos-Geraeusche liegen lassen

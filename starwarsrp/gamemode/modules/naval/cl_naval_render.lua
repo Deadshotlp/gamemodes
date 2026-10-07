@@ -281,8 +281,28 @@ local function Bounds(meshes, mats)
     return {length = math.max(maxs.x - mins.x, maxs.y - mins.y), center = (mins + maxs) * 0.5}
 end
 
+-- Ergebnisse dauerhaft merken (data/pd_naval_modelinfo.txt): das Einlesen
+-- der Meshes erzeugt bei grossen Modellen sehr viel Lua-Speicher - auf dem
+-- 32-Bit-Client kann das beim naechsten Map-Laden den Speicher sprengen.
+-- So passiert es je Spieler nur einmal pro Modell.
+local DISK_FILE, DISK_VERSION = "pd_naval_modelinfo.txt", 2
+local disk
+
+local function DiskCache()
+    if disk then return disk end
+    local data = util.JSONToTable(file.Read(DISK_FILE, "DATA") or "") or {}
+    disk = data.v == DISK_VERSION and istable(data.models) and data.models or {}
+    return disk
+end
+
 function Naval.ModelInfo(path)
     if meshInfo[path] ~= nil then return meshInfo[path] end
+
+    local cached = DiskCache()[path]
+    if istable(cached) and tonumber(cached.l) then
+        meshInfo[path] = {length = tonumber(cached.l), center = Vector(tonumber(cached.x) or 0, tonumber(cached.y) or 0, tonumber(cached.z) or 0)}
+        return meshInfo[path]
+    end
 
     local info = false
     local ok, meshes, bindPose = pcall(util.GetModelMeshes, path, 0)
@@ -324,6 +344,15 @@ function Naval.ModelInfo(path)
     end
 
     meshInfo[path] = info
+
+    -- Speicher der Meshes sofort freigeben und Ergebnis merken
+    meshes, bindPose = nil, nil
+    collectgarbage("collect")
+    if info then
+        DiskCache()[path] = {l = info.length, x = info.center.x, y = info.center.y, z = info.center.z}
+        file.Write(DISK_FILE, util.TableToJSON({v = DISK_VERSION, models = disk}) or "")
+    end
+
     return info
 end
 
@@ -497,7 +526,7 @@ local function CameraOffset()
 end
 
 function Naval.RenderSpace()
-    if lastDrawn == FrameNumber() then return end
+    if Naval.ClientShutdown or lastDrawn == FrameNumber() then return end
     lastDrawn = FrameNumber()
 
     if not Naval.IsNavalMap() then return end
@@ -608,6 +637,21 @@ timer.Create("PD.Naval.RenderGuard", 1, 0, function()
         useFallback = true
         print("[Naval] PostDraw2DSkyBox laeuft nicht (verschluckt?) - nutze PreDrawSkyBox. pd_naval_hookaudit zeigt die Hooks.")
     end
+end)
+
+-- Beim Verlassen der Map (Map-Wechsel, Trennen) alles freigeben, bevor das
+-- Grafiksystem herunterfaehrt: selbst erzeugte Meshes, die erst danach vom
+-- Garbage Collector entsorgt werden, koennen das Spiel abstuerzen lassen.
+hook.Add("ShutDown", "PD.Naval.Render", function()
+    Naval.ClientShutdown = true
+    for _, m in ipairs(starMeshes) do pcall(m.Destroy, m) end
+    starMeshes = {}
+    starMeshSystem = nil
+    for id, m in pairs(shipModels) do
+        if IsValid(m) then m:Remove() end
+        shipModels[id] = nil
+    end
+    if IsValid(tunnel) then tunnel:Remove() end
 end)
 
 -- Beim Lua-Refresh keine Modelle liegen lassen

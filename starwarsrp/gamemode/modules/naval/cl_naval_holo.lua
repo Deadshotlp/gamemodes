@@ -535,7 +535,7 @@ local function DrawHolo()
 end
 
 hook.Add("PostDrawTranslucentRenderables", "PD.Naval.Holo", function(depth, sky)
-    if sky or depth then return end
+    if sky or depth or Naval.ClientShutdown then return end
     if not GetGlobalBool("PD.Naval.HoloOn", false) or not IsValid(projector) then return end
     if not Naval.IsNavalMap() or EyePos():DistToSqr(projector:GetPos()) > DRAW_DIST * DRAW_DIST then return end
 
@@ -549,6 +549,14 @@ hook.Add("PostDrawTranslucentRenderables", "PD.Naval.Holo", function(depth, sky)
             Naval.HoloErrorNext = CurTime() + 10
             ErrorNoHalt("[Naval] Hologramm: " .. tostring(err) .. "\n")
         end
+    end
+end)
+
+hook.Add("ShutDown", "PD.Naval.Holo", function()
+    Naval.ClientShutdown = true
+    for key, m in pairs(models) do
+        if IsValid(m) then m:Remove() end
+        models[key] = nil
     end
 end)
 
