@@ -112,6 +112,20 @@ local function FormatDist(m)
     return Naval.FormatDist and Naval.FormatDist(m) or (math.Round(m / 1000) .. " km")
 end
 
+-- Gut sichtbare Markierung: deckende Raute (bzw. Kugel) mit dunklem Rand
+-- statt additiver Leuchtpunkte, die auf dem blauen Hologramm verschwimmen.
+-- Erwartet render.SetColorMaterial().
+local function Marker(pos, size, col, flicker, hollow, round)
+    local a = 255 * (flicker or 1)
+    local segX, segY = round and 8 or 4, round and 6 or 2
+    render.DrawSphere(pos, size * 1.35, segX, segY, Color(10, 15, 25, 200 * (flicker or 1)))
+    if hollow then
+        render.DrawWireframeSphere(pos, size, segX, segY, Color(col.r, col.g, col.b, a), true)
+    else
+        render.DrawSphere(pos, size, segX, segY, Color(col.r, col.g, col.b, a))
+    end
+end
+
 local function DrawTactical(center, radius, labels, flicker)
     local view = C.View and C.View()
     local static = C.static
@@ -197,14 +211,13 @@ local function DrawTactical(center, radius, labels, flicker)
 
     -- Staffeln (cl_naval_hangar.lua)
     if C.squadrons and Naval.SquadronPos then
-        render.SetMaterial(MAT_GLOW)
+        render.SetColorMaterial()
         for _, sq in ipairs(C.squadrons) do
             local rel = Naval.V3.Sub(Naval.SquadronPos(sq), view.pos)
             if Naval.V3.Len(rel) <= range then
                 local relation = Naval.ClientRelation and Naval.ClientRelation(myFaction, sq.factionId) or "neutral"
                 local col = REL_COLOR[relation] or COL_HOLO
-                local size = radius * (sq.bomber and 0.035 or 0.025)
-                render.DrawSprite(ToHolo(rel), size, size, Color(col.r, col.g, col.b, 220 * flicker))
+                Marker(ToHolo(rel), radius * (sq.bomber and 0.014 or 0.01), col, flicker)
             end
         end
     end
@@ -298,7 +311,7 @@ local function DrawTactical(center, radius, labels, flicker)
 
     -- Schildzonen um das eigene Schiff
     if combat and combat.zones and mapLen > 0 and Naval.HoloLayer("shields") then
-        render.SetMaterial(MAT_GLOW)
+        render.SetColorMaterial()
         local axes = {front = {1, 0, 0}, back = {-1, 0, 0}, left = {0, 1, 0}, right = {0, -1, 0}, top = {0, 0, 1}, bottom = {0, 0, -1}}
         for zone, a in pairs(axes) do
             local z = combat.zones[zone]
@@ -307,9 +320,9 @@ local function DrawTactical(center, radius, labels, flicker)
                 local d = Q.RotateVec(qbm, {x = a[1], y = a[2], z = a[3]})
                 local reach = (zone == "front" or zone == "back") and mapLen * 0.62 or mapLen * 0.32
                 local p = center + Vector(d.x, d.y, d.z) * reach
-                local col = combat.up and Color(255 - frac * 175, 80 + frac * 110, 80 + frac * 175, 200 * flicker) or Color(255, 60, 50, 90 * flicker)
-                local size = math.max(mapLen * 0.25, 3) * (0.5 + frac * 0.7)
-                render.DrawSprite(p, size, size, col)
+                local col = not combat.up and Color(255, 50, 40) or (frac > 0.6 and Color(70, 210, 255) or (frac > 0.3 and Color(255, 210, 60) or Color(255, 90, 40)))
+                local size = math.max(mapLen * 0.06, 0.9) * (0.6 + frac * 0.6)
+                Marker(p, size, col, flicker, not combat.up)
             end
         end
     end
@@ -407,15 +420,15 @@ local function DrawGalaxy(center, radius, labels, flicker, F, R)
 
     -- Systeme an Routen oder mit Gebiet (hoechstens 400)
     local territory = Naval.TerritoryData and Naval.TerritoryData()
-    render.SetMaterial(MAT_GLOW)
+    render.SetColorMaterial()
     local count = 0
     for _, sys in ipairs(static.systemList or {}) do
         if count >= 400 then break end
         local owner = territory and territory.byId[sys.id]
         if (owner or (sys.routes and #sys.routes > 0)) and Inside(sys.g.x, sys.g.y) then
             count = count + 1
-            local col = owner and Naval.TerritoryColor(owner, 220 * flicker) or Color(200, 215, 240, 160 * flicker)
-            render.DrawSprite(G(sys.g.x, sys.g.y, 0.2), radius * 0.03, radius * 0.03, col)
+            local col = owner and Naval.TerritoryColor(owner, 255) or Color(200, 215, 240)
+            Marker(G(sys.g.x, sys.g.y, 0.2), radius * (owner and 0.009 or 0.006), col, flicker, false, true)
         end
     end
 
