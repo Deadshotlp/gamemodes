@@ -196,11 +196,13 @@ local function DrawBodies(view, M, camOffset, ang, fov)
     for _, e in ipairs(list) do
         local body = e.body
         local seg = math.Clamp(math.floor(e.radius / e.dist * 400), 12, 64)
-        local d = e.pos:Length()
+        -- Tiefe entlang der Blickrichtung (Nah-/Fernebene stehen senkrecht dazu)
+        local d = e.pos:Dot(ang:Forward())
         local reach = e.radius * (body.type == "star" and 8 or 1.1)
 
         render.ClearDepth()
-        cam.Start3D(Vector(0, 0, 0), ang, fov, 0, 0, ScrW(), ScrH(), math.max(1, d - reach), d + reach + 1)
+        local near = math.max(1, d - reach)
+        cam.Start3D(Vector(0, 0, 0), ang, fov, 0, 0, ScrW(), ScrH(), near, math.max(near + 1, d + reach + 1))
 
         if body.type == "star" then
             local mat = Mat(body.material)
