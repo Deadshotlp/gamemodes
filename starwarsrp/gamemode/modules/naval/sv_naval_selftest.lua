@@ -341,6 +341,32 @@ function Naval.SimSelfTest()
             ok and ("Hülle schnell %d -> %d, langsam %d -> %d, Autopilot max %.0f von %.0f m/s"):format(hull0, fship.fastHull, hull0, fship.hull, limit, fmax) or tostring(runErr))
     end
 
+    -- 17. Nachschub: Torpedos ins Magazin, Ersatzteile bis zur Grenze
+    if Naval.SupplyApplyForTest and Naval.Classes.venator then
+        local sship = TestShip("venator")
+        sship.id = 64051
+        sship.flags = {test = true, hidden = true}
+        local ssubs, _, scc = Naval.Combat(sship)
+        local tIdx
+        for i, b in ipairs(scc.weapons) do
+            if b.type == "torpedo" or b.type == "missile" then ssubs.ammo[i] = 0 tIdx = tIdx or i end
+        end
+        local hullMax = sship:Class().hull
+        sship.hull = hullMax * 0.5
+
+        local ok, runErr = pcall(function()
+            local kind = tIdx and scc.weapons[tIdx].type or "torpedo"
+            sship.ammoText = Naval.SupplyApplyForTest(sship, kind)
+            for _ = 1, 40 do Naval.SupplyApplyForTest(sship, "parts") end
+        end)
+        local ammoAfter = tIdx and ssubs.ammo[tIdx] or 0
+        local capPct = tonumber(Naval.Settings.supply_parts_max) or 80
+
+        check("Nachschub: Munition verbucht, Ersatzteile nur bis zur Grenze",
+            ok and (not tIdx or ammoAfter > 0) and math.abs(sship.hull - hullMax * capPct / 100) < 1,
+            ok and ("Magazin %d (%s), Hülle %d %% (Grenze %d %%)"):format(ammoAfter, tostring(sship.ammoText), sship.hull / hullMax * 100, capPct) or tostring(runErr))
+    end
+
     -- 12. Moral: schwer beschaedigtes Schiff will fliehen
     if Naval.MoraleTarget then
         local probe = TestShip("munificent")

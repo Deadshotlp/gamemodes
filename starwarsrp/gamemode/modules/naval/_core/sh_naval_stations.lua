@@ -175,3 +175,25 @@ PD.Naval.Stations.tractor = {
     model = "models/lordtrilobite/starwars/isd/imp_console_large01.mdl",
     desc = "Schiffe greifen, heranziehen und entern",
 }
+
+-- Stufe 4e: Nachschub. Leitstand plus zwei Ortsmarker (fuer alle mit
+-- Hinweis am Boden sichtbar, siehe cl_naval_supply.lua)
+PD.Naval.Stations.logistics = {
+    name = "Logistik-Leitstand",
+    model = "models/lordtrilobite/starwars/isd/imp_console_medium03.mdl",
+    desc = "Nachschub anfordern, Bestand",
+}
+PD.Naval.Stations.supply_drop = {
+    name = "Anlieferung",
+    model = "models/hunter/plates/plate1x1.mdl",
+    desc = "Hier erscheinen angeforderte Nachschubkisten",
+    noUse = true,
+    marker = true,
+}
+PD.Naval.Stations.supply_intake = {
+    name = "Nachschub-Annahme",
+    model = "models/hunter/plates/plate1x1.mdl",
+    desc = "Hier abgestellte Nachschubkisten werden verbucht",
+    noUse = true,
+    marker = true,
+}

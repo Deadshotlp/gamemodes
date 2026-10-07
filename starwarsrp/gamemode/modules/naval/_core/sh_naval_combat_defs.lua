@@ -218,3 +218,16 @@ function Naval.ClassTractor(class)
     if not class then return 0 end
     return tonumber(class.tractor) or Naval.TractorDefaults[class.id] or 0
 end
+
+--[[
+    Nachschub (Stufe 4e): Kistenarten des Logistik-Leitstands.
+    amount: Schuss (Munition), Maschinen (craft); Ersatzteile siehe
+    supply_parts_hull / supply_parts_max.
+]]
+Naval.SupplyKinds = {
+    torpedo = {name = "Torpedokiste", desc = "12 Protonentorpedos", weapon = "torpedo", amount = 12, unit = "Torpedos", color = Color(255, 150, 70)},
+    missile = {name = "Raketenkiste", desc = "24 Erschütterungsraketen", weapon = "missile", amount = 24, unit = "Raketen", color = Color(255, 210, 90)},
+    parts = {name = "Ersatzteile", desc = "Hüllenreparatur", color = Color(120, 200, 255)},
+    craft = {name = "Ersatzmaschinen", desc = "6 Jäger oder Bomber für den Hangar", amount = 6, color = Color(150, 230, 150)},
+}
+Naval.SupplyOrder = {"torpedo", "missile", "parts", "craft"}

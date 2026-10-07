@@ -216,6 +216,15 @@ Naval.SettingInfo = {
         {"field_nebula_shields", "Schildladung im Nebel", "Faktor"},
         {"field_nebula_hide", "Im Nebel sichtbar bis", "m"},
     }},
+    {"Nachschub", {
+        {"supply_delivery_time", "Lieferzeit", "s"},
+        {"supply_cooldown", "Sperre zwischen Lieferungen", "s"},
+        {"supply_max_crates", "Kisten je Lieferung", "Anzahl"},
+        {"supply_require_friendly", "Nur in eigenem Gebiet / bei Verbündeten", "1 = an"},
+        {"supply_parts_hull", "Ersatzteile: Hülle je Kiste", "%"},
+        {"supply_parts_max", "Ersatzteile reparieren bis", "% Hülle"},
+        {"supply_npc_rate", "KI-Nachschub je Minute", "Anteil"},
+    }},
     {"Autopilot", {
         {"autopilot_clearance", "Sicherheitsabstand", "× Radius"},
         {"autopilot_margin", "Sicherheitsabstand zusätzlich", "m"},

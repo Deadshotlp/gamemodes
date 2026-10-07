@@ -99,6 +99,13 @@ D.Settings = {
     field_nebula_sensors = 0.35,  -- Sensorreichweite im Nebel
     field_nebula_shields = 0.4,   -- Schildladung im Nebel
     field_nebula_hide = 20000,    -- m: Schiffe im Nebel erst ab hier sichtbar
+    supply_delivery_time = 90,    -- s von der Anforderung bis zur Anlieferung
+    supply_cooldown = 900,        -- s zwischen zwei Lieferungen (nach der Anlieferung)
+    supply_max_crates = 8,        -- Kisten je Lieferung
+    supply_require_friendly = 1,  -- nur in eigenem Gebiet oder bei verbuendetem Schiff in 100 km (0 = ueberall)
+    supply_parts_hull = 5,        -- % Huelle je Ersatzteilkiste
+    supply_parts_max = 80,        -- % Huelle, bis zu der Ersatzteile reparieren (Rest nur in der Werft/Admin)
+    supply_npc_rate = 0.1,        -- KI-Schiffe in eigenem Gebiet: Anteil Munition je Minute
 }
 
 --------------------------------------------------------------------------------
