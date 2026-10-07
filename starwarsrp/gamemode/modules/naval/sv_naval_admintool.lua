@@ -357,6 +357,53 @@ Actions.console_remove = function(ply, args)
 end
 
 --------------------------------------------------------------------------------
+-- Map-Knoepfe fuer die Alarmstufen (sv_naval_alert.lua)
+--------------------------------------------------------------------------------
+
+Actions.alertbtn_add = function(ply, args)
+    local ent = ply:GetEyeTrace().Entity
+    if not IsValid(ent) or ent:MapCreationID() == -1 then
+        Notify(ply, "Kein Map-Knopf im Blick (nur Entities der Map)")
+        return
+    end
+
+    local level = tonumber(args.level) == 1 and 1 or 2
+    local list = table.Copy(Naval.AlertButtons())
+    for _, entry in ipairs(list) do
+        if entry.id == ent:MapCreationID() and entry.level == level then Notify(ply, "Schon eingetragen") return end
+    end
+
+    local name = ent:GetName() ~= "" and ent:GetName() or ent:GetClass()
+    list[#list + 1] = {id = ent:MapCreationID(), level = level, leave = args.leave ~= false,
+        name = ("%s (%d %d %d)"):format(name, ent:GetPos().x, ent:GetPos().y, ent:GetPos().z)}
+    Naval.SaveAlertButtons(list)
+
+    Notify(ply, "Knopf für " .. (Naval.AlertNames[level] or level) .. " eingetragen: " .. name, true)
+    Log(ply, "Alarm-Knopf " .. name .. " -> Stufe " .. level)
+    Actions.settings_get(ply)
+end
+
+Actions.alertbtn_remove = function(ply, args)
+    local list = table.Copy(Naval.AlertButtons())
+    local idx = tonumber(args.idx)
+    if not idx or not list[idx] then return end
+    local removed = table.remove(list, idx)
+    Naval.SaveAlertButtons(list)
+    Log(ply, "Alarm-Knopf entfernt: " .. tostring(removed.name))
+    Actions.settings_get(ply)
+end
+
+Actions.alertbtn_test = function(ply, args)
+    local entry = Naval.AlertButtons()[tonumber(args.idx) or -1]
+    if not entry then return end
+    Notify(ply, Naval.PressMapButton(entry) and "Gedrückt" or "Knopf nicht gefunden", true)
+end
+
+Actions.alert_set = function(ply, args)
+    Naval.SetAlert(args.level, ply:Nick())
+end
+
+--------------------------------------------------------------------------------
 -- Einstellungen (dieselben wie im Web-Panel)
 --------------------------------------------------------------------------------
 
@@ -367,6 +414,14 @@ local function SendSettings(ply)
             out[key] = value
         end
     end
+
+    -- Alarm-Knoepfe der Map (mit Hinweis, ob es sie noch gibt)
+    local buttons = {}
+    for i, entry in ipairs(Naval.AlertButtons and Naval.AlertButtons() or {}) do
+        local ent = ents.GetMapCreatedEntity(tonumber(entry.id) or -1)
+        buttons[i] = {level = entry.level, leave = entry.leave, name = entry.name, ok = IsValid(ent)}
+    end
+    out._alertButtons = buttons
 
     net.Start("PD.Naval.AdminSettings")
     net.WriteString(util.TableToJSON(out) or "{}")

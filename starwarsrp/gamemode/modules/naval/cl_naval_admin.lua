@@ -177,6 +177,8 @@ Naval.SettingInfo = {
         {"alert_defcon_yellow", "DEFCON bei Gelb", "0 = nicht ändern"},
         {"alert_defcon_red", "DEFCON bei Rot", "0 = nicht ändern"},
         {"alert_alarm_seconds", "Alarmton bei Rot", "s"},
+        {"alert_red_light", "Rotlicht bei Rot", "1 Map dunkel+rot, 2 nur rot, 0 aus"},
+        {"alert_red_lightstyle", "Map-Helligkeit bei Rot", "a dunkel .. m normal"},
     }},
     {"Sensoren und Schildmodulation", {
         {"sensor_ident_range", "Automatisch erkannt bis", "m"},
@@ -293,6 +295,60 @@ function Naval.AdminMenu(base)
     ----------------------------------------------------------------------------
     -- Konsolen
     ----------------------------------------------------------------------------
+
+    ----------------------------------------------------------------------------
+    -- Alarmstufen und Map-Knoepfe
+    ----------------------------------------------------------------------------
+
+    R.Header("Alarmstufen und Map-Knöpfe")
+    R.Text("Map-Knöpfe (z. B. Venator-Sirene, rote Lichtpaneele) einer Alarmstufe zuordnen: Knopf anschauen und "
+        .. "\"Angeschauter Knopf\" drücken. Beim Wechsel auf die Stufe wird er gedrückt, mit \"Beim Verlassen wieder "
+        .. "drücken\" auch beim Zurückschalten (Schalter, die an/aus umschalten).")
+    R.Buttons({
+        {"Normal", function() Send("alert_set", {level = 0}) end, Color(90, 210, 130)},
+        {"Gelb", function() Send("alert_set", {level = 1}) end, Color(240, 200, 60)},
+        {"Rot", function() Send("alert_set", {level = 2}) end, Color(240, 70, 60)},
+    })
+
+    local leave = true
+    local leaveBtn = R.Buttons({{"", function() leave = not leave end}})[1]
+    leaveBtn.Think = function(s) s.Label = leave and "Beim Verlassen wieder drücken: AN" or "Beim Verlassen wieder drücken: AUS" end
+
+    R.Buttons({
+        {"Angeschauter Knopf -> Gelb", function() Send("alertbtn_add", {level = 1, leave = leave}) end, Color(240, 200, 60)},
+        {"Angeschauter Knopf -> Rot", function() Send("alertbtn_add", {level = 2, leave = leave}) end, Color(240, 70, 60)},
+    })
+
+    local buttonList = R.Row(10)
+    buttonList.Paint = nil
+
+    local function FillButtons()
+        if not IsValid(buttonList) then return end
+        buttonList:Clear()
+        local list = (C.adminSettings or {})._alertButtons or {}
+        buttonList:SetTall(math.max(#list * 36, 10))
+
+        for i, entry in ipairs(list) do
+            local row = vgui.Create("DPanel", buttonList)
+            row:Dock(TOP)
+            row:DockMargin(0, 0, 0, 4)
+            row:SetTall(32)
+            row.Paint = function(s, w, h)
+                draw.RoundedBox(0, 0, 0, w, h, COL.panel)
+                local col = tonumber(entry.level) == 1 and Color(240, 200, 60) or Color(240, 70, 60)
+                surface.SetDrawColor(col)
+                surface.DrawRect(0, 0, 4, h)
+                draw.SimpleText((entry.ok and "" or "FEHLT: ") .. tostring(entry.name or "?"), "MLIB.14", 10, h / 2,
+                    entry.ok and COL.text or COL.bad, nil, TEXT_ALIGN_CENTER)
+            end
+
+            local del = UI.Button(row, "Entfernen", function() Send("alertbtn_remove", {idx = i}) end, function() return COL.bad end)
+            del:Dock(RIGHT) del:SetWide(80)
+            local test = UI.Button(row, "Testen", function() Send("alertbtn_test", {idx = i}) end)
+            test:Dock(RIGHT) test:DockMargin(0, 0, 4, 0) test:SetWide(64)
+        end
+    end
+    hook.Add("PD.Naval.AdminSettings", buttonList, FillButtons)
 
     R.Header("Konsolen")
     R.Text("Neue Konsole: auf die Stelle schauen, an der sie stehen soll, Station wählen, \"Aufstellen\". "

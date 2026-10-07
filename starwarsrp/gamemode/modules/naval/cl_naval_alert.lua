@@ -1,8 +1,10 @@
 --[[
     Naval - Alarmstufe und Bordmeldungen (Client).
 
-    Gelb: Hinweis oben, kurzer Gong. Rot: Hinweis, pulsierender roter
-    Schimmer und Alarmton fuer alert_alarm_seconds nach dem Wechsel.
+    Gelb: Hinweis oben, kurzer Gong. Rot: Hinweis, Alarmton fuer
+    alert_alarm_seconds nach dem Wechsel und Rotlicht (alert_red_light):
+    roter Farbfilter, bei 1 zusaetzlich abgedunkeltes Map-Licht (Server setzt
+    den Lichtstil, hier werden die Lightmaps neu geladen).
     Dazu kurze Bordmeldungen (Hyperraum-Austritt erkannt).
 ]]
 
@@ -17,6 +19,34 @@ local COLORS = {[1] = Color(240, 200, 60), [2] = Color(240, 70, 60)}
 local lastLevel
 local nextKlaxon = 0
 local messages = {}
+
+net.Receive("PD.Naval.AlertLight", function()
+    render.RedownloadAllLightmaps(false, false)
+end)
+
+local function RedLight()
+    local s = C.static and C.static.settings
+    return tonumber(s and s.alert_red_light) or 1
+end
+
+-- Rotlicht: Farben ins Rote ziehen, leicht pulsierend
+hook.Add("RenderScreenspaceEffects", "PD.Naval.Alert", function()
+    if GetGlobalInt("PD.Naval.Alert", 0) ~= 2 or RedLight() == 0 then return end
+    if not Naval.IsNavalMap or not Naval.IsNavalMap() then return end
+
+    local pulse = (math.sin(CurTime() * 2.2) + 1) * 0.5
+    DrawColorModify({
+        ["$pp_colour_addr"] = 0.05 + pulse * 0.04,
+        ["$pp_colour_addg"] = 0,
+        ["$pp_colour_addb"] = 0,
+        ["$pp_colour_brightness"] = -0.03,
+        ["$pp_colour_contrast"] = 1.08,
+        ["$pp_colour_colour"] = 0.45,
+        ["$pp_colour_mulr"] = 0.5,
+        ["$pp_colour_mulg"] = 0,
+        ["$pp_colour_mulb"] = 0,
+    })
+end)
 
 local function AlarmSeconds()
     local s = C.static and C.static.settings
@@ -58,12 +88,6 @@ hook.Add("HUDPaint", "PD.Naval.Alert", function()
 
     local level = GetGlobalInt("PD.Naval.Alert", 0)
     local w = ScrW()
-
-    if level == 2 then
-        local a = (math.sin(CurTime() * 3) + 1) * 0.5
-        surface.SetDrawColor(255, 30, 20, 8 + a * 18)
-        surface.DrawRect(0, 0, ScrW(), ScrH())
-    end
 
     if level > 0 then
         local col = COLORS[level]

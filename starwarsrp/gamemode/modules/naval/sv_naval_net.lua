@@ -111,6 +111,7 @@ local function BuildStatic()
             jump_align_tolerance = s.jump_align_tolerance, galaxy_unit = s.galaxy_unit,
             holo_radius = s.holo_radius, holo_height = s.holo_height,
             alert_alarm_seconds = s.alert_alarm_seconds, mass_shadow_factor = s.mass_shadow_factor,
+            alert_red_light = s.alert_red_light,
             autopilot_clearance = s.autopilot_clearance, autopilot_margin = s.autopilot_margin,
             ["mapcal_" .. ((Naval.GetProfile() or {}).key or "")] = Naval.GetProfile() and s["mapcal_" .. Naval.GetProfile().key] or nil},
         classes = classes, factions = factions, relations = Naval.Relations,

@@ -8,7 +8,17 @@
     setzt auf Wunsch das DEFCON (alert_defcon_*, 0 = nicht aendern). Bei Rot
     gehen die Schilde automatisch hoch. Ton und roter Schimmer: Client
     (cl_naval_alert.lua).
+
+    Rotlicht (alert_red_light): 1 = Map-Licht abgedunkelt (Lichtstil 0) und
+    roter Farbfilter bei den Spielern, 2 = nur Farbfilter, 0 = aus.
+
+    Map-Knoepfe (Sirene, rote Lichtpaneele): im Admin-Tab den angeschauten
+    Knopf einer Stufe zuordnen. Beim Wechsel auf diese Stufe wird er
+    gedrueckt, beim Verlassen auf Wunsch noch einmal (Schalter wieder aus).
+    Gespeichert als alertbtn_<map> in pd_naval_settings (MapCreationID).
 ]]
+
+util.AddNetworkString("PD.Naval.AlertLight")
 
 PD.Naval = PD.Naval or {}
 
@@ -20,12 +30,67 @@ function Naval.GetAlert()
     return GetGlobalInt("PD.Naval.Alert", 0)
 end
 
+--------------------------------------------------------------------------------
+-- Map-Knoepfe und Licht
+--------------------------------------------------------------------------------
+
+local function ButtonKey() return "alertbtn_" .. game.GetMap() end
+
+function Naval.AlertButtons()
+    local list = Naval.Settings and Naval.Settings[ButtonKey()]
+    return istable(list) and list or {}
+end
+
+function Naval.SaveAlertButtons(list)
+    Naval.Settings[ButtonKey()] = list
+    PD.SQL.Query("REPLACE INTO `pd_naval_settings` (`config_key`, `config_value`) VALUES ("
+        .. PD.SQL.EscapeString(ButtonKey()) .. ", " .. PD.SQL.EscapeString(Naval.DB.Encode(list)) .. ")")
+end
+
+function Naval.PressMapButton(entry)
+    local ent = ents.GetMapCreatedEntity(tonumber(entry.id) or -1)
+    if not IsValid(ent) then return false end
+
+    if string.find(ent:GetClass(), "button", 1, true) then
+        ent:Fire("Press")
+    else
+        ent:Input("Use", game.GetWorld(), game.GetWorld())
+    end
+    return true
+end
+
+local function Buttons(oldLevel, newLevel)
+    for _, entry in ipairs(Naval.AlertButtons()) do
+        local level = tonumber(entry.level) or 2
+        if level == newLevel or (level == oldLevel and entry.leave) then
+            Naval.PressMapButton(entry)
+        end
+    end
+end
+
+local function Light(level)
+    local mode = tonumber(Naval.Settings.alert_red_light) or 1
+    local dim = level == 2 and mode == 1
+    if dim == (Naval.AlertDimmed == true) then return end
+
+    Naval.AlertDimmed = dim
+    engine.LightStyle(0, dim and (Naval.Settings.alert_red_lightstyle or "e") or "m")
+    timer.Simple(0.2, function()
+        net.Start("PD.Naval.AlertLight")
+        net.Broadcast()
+    end)
+end
+
 function Naval.SetAlert(level, by)
     level = math.Clamp(math.floor(tonumber(level) or 0), 0, 2)
-    if level == Naval.GetAlert() then return false end
+    local oldLevel = Naval.GetAlert()
+    if level == oldLevel then return false end
 
     SetGlobalInt("PD.Naval.Alert", level)
     SetGlobalFloat("PD.Naval.AlertSince", CurTime())
+
+    Buttons(oldLevel, level)
+    Light(level)
 
     local ship = Naval.GetMapShip()
     if ship then

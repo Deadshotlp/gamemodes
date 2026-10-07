@@ -66,6 +66,8 @@ D.Settings = {
     alert_defcon_yellow = 3,      -- DEFCON bei Gelb
     alert_defcon_red = 2,         -- DEFCON bei Rot
     alert_alarm_seconds = 20,     -- s Alarmton nach dem Wechsel auf Rot
+    alert_red_light = 1,          -- Rot: 1 = Map-Licht abdunkeln + roter Filter, 2 = nur Filter, 0 = aus
+    alert_red_lightstyle = "e",   -- Helligkeit der Map bei Rot (a = dunkel, m = normal)
     sensor_ident_range = 15000,   -- m: Kontakte naeher als das sind automatisch erkannt
     sensor_scan_time = 8,         -- s je Scan (laenger mit Entfernung, kuerzer mit Sensorenergie)
     shield_mod_bonus = 0.35,      -- Schildmodulation: so viel weniger Schildverbrauch
