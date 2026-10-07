@@ -27,7 +27,7 @@
 PD.Naval = PD.Naval or {}
 
 local Naval = PD.Naval
-local V3 = Naval.V3
+local V3, Q = Naval.V3, Naval.Q
 local S = Naval.State
 
 local function Setting(key, default)
@@ -84,25 +84,16 @@ local function Clear(a, b, o)
     return V3.Dist(V3.Add(a, V3.Scale(d, t)), o.c) >= o.r
 end
 
--- Umweg um ein Hindernis: zuerst zum Tangentenpunkt eines etwas groesseren
--- Kreises (Radius 1,2 x Sicherheitsabstand), dann in 40-Grad-Schritten auf
--- diesem Kreis weiter, bis das Ziel frei sichtbar ist. Jedes Teilstueck
--- liegt so ausserhalb der Kugel - auch wenn das Schiff dicht daneben steht
--- (Orbit) und das Ziel auf der anderen Seite liegt.
-local function Detour(cur, to, o, preferSide)
+-- Umweg um ein Hindernis in der Ebene (Mitte, u, side): zuerst zum
+-- Tangentenpunkt eines etwas groesseren Kreises (Radius 1,2 x
+-- Sicherheitsabstand), dann in 40-Grad-Schritten auf diesem Kreis weiter, bis
+-- das Ziel frei sichtbar ist. Jedes Teilstueck liegt so ausserhalb der Kugel.
+local function Detour(cur, to, o, side)
     local R = o.r * 1.2
     local rel = V3.Sub(cur, o.c)
     local d = V3.Len(rel)
     local u = d > 1 and V3.Scale(rel, 1 / d) or {x = 1, y = 0, z = 0}
-
-    -- Ebene aus Schiff, Mitte und Ziel; v zeigt zur Zielseite
-    local toRel = V3.Sub(to, o.c)
-    local v = V3.Sub(toRel, V3.Scale(u, V3.Dot(toRel, u)))
-    if V3.LenSqr(v) < 1 then
-        v = preferSide or V3.Cross(u, {x = 0, y = 0, z = 1})
-        if V3.LenSqr(v) < 1e-6 then v = V3.Cross(u, {x = 0, y = 1, z = 0}) end
-    end
-    v = V3.Normalize(v)
+    local v = V3.Normalize(V3.Sub(side, V3.Scale(u, V3.Dot(side, u))))
 
     local function OnCircle(angle)
         return V3.Add(o.c, V3.Scale(V3.Add(V3.Scale(u, math.cos(angle)), V3.Scale(v, math.sin(angle))), R))
@@ -119,25 +110,74 @@ local function Detour(cur, to, o, preferSide)
     return points
 end
 
--- Punkte von "from" nach "to" um alle Hindernisse herum
-function Naval.AvoidPath(systemId, from, to)
+-- Seiten, auf denen man um das Hindernis fliegen kann: zur Zielseite, zur
+-- Seite, in die das Schiff gerade fliegt, und jeweils die Gegenseite
+local function Sides(cur, to, o, heading)
+    local u = V3.Normalize(V3.Sub(cur, o.c))
+    local list = {}
+    local function Add(vec)
+        local perp = V3.Sub(vec, V3.Scale(u, V3.Dot(vec, u)))
+        if V3.LenSqr(perp) > 1e-6 * math.max(V3.LenSqr(vec), 1) then
+            list[#list + 1] = perp
+            list[#list + 1] = V3.Scale(perp, -1)
+        end
+    end
+    Add(V3.Sub(to, o.c))
+    if heading then Add(heading) end
+    if #list == 0 then
+        Add(V3.Cross(u, {x = 0, y = 0, z = 1}))
+        Add(V3.Cross(u, {x = 0, y = 1, z = 0}))
+    end
+    return list
+end
+
+local function Angle(a, b)
+    return math.acos(math.Clamp(V3.Dot(V3.Normalize(a), V3.Normalize(b)), -1, 1))
+end
+
+-- Punkte von "from" nach "to" um alle Hindernisse herum. motion (optional):
+-- {dir = Flugrichtung, radius = Wenderadius in m}. Von mehreren moeglichen
+-- Umwegen wird der mit der kleinsten Summe aus Weglaenge und Wendekosten
+-- (Drehwinkel x Wenderadius) gewaehlt - ein Umweg hinter dem Schiff kostet
+-- bei voller Fahrt mehr als einer in Flugrichtung.
+function Naval.AvoidPath(systemId, from, to, motion)
     local obstacles = Obstacles(systemId, from)
     local points = {from}
     local cur = from
+    local heading = motion and motion.dir
+    local turnRadius = motion and motion.radius or 0
 
     for _ = 1, 4 do
         local hit = Blocking(cur, to, obstacles)
         if not hit then break end
 
-        local side = V3.Sub(hit.p, hit.o.c)
-        for _, wp in ipairs(Detour(cur, to, hit.o, V3.LenSqr(side) > 1 and side or nil)) do
+        local best, bestCost
+        for _, side in ipairs(Sides(cur, to, hit.o, heading)) do
+            local candidate = Detour(cur, to, hit.o, side)
+            local cost = V3.Dist(cur, candidate[1]) + V3.Dist(candidate[#candidate], to)
+            for i = 2, #candidate do cost = cost + V3.Dist(candidate[i - 1], candidate[i]) end
+            if heading then cost = cost + Angle(heading, V3.Sub(candidate[1], cur)) * turnRadius end
+
+            if not bestCost or cost < bestCost then best, bestCost = candidate, cost end
+        end
+
+        for _, wp in ipairs(best) do
             points[#points + 1] = wp
             cur = wp
         end
+        -- Danach zaehlt die Richtung des letzten Teilstuecks
+        if #points >= 2 then heading = V3.Sub(points[#points], points[#points - 1]) end
     end
 
     points[#points + 1] = to
     return points
+end
+
+-- Flugrichtung und Wenderadius eines Schiffs
+local function Motion(ship)
+    local rates = ship:Rates()
+    local omega = math.max(math.min(rates.y, rates.z), 1e-3)
+    return {dir = Q.Forward(ship.rot), radius = ship:Speed() / omega}
 end
 
 --[[
@@ -181,6 +221,23 @@ local function PlannedSpeed(ship, points, speeds)
     return allowed, along
 end
 
+-- Abstand, bis das Schiff in Flugrichtung einen Sicherheitsabstand trifft
+local function ImpactDistance(ship)
+    local dir = Q.Forward(ship.rot)
+    local best = math.huge
+    for _, o in ipairs(Obstacles(ship.systemId, ship.pos)) do
+        local oc = V3.Sub(o.c, ship.pos)
+        local tca = V3.Dot(oc, dir)
+        if tca > 0 then
+            local d2 = V3.LenSqr(oc) - tca * tca
+            if d2 < o.r * o.r then
+                best = math.min(best, tca - math.sqrt(o.r * o.r - d2))
+            end
+        end
+    end
+    return best
+end
+
 -- Auf den naechsten Punkt zu, mit geplanter Geschwindigkeit. Gibt true
 -- zurueck, wenn das Schiff am letzten Punkt steht.
 local function Steer(ship, points, speeds, tolerance, speedCap)
@@ -200,6 +257,15 @@ local function Steer(ship, points, speeds, tolerance, speedCap)
     local _, _, _, err = Naval.FaceRates(ship, toAim)
     local maxSpeed = math.max(ship:Stat("maxSpeed"), 1)
 
+    -- Bug zeigt auf einen Koerper: nur so schnell, dass der Wendekreis
+    -- (Fahrt / Drehrate) vor dem Sicherheitsabstand bleibt
+    local impact = ImpactDistance(ship)
+    if impact < math.huge then
+        local rates = ship:Rates()
+        local omega = math.max(math.min(rates.y, rates.z), 1e-3)
+        allowed = math.min(allowed, math.max(80, omega * math.max(impact, 0) * 0.8))
+    end
+
     local throttle = math.Clamp(allowed / maxSpeed, 0.02, speedCap)
     -- Bug zeigt noch nicht zum Punkt: erst drehen, kaum Fahrt
     if err > 25 then throttle = math.min(throttle, 0.1) end
@@ -211,7 +277,7 @@ end
 -- Fuer KI-Befehle: true, wenn angekommen
 function Naval.AutoSteer(ship, target, tolerance, speedCap)
     tolerance = tolerance or (((ship:Class() or {}).lengthM or 300) * 3 + 1000)
-    local path = Naval.AvoidPath(ship.systemId, ship.pos, target)
+    local path = Naval.AvoidPath(ship.systemId, ship.pos, target, Motion(ship))
     return Steer(ship, path, CornerSpeeds(ship, path, tolerance, 0), tolerance, speedCap), path
 end
 
@@ -294,7 +360,7 @@ end
 
 -- Ganzer Weg: aktuelles Ziel und alle weiteren der Kette, mit Umwegen
 local function RoutePoints(ship, auto, target)
-    local points = Naval.AvoidPath(ship.systemId, ship.pos, target)
+    local points = Naval.AvoidPath(ship.systemId, ship.pos, target, Motion(ship))
     local legEnd = #points
     local last = target
 

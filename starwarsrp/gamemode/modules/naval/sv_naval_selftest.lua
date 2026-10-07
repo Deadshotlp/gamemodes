@@ -195,6 +195,23 @@ function Naval.SimSelfTest()
             end
             check("Autopilot aus dem Orbit nicht durch " .. main.name, closest2 >= r * 1.1,
                 ("%d Wegpunkte, nächster Abstand %.1f Radien"):format(#path2, closest2 / r))
+
+            -- Echter Flug: volle Fahrt genau auf den Planeten zu, Ziel dahinter
+            local probe = TestShip("venator")
+            probe.systemId = sysId
+            probe.pos = V3.Add(c, {x = -clear * 3, y = 0, z = 0})
+            probe.vel = {x = probe:Stat("maxSpeed"), y = 0, z = 0}
+            local goal3 = V3.Add(c, {x = clear * 3, y = 0, z = 0})
+            local tol3 = probe:Class().lengthM * 2 + 1000
+            local minDist, done, flown = math.huge, false, 0
+            while flown < 30000 and not done do
+                done = Naval.AutoSteer(probe, goal3, tol3)
+                Naval.StepShip(probe, 0.5)
+                minDist = math.min(minDist, V3.Dist(probe.pos, c))
+                flown = flown + 0.5
+            end
+            check("Autopilot bei voller Fahrt um " .. main.name .. " herum", done and minDist >= clear * 0.9,
+                ("%s nach %.0f s, nächster Abstand %.2f Sicherheitsabstände"):format(done and "angekommen" or "nicht angekommen", flown, minDist / clear))
         end
     end
 
