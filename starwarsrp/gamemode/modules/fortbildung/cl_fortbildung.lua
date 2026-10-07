@@ -135,7 +135,7 @@ end
 
 -- Eine Zeile mit farbigem Streifen links, Titel und Untertitel. Wird für
 -- Fortbildungen, Teilnehmer und Historieneinträge gleichermaßen benutzt.
-local function infoRow(parent, title, subtitle, color, height)
+local function infoRow(parent, title, subtitle, color, height, course)
     local row = vgui.Create("DPanel", parent)
     row:Dock(TOP)
     row:SetTall(height or PD.H(52))
@@ -146,7 +146,8 @@ local function infoRow(parent, title, subtitle, color, height)
         surface.SetDrawColor(color or PD.Theme.Colors.AccentGray)
         surface.DrawRect(0, 0, PD.W(3), h)
 
-        draw.DrawText(title, "MLIB.16", PD.W(15), PD.H(8), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+        local ix = course and PD.FB.DrawIcon(course, PD.W(15), PD.H(8), PD.H(18)) or 0
+        draw.DrawText(title, "MLIB.16", PD.W(15) + ix, PD.H(8), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
 
         if subtitle and subtitle ~= "" then
             draw.DrawText(subtitle, "MLIB.12", PD.W(15), PD.H(28), PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
@@ -189,7 +190,7 @@ local function buildOwnTab(base)
 
         if entry then
             local subtitle = PD.FB.FormatRemaining(entry) .. "  |  erhalten am " .. PD.FB.FormatDate(entry.granted_at)
-            local row = infoRow(scroll, course.name, subtitle, PD.FB.ToColor(course.color))
+            local row = infoRow(scroll, course.name, subtitle, PD.FB.ToColor(course.color), nil, course)
 
             if course.description and course.description ~= "" then
                 row:SetTall(PD.H(72))
@@ -264,7 +265,7 @@ local function buildCatalogTab(base)
                     subtitle = subtitle .. "  |  " .. table.concat(details, ", ")
                 end
 
-                infoRow(scroll, course.name, subtitle, color)
+                infoRow(scroll, course.name, subtitle, color, nil, course)
             end
         end
 

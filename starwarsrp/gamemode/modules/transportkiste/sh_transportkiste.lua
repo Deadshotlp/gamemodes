@@ -24,6 +24,11 @@ PD.Kiste.Packables = PD.Kiste.Packables or {}
 -- Sortiment des Kistenlagers: { {model, name, limit}, ... }
 PD.Kiste.Spawnables = PD.Kiste.Spawnables or {}
 
+-- Aufbauen duerfen nur Engineers (Job-/Untereinheit-Haekchen "Ist Engineer")
+function PD.Kiste.CanUnpack(ply)
+    return PD.Carry ~= nil and isfunction(PD.Carry.IsEngineer) and PD.Carry.IsEngineer(ply)
+end
+
 function PD.Kiste.NormalizeModel(model)
     return string.lower(string.gsub(tostring(model or ""), "\\", "/"))
 end

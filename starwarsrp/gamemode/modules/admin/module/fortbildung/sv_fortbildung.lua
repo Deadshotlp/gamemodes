@@ -92,6 +92,11 @@ local function sanitizeCourse(key, input, existing)
         badge.skin = math.Clamp(tonumber(inputBadge.skin) or 0, 0, 63)
     end
 
+    -- Kleines Icon (Material-Pfad)
+    if isstring(inputBadge.icon) and inputBadge.icon ~= "" and string.match(inputBadge.icon, "^[%w_/%-%.]+$") then
+        badge.icon = string.sub(inputBadge.icon, 1, 128)
+    end
+
     for _, entry in pairs(inputBadge.bodygroups or {}) do
         if istable(entry) and #badge.bodygroups < 32 then
             table.insert(badge.bodygroups, {

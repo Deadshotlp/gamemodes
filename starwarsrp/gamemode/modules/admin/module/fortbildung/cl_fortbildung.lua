@@ -260,6 +260,15 @@ local function badgeSection(parent, badge)
     })
     hint:Dock(TOP)
 
+    -- Kleines Icon der Fortbildung (Vorschau rechts)
+    local iconEntry = labeledEntry(parent, "Icon (Material, z. B. icon16/star.png; leer = keins)", badge.icon or "", function(value)
+        value = string.Trim(value)
+        badge.icon = value ~= "" and value or nil
+    end)
+    iconEntry.PaintOver = function(s, w, h)
+        PD.FB.DrawIcon({badge = badge}, w - h + 4, 4, h - 8)
+    end
+
     local skinEntry = labeledEntry(parent, "Skin (leer = unverändert)", badge.skin ~= nil and badge.skin or "", function(value)
         if value == "" then
             badge.skin = nil
@@ -523,7 +532,8 @@ local function buildGrantView(parent)
             surface.SetDrawColor(has and PD.Theme.Colors.StatusActive or PD.Theme.Colors.AccentGray)
             surface.DrawRect(0, 0, PD.W(3), h)
 
-            draw.DrawText(course.name, "MLIB.14", PD.W(15), PD.H(6), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
+            local ix = PD.FB.DrawIcon(course, PD.W(15), PD.H(6), PD.H(16))
+            draw.DrawText(course.name, "MLIB.14", PD.W(15) + ix, PD.H(6), PD.Theme.Colors.Text, TEXT_ALIGN_LEFT)
             draw.DrawText(has and PD.FB.FormatRemaining(entry) or "nicht vorhanden", "MLIB.12", PD.W(15), PD.H(24),
                 PD.Theme.Colors.TextDim, TEXT_ALIGN_LEFT)
         end

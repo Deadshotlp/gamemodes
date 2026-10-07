@@ -45,24 +45,30 @@ hook.Add("PD.Interaction.Requested", "PD.Kiste.Interaction", function(entClass)
         local name = ent:GetContentName()
         local previewOn = PD.Kiste.PreviewActive(ent)
 
-        PD.IA.AddEntityActions({
-            [1] = {
+        local actions = {}
+
+        -- Aufbauen nur fuer Engineers
+        if PD.Kiste.CanUnpack(LocalPlayer()) then
+            actions[#actions + 1] = {
                 id = "kiste_unpack",
                 name = name ~= "" and (name .. " aufbauen") or "Auspacken",
                 func = function(ply, target)
                     StartJob(target, ACTION_UNPACK)
                 end,
                 ad = {bone}
-            },
-            [2] = {
-                id = "kiste_preview",
-                name = previewOn and "Vorschau aus" or "Vorschau an",
-                func = function(ply, target)
-                    PD.Kiste.TogglePreview(target)
-                end,
-                ad = {bone}
             }
-        }, "Transportkiste")
+        end
+
+        actions[#actions + 1] = {
+            id = "kiste_preview",
+            name = previewOn and "Vorschau aus" or "Vorschau an",
+            func = function(ply, target)
+                PD.Kiste.TogglePreview(target)
+            end,
+            ad = {bone}
+        }
+
+        PD.IA.AddEntityActions(actions, "Transportkiste")
 
         return
     end

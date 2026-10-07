@@ -327,6 +327,12 @@ hook.Add("PlayerSpawn", "PD.WB:PlayerSpawn", function(ply)
         PD.WB.GiveAlways(ply)
         refresh(ply)
     end)
+
+    -- Mit den Haenden in der Hand spawnen (nach den anderen Spawn-Schritten)
+    timer.Simple(0.3, function()
+        local hands = (PD.Equip and PD.Equip.Hands) or "mhands"
+        if IsValid(ply) and ply:Alive() and ply:HasWeapon(hands) then ply:SelectWeapon(hands) end
+    end)
 end)
 
 hook.Add("PlayerInitialSpawn", "PD.WB:PlayerInitialSpawn", function(ply)
