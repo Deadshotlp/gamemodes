@@ -230,6 +230,14 @@ local TABLES = {
         PRIMARY KEY (`id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
+    -- Live-Lage fuer die Strategieansicht im Web-Panel (Stufe 4c), alle 2 s
+    [[CREATE TABLE IF NOT EXISTS `pd_naval_live` (
+        `server_key` VARCHAR(64) NOT NULL,
+        `updated_at` BIGINT NOT NULL DEFAULT 0,
+        `data` MEDIUMTEXT NOT NULL,
+        PRIMARY KEY (`server_key`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
     [[CREATE TABLE IF NOT EXISTS `pd_naval_log` (
         `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         `server_key` VARCHAR(64) NOT NULL DEFAULT 'main',

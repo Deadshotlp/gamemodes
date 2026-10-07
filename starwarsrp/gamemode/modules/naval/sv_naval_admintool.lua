@@ -120,6 +120,93 @@ end)
 hook.Add("PlayerDisconnected", "PD.Naval.AdminTool", function(ply) watchers[ply] = nil end)
 
 --------------------------------------------------------------------------------
+-- Live-Lage fuer die Strategieansicht im Web-Panel (Stufe 4c)
+--
+-- Alle 2 s eine Zeile in pd_naval_live (je server_key): alle Schiffe mit
+-- Position (Systemmeter), Bugrichtung, Fahrt, Huelle, Schilden, Ziel, Flotte,
+-- Befehl, Sprung (Ziel, Restzeit), dazu Flotten, Alarmstufe, Funkverkehr.
+-- Laeuft nur, solange der Server nicht schlaeft (dann bleibt der letzte Stand).
+--------------------------------------------------------------------------------
+
+local function Round(v, d) return math.Round(v, d or 0) end
+
+local function LiveData()
+    local now = Naval.Now()
+    local ships = {}
+
+    for id, ship in pairs(Naval.Ships) do
+        if not (ship.flags and ship.flags.test) then
+            local class = ship:Class() or {}
+            local fwd = Q.Forward(ship.rot)
+            local row = {
+                id = id, name = ship.name, classId = ship.classId, factionId = ship.factionId, systemId = ship.systemId,
+                state = ship.state, map = ship:IsPlayerShip() or nil,
+                p = {Round(ship.pos.x), Round(ship.pos.y), Round(ship.pos.z)},
+                f = {Round(fwd.x, 3), Round(fwd.y, 3), Round(fwd.z, 3)},
+                speed = Round(ship:Speed()),
+                hull = Round((ship.hull or 0) / math.max(class.hull or 1, 1) * 100),
+                order = ship.orders.queue[1] and ship.orders.queue[1].type or nil,
+                roe = ship.subs and ship.subs.roe or nil,
+                target = ship.subs and ship.subs.target or nil,
+                fleetId = (ship.fleetId or 0) > 0 and ship.fleetId or nil,
+                morale = ship.subs and ship.subs.morale and Round(ship.subs.morale) or nil,
+                surrendered = ship.flags and ship.flags.surrendered or nil,
+                interdictor = ship.flags and ship.flags.interdictor and ship.subs and ship.subs.interdict ~= false or nil,
+            }
+
+            local sh = ship.shields
+            if istable(sh) and istable(sh.zones) then
+                local cc = Naval.ClassCombat(class, Naval.HardpointsFor and Naval.HardpointsFor(ship))
+                local cur, cap = 0, 0
+                for _, z in ipairs(Naval.Zones) do
+                    local zone = sh.zones[z]
+                    if zone then cur = cur + (zone.e or 0) + (zone.m or 0) end
+                    cap = cap + cc.shields.perZone * ((sh.dist or {})[z] or 1)
+                end
+                row.shield = cap > 0 and Round(cur / cap * 100) or nil
+                row.shieldsUp = sh.up ~= false
+            end
+
+            local h = ship.hyper
+            if ship.state ~= Naval.State.NORMAL and istable(h) and h.to then
+                row.jump = {from = h.from or ship.systemId, to = h.to,
+                    eta = h.tExit and math.max(0, Round(h.tExit - now)) or nil,
+                    total = (h.tExit and h.tTunnel) and Round(h.tExit - h.tTunnel) or nil}
+            end
+
+            ships[#ships + 1] = row
+        end
+    end
+
+    local fleets = {}
+    for id, fleet in pairs(Naval.Fleets or {}) do
+        fleets[#fleets + 1] = {id = id, name = fleet.name, flagshipId = fleet.flagshipId, formation = fleet.formation, mode = fleet.mode}
+    end
+
+    local comms = {}
+    local log = Naval.CommsLog or {}
+    for i = math.max(1, #log - 19), #log do comms[#comms + 1] = log[i] end
+
+    local mapShip = Naval.GetMapShip()
+    return {
+        time = os.time(), paused = Naval.Paused == true,
+        mapShipId = mapShip and mapShip.id, alert = Naval.GetAlert and Naval.GetAlert() or 0,
+        ships = ships, fleets = fleets, comms = comms,
+    }
+end
+
+Naval.LiveDataForTest = LiveData
+
+timer.Create("PD.Naval.Live", 2, 0, function()
+    if not Naval.SimRunning then return end
+    local ok, json = pcall(function() return util.TableToJSON(LiveData()) end)
+    if not ok or not json then return end
+
+    PD.SQL.Query("REPLACE INTO `pd_naval_live` (`server_key`, `updated_at`, `data`) VALUES ("
+        .. PD.SQL.EscapeString(Naval.DB.ServerKey()) .. ", " .. os.time() .. ", " .. PD.SQL.EscapeString(json) .. ")")
+end)
+
+--------------------------------------------------------------------------------
 -- Aktionen
 --------------------------------------------------------------------------------
 
