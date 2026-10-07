@@ -181,6 +181,20 @@ function Naval.SimSelfTest()
 
             check("Autopilot umfliegt " .. main.name, #path > 2 and closest >= r * 1.1,
                 ("%d Wegpunkte, nächster Abstand %.1f Radien"):format(#path, closest / r))
+
+            -- Aus dem Orbit (knapp ausserhalb des Sicherheitsabstands) auf die andere Seite
+            local clear = Naval.AutopilotClearance(main)
+            local from2 = V3.Add(c, {x = -clear * 1.03, y = 0, z = 0})
+            local path2 = Naval.AvoidPath(sysId, from2, V3.Add(c, {x = clear * 3, y = 0, z = 0}))
+            local closest2 = math.huge
+            for i = 2, #path2 do
+                local a, b = path2[i - 1], path2[i]
+                local d = V3.Sub(b, a)
+                local t2 = math.Clamp(V3.Dot(V3.Sub(c, a), d) / math.max(V3.LenSqr(d), 1), 0, 1)
+                closest2 = math.min(closest2, V3.Dist(V3.Add(a, V3.Scale(d, t2)), c))
+            end
+            check("Autopilot aus dem Orbit nicht durch " .. main.name, closest2 >= r * 1.1,
+                ("%d Wegpunkte, nächster Abstand %.1f Radien"):format(#path2, closest2 / r))
         end
     end
 

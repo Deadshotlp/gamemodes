@@ -76,6 +76,49 @@ local function Blocking(a, b, obstacles)
     return best
 end
 
+-- Ist die Strecke a -> b frei von diesem Hindernis?
+local function Clear(a, b, o)
+    local d = V3.Sub(b, a)
+    local lenSqr = math.max(V3.LenSqr(d), 1)
+    local t = math.Clamp(V3.Dot(V3.Sub(o.c, a), d) / lenSqr, 0, 1)
+    return V3.Dist(V3.Add(a, V3.Scale(d, t)), o.c) >= o.r
+end
+
+-- Umweg um ein Hindernis: zuerst zum Tangentenpunkt eines etwas groesseren
+-- Kreises (Radius 1,2 x Sicherheitsabstand), dann in 40-Grad-Schritten auf
+-- diesem Kreis weiter, bis das Ziel frei sichtbar ist. Jedes Teilstueck
+-- liegt so ausserhalb der Kugel - auch wenn das Schiff dicht daneben steht
+-- (Orbit) und das Ziel auf der anderen Seite liegt.
+local function Detour(cur, to, o, preferSide)
+    local R = o.r * 1.2
+    local rel = V3.Sub(cur, o.c)
+    local d = V3.Len(rel)
+    local u = d > 1 and V3.Scale(rel, 1 / d) or {x = 1, y = 0, z = 0}
+
+    -- Ebene aus Schiff, Mitte und Ziel; v zeigt zur Zielseite
+    local toRel = V3.Sub(to, o.c)
+    local v = V3.Sub(toRel, V3.Scale(u, V3.Dot(toRel, u)))
+    if V3.LenSqr(v) < 1 then
+        v = preferSide or V3.Cross(u, {x = 0, y = 0, z = 1})
+        if V3.LenSqr(v) < 1e-6 then v = V3.Cross(u, {x = 0, y = 1, z = 0}) end
+    end
+    v = V3.Normalize(v)
+
+    local function OnCircle(angle)
+        return V3.Add(o.c, V3.Scale(V3.Add(V3.Scale(u, math.cos(angle)), V3.Scale(v, math.sin(angle))), R))
+    end
+
+    local points = {}
+    local angle = d > R and math.acos(R / d) or 0
+    for _ = 1, 9 do
+        local wp = OnCircle(angle)
+        points[#points + 1] = wp
+        if Clear(wp, to, o) then break end
+        angle = angle + math.rad(40)
+    end
+    return points
+end
+
 -- Punkte von "from" nach "to" um alle Hindernisse herum
 function Naval.AvoidPath(systemId, from, to)
     local obstacles = Obstacles(systemId, from)
@@ -86,18 +129,11 @@ function Naval.AvoidPath(systemId, from, to)
         local hit = Blocking(cur, to, obstacles)
         if not hit then break end
 
-        local o = hit.o
-        local side = V3.Sub(hit.p, o.c)
-        if V3.LenSqr(side) < 1 then
-            -- Strecke geht genau durch die Mitte: seitlich (in der Ebene) vorbei
-            local d = V3.Normalize(V3.Sub(to, cur))
-            side = {x = -d.y, y = d.x, z = 0}
-            if V3.LenSqr(side) < 1e-6 then side = {x = 0, y = 0, z = 1} end
+        local side = V3.Sub(hit.p, hit.o.c)
+        for _, wp in ipairs(Detour(cur, to, hit.o, V3.LenSqr(side) > 1 and side or nil)) do
+            points[#points + 1] = wp
+            cur = wp
         end
-
-        local wp = V3.Add(o.c, V3.Scale(V3.Normalize(side), o.r * 1.2))
-        points[#points + 1] = wp
-        cur = wp
     end
 
     points[#points + 1] = to

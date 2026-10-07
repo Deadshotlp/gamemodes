@@ -414,7 +414,7 @@ end
 Actions.alertbtn_test = function(ply, args)
     local entry = Naval.AlertButtons()[tonumber(args.idx) or -1]
     if not entry then return end
-    Notify(ply, Naval.PressMapButton(entry) and "Gedrückt" or "Knopf nicht gefunden", true)
+    Notify(ply, Naval.SetMapButton(entry) and "Umgeschaltet" or "Knopf nicht gefunden", true)
 end
 
 Actions.alert_set = function(ply, args)

@@ -14,7 +14,9 @@
 
     Map-Knoepfe (Sirene, rote Lichtpaneele): im Admin-Tab den angeschauten
     Knopf einer Stufe zuordnen. Beim Wechsel auf diese Stufe wird er
-    gedrueckt, beim Verlassen auf Wunsch noch einmal (Schalter wieder aus).
+    eingeschaltet, beim Verlassen auf Wunsch wieder aus. Venator-Knoepfe
+    (alarmBut1/alarmbut2): Druck schaltet ein und sperrt den Knopf, Benutzen
+    des gesperrten Knopfs (OnUseLocked) schaltet aus - daher nach Sperrzustand.
     Gespeichert als alertbtn_<map> in pd_naval_settings (MapCreationID).
 ]]
 
@@ -47,54 +49,37 @@ function Naval.SaveAlertButtons(list)
         .. PD.SQL.EscapeString(ButtonKey()) .. ", " .. PD.SQL.EscapeString(Naval.DB.Encode(list)) .. ")")
 end
 
--- Zustand eines func_button: 0 oben, 1 unten, 2 faehrt hoch, 3 faehrt runter
-local function ButtonInfo(ent)
-    local kv = ent:GetKeyValues() or {}
-    local flags = tonumber(kv.spawnflags) or 0
-    return {
-        state = tonumber(ent:GetInternalVariable("m_toggle_state")) or 0,
-        locked = ent:GetInternalVariable("m_bLocked") == true,
-        toggle = bit.band(flags, 32) ~= 0,
-        wait = tonumber(kv.wait),
-    }
-end
-
--- Knoepfe ignorieren "Press", solange sie unten sind oder sich bewegen
--- (Wartezeit nach dem letzten Druck). Dann bis zu 30 s lang erneut versuchen.
-local function Ready(info)
-    if info.state == 2 or info.state == 3 then return false end
-    return info.toggle or info.state == 0
-end
-
-function Naval.PressMapButton(entry, attempt)
+-- Knopf ein- (on = true) oder ausschalten. Gesperrt gilt als "an": die
+-- Map sperrt ihre Alarm-Knoepfe beim Einschalten und schaltet beim
+-- Benutzen des gesperrten Knopfs aus. on = nil: umschalten (Testen).
+function Naval.SetMapButton(entry, on)
     local ent = ents.GetMapCreatedEntity(tonumber(entry.id) or -1)
     if not IsValid(ent) then return false end
 
+    local world = game.GetWorld()
     if not string.find(ent:GetClass(), "button", 1, true) then
-        ent:Input("Use", game.GetWorld(), game.GetWorld())
+        ent:Input("Use", world, world)
         return true
     end
 
-    local info = ButtonInfo(ent)
-    attempt = attempt or 0
+    local locked = ent:GetInternalVariable("m_bLocked") == true
+    if on == nil then on = not locked end
 
-    if not Ready(info) and attempt < 60 then
-        timer.Simple(0.5, function() Naval.PressMapButton(entry, attempt + 1) end)
-        return true
+    if on and not locked then
+        ent:Fire("Press")
+    elseif not on and locked then
+        ent:Input("Use", world, world)
     end
-
-    if info.locked then ent:Fire("Unlock") end
-    ent:Fire("Press", "", info.locked and 0.05 or 0)
-    Naval.Log(("Alarm-Knopf %s gedrückt (Zustand %d, gesperrt %s, Umschalter %s, wait %s, nach %.1f s)")
-        :format(tostring(entry.name), info.state, tostring(info.locked), tostring(info.toggle), tostring(info.wait), attempt * 0.5))
     return true
 end
 
 local function Buttons(oldLevel, newLevel)
     for _, entry in ipairs(Naval.AlertButtons()) do
         local level = tonumber(entry.level) or 2
-        if level == newLevel or (level == oldLevel and entry.leave) then
-            Naval.PressMapButton(entry)
+        if level == newLevel then
+            Naval.SetMapButton(entry, true)
+        elseif level == oldLevel and entry.leave then
+            Naval.SetMapButton(entry, false)
         end
     end
 end
@@ -177,3 +162,4 @@ concommand.Add("pd_naval_alert", function(ply, _, args)
 
     Naval.SetAlert(level, IsValid(ply) and ply:Nick() or "Konsole")
 end)
+
