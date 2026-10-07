@@ -188,6 +188,7 @@ Naval.SettingInfo = {
     {"Autopilot", {
         {"autopilot_clearance", "Sicherheitsabstand", "× Radius"},
         {"autopilot_margin", "Sicherheitsabstand zusätzlich", "m"},
+        {"ship_inertia", "Trägheit beim Fliegen", "1 = an, 0 = aus"},
     }},
     {"Sensoren und Darstellung", {
         {"sensor_default", "Sensorreichweite (Standard)", "m"},

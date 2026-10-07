@@ -73,6 +73,7 @@ D.Settings = {
     shield_mod_cooldown = 20,     -- s nach einem Fehlversuch
     autopilot_clearance = 1.6,    -- Autopilot: Sicherheitsabstand in Koerperradien
     autopilot_margin = 5000,      -- m zusaetzlich
+    ship_inertia = 0,             -- 1 = Traegheit (Rutschen nach dem Drehen, Nachlaufen der Drehung)
 }
 
 --------------------------------------------------------------------------------

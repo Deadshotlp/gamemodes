@@ -12,8 +12,10 @@
       rate p/y/r  -1..1    Drehrate (Nicken: + = Nase runter, wie Source)
       thrust x/y/z -1..1   Manoevrierduesen (vor/links/oben)
       autopilot  {dir = V3}  Bug auf diese Richtung drehen (ueberschreibt rate)
-    Traegheitsdaempfer: das Schiff haelt Geschwindigkeit und Kurs, ohne zu
-    driften (Star-Wars-Gefuehl).
+    Traegheit (Einstellung ship_inertia, Standard 0 = aus): ohne sie folgt die
+    Fahrt sofort dem Bug (kein Rutschen nach dem Drehen) und Drehungen
+    stoppen ohne Nachlaufen. Beschleunigen und Bremsen dauern weiterhin
+    (accel/decel der Klasse).
 ]]
 
 PD.Naval = PD.Naval or {}
@@ -74,11 +76,18 @@ local function Step(ship, dt)
     if disabled then rp, ry, rr = 0, 0, 0 end
 
     local target = {x = rr * maxRate.x, y = rp * maxRate.y, z = ry * maxRate.z}
-    ship.angVel = {
-        x = approach(ship.angVel.x, target.x, angAccel.x * dt),
-        y = approach(ship.angVel.y, target.y, angAccel.y * dt),
-        z = approach(ship.angVel.z, target.z, angAccel.z * dt),
-    }
+    -- Ohne Traegheit (ship_inertia 0): Drehrate sofort wie befohlen, kein
+    -- Nachlaufen/Ueberschiessen
+    local inertia = (tonumber(Naval.Settings.ship_inertia) or 0) ~= 0
+    if inertia then
+        ship.angVel = {
+            x = approach(ship.angVel.x, target.x, angAccel.x * dt),
+            y = approach(ship.angVel.y, target.y, angAccel.y * dt),
+            z = approach(ship.angVel.z, target.z, angAccel.z * dt),
+        }
+    else
+        ship.angVel = target
+    end
 
     if V3.LenSqr(ship.angVel) > 1e-12 then
         ship.rot = Q.Integrate(ship.rot, ship.angVel, dt)
@@ -99,8 +108,15 @@ local function Step(ship, dt)
     vb.x = approach(vb.x, targetX, rateX * dt)
 
     local thr = disabled and 0 or ship:Stat("thrusterSpeed")
-    vb.y = approach(vb.y, (ctrl.thrust.y or 0) * thr, thr * 0.5 * dt + 1e-9)
-    vb.z = approach(vb.z, (ctrl.thrust.z or 0) * thr, thr * 0.5 * dt + 1e-9)
+    if inertia then
+        vb.y = approach(vb.y, (ctrl.thrust.y or 0) * thr, thr * 0.5 * dt + 1e-9)
+        vb.z = approach(vb.z, (ctrl.thrust.z or 0) * thr, thr * 0.5 * dt + 1e-9)
+    else
+        -- Kein seitliches Rutschen: die Fahrt zeigt immer in Bugrichtung,
+        -- seitlich/vertikal bewegen nur die Manoevrierduesen
+        vb.y = (ctrl.thrust.y or 0) * thr
+        vb.z = (ctrl.thrust.z or 0) * thr
+    end
     if math.abs(ctrl.thrust.x or 0) > 0 then
         vb.x = vb.x + (ctrl.thrust.x or 0) * thr * 0.5 * dt
     end
