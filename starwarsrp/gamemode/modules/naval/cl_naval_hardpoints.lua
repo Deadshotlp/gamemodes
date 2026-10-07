@@ -105,7 +105,7 @@ function Naval.OpenHardpointEditor()
             local dir = Angle(-s.camPitch, s.camYaw, 0):Forward()
             s:SetCamPos(center - dir * dist)
             s:SetLookAt(center)
-            s:SetFarZ(dist * 4)
+            s.FarZ = dist * 4 -- Feld des DModelPanel (keine Set-Methode); grosse Schiffe sonst abgeschnitten
         end
         oldPaint(s, w, h)
         draw.SimpleText("Ziehen = drehen, Mausrad = zoomen. Vorn = +x (rote Linie).", "MLIB.14", 8, h - 22, COL.dim)
