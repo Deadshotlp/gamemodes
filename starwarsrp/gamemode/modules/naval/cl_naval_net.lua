@@ -57,7 +57,8 @@ local function OnData(kind, payload)
     elseif kind == "shipinfo" then
         local info = {}
         for _, row in ipairs(payload or {}) do
-            info[row[1]] = {id = row[1], name = row[2], classId = row[3], factionId = row[4], mapShip = row[5] == true}
+            info[row[1]] = {id = row[1], name = row[2], classId = row[3], factionId = row[4], mapShip = row[5] == true,
+                ident = row[5] == true and 2 or (tonumber(row[6]) or 2)}
         end
         C.info = info
         hook.Run("PD.Naval.ShipInfoReceived")

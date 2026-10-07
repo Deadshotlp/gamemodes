@@ -155,13 +155,14 @@ end
 
 local helm = {throttle = 0, p = 0, y = 0, r = 0, ty = 0, tz = 0, keys = {}}
 
-local function SendHelm(align, cancelAuto)
+local function SendHelm(align, cancelAuto, manualThrottle)
     net.Start("PD.Naval.Helm")
         net.WriteFloat(helm.throttle)
         net.WriteFloat(helm.p) net.WriteFloat(helm.y) net.WriteFloat(helm.r)
         net.WriteFloat(helm.ty) net.WriteFloat(helm.tz)
         net.WriteBool(align == true)
         net.WriteBool(cancelAuto == true)
+        net.WriteBool(manualThrottle == true)
     net.SendToServer()
 end
 
@@ -193,7 +194,7 @@ local function OpenHelm(console)
 
     local function SetThrottle(v)
         helm.throttle = math.Clamp(math.Round(v, 2), -0.25, 1)
-        SendHelm()
+        SendHelm(false, false, true)
     end
 
     -- Schubhebel
@@ -214,9 +215,12 @@ local function OpenHelm(console)
         draw.SimpleText(math.Round(helm.throttle * 100) .. " %", "MLIB.18", w / 2, 6, COL_TEXT, TEXT_ALIGN_CENTER)
     end
     lever.OnMousePressed = function(s) s.Dragging = true s:MouseCapture(true) end
-    lever.OnMouseReleased = function(s) s.Dragging = false s:MouseCapture(false) SendHelm() end
+    lever.OnMouseReleased = function(s) s.Dragging = false s:MouseCapture(false) SendHelm(false, false, true) end
     lever.Think = function(s)
-        if not s.Dragging then return end
+        if not s.Dragging then
+            if C.status and C.status.auto then helm.throttle = C.status.throttle or helm.throttle end
+            return
+        end
         local _, my = s:CursorPos()
         local f = 1 - math.Clamp((my - 20) / (s:GetTall() - 40), 0, 1)
         helm.throttle = math.Clamp(math.Round(f * 1.25 - 0.25, 2), -0.25, 1)
@@ -248,7 +252,10 @@ local function OpenHelm(console)
         end
 
         local auto = status.autopilot and "Autopilot: richtet aus" or "Autopilot: aus"
-        draw.SimpleText(auto, "MLIB.16", 12, 112, status.autopilot and COL_ACCENT or COL_DIM)
+        if status.auto then
+            auto = "Autopilot: " .. (status.auto.label or "?") .. (status.auto.arrived and " (erreicht)" or (" - " .. Fmt(status.auto.eta)))
+        end
+        draw.SimpleText(auto, "MLIB.16", 12, 112, (status.autopilot or status.auto) and COL_ACCENT or COL_DIM)
 
         if status.nav and status.align then
             draw.SimpleText(("Sprungvektor %s: %.1f° Abweichung"):format(Naval.SystemName(status.nav.target), status.align), "MLIB.16", 12, 136,

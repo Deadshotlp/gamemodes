@@ -2,9 +2,12 @@
     Naval - Kampfstationen des Map-Schiffs (Server).
 
       PD.Naval.CombatCmd   Client -> Server: Station, Aktion, JSON
-        weapons:     target {id}, fire {on}, battery {idx, on}
-        shields:     up {on}, ratio {value 0..1}, dist {zone = Gewicht}
+        weapons:     target {id}, subtarget {sub}, fire {on}, battery {idx, on}
+        shields:     up {on}, ratio {value 0..1}, dist {zone = Gewicht},
+                     mod_start, mod_submit {f, p} (Modulation, Minispiel)
         engineering: power {engines, shields, weapons, sensors}
+        Weitere Stationen haengen sich an Naval.CombatCommands (Schadens-
+        kontrolle, Sensoren, Alarm).
 
     Zustand fuer die Konsolen: Naval.CombatStatus(ship) haengt am
     Status-Paket (sv_naval_stations.lua, 2 Hz).
@@ -16,6 +19,7 @@ local Naval = PD.Naval
 local V3 = Naval.V3
 
 util.AddNetworkString("PD.Naval.CombatCmd")
+util.AddNetworkString("PD.Naval.ModGame")
 
 local function Who(ply) return IsValid(ply) and ply:Nick() or "?" end
 
@@ -72,9 +76,15 @@ function Naval.CombatStatus(ship)
         }
     end
 
+    local now = Naval.Now()
+    local mod = sh.mod or {}
+
     return {
         hull = math.Round(ship.hull or 0), hullMax = class.hull or 0,
         up = sh.up, ratio = sh.ratio, zones = zones,
+        modLeft = (mod.untilT or 0) > now and math.Round(mod.untilT - now) or nil,
+        modBlocked = (mod.blockUntil or 0) > now and math.Round(mod.blockUntil - now) or nil,
+        targetSub = subs.targetSub,
         power = subs.power, factors = factors, output = math.Round(output), sum = sum,
         systems = systems, batteries = batteries, target = tinfo, fire = subs.fire == true,
     }
@@ -84,7 +94,11 @@ end
 -- Befehle
 --------------------------------------------------------------------------------
 
-local Commands = {weapons = {}, shields = {}, engineering = {}}
+Naval.CombatCommands = Naval.CombatCommands or {}
+local Commands = Naval.CombatCommands
+Commands.weapons = Commands.weapons or {}
+Commands.shields = Commands.shields or {}
+Commands.engineering = Commands.engineering or {}
 
 Commands.weapons.target = function(ply, ship, args)
     local target = Naval.Ships[tonumber(args.id) or -1]
@@ -93,8 +107,22 @@ Commands.weapons.target = function(ply, ship, args)
         return
     end
 
+    if ship.subs.target ~= target.id then ship.subs.targetSub = nil end
     ship.subs.target = target.id
-    ship:Log("combat", Who(ply), "Ziel aufgeschaltet: " .. target.name)
+    local known = not Naval.IdentLevel or Naval.IdentLevel(ship, target) >= 1
+    ship:Log("combat", Who(ply), "Ziel aufgeschaltet: " .. (known and target.name or "unbekannter Kontakt"))
+end
+
+-- Subsystem des Ziels gezielt beschiessen (erst nach genauem Scan)
+Commands.weapons.subtarget = function(ply, ship, args)
+    local target = ship.subs.target and Naval.Ships[ship.subs.target]
+    local sub = tostring(args.sub or "")
+    if sub == "" or not target then ship.subs.targetSub = nil return end
+    if Naval.IdentLevel and Naval.IdentLevel(ship, target) < 2 then Notify(ply, "Ziel erst genau scannen (Sensoren)") return end
+    if not Naval.SubsystemNames[sub] then return end
+
+    ship.subs.targetSub = sub
+    ship:Log("combat", Who(ply), "Feuer auf " .. Naval.SubsystemNames[sub] .. " von " .. target.name)
 end
 
 Commands.weapons.fire = function(ply, ship, args)
@@ -130,6 +158,46 @@ Commands.shields.dist = function(ply, ship, args)
     end
 end
 
+-- Schildmodulation: der Server legt Frequenz und Phase fest, der Spieler
+-- muss seine Welle darauf einstellen (cl_naval_combat_ui.lua).
+Commands.shields.mod_start = function(ply, ship)
+    local sh = ship.shields
+    local now = Naval.Now()
+    sh.mod = istable(sh.mod) and sh.mod or {}
+    if (sh.mod.blockUntil or 0) > now then
+        Notify(ply, ("Modulator kühlt ab (%d s)"):format(sh.mod.blockUntil - now))
+        return
+    end
+
+    local mg = {f = math.Round(math.Rand(1.5, 8.5), 1), p = math.random(0, 35) * 10, untilT = CurTime() + 30}
+    ply.PD_NavalModGame = mg
+
+    net.Start("PD.Naval.ModGame")
+    net.WriteFloat(mg.f)
+    net.WriteUInt(mg.p, 9)
+    net.Send(ply)
+end
+
+Commands.shields.mod_submit = function(ply, ship, args)
+    local mg = ply.PD_NavalModGame
+    ply.PD_NavalModGame = nil
+    if not mg or CurTime() > mg.untilT then Notify(ply, "Zeit abgelaufen") return end
+
+    local sh = ship.shields
+    sh.mod = istable(sh.mod) and sh.mod or {}
+    local df = math.abs((tonumber(args.f) or 0) - mg.f)
+    local dp = math.abs(math.AngleDifference(tonumber(args.p) or 0, mg.p))
+
+    if df <= 0.25 and dp <= 20 then
+        sh.mod.untilT = Naval.Now() + (Naval.Settings.shield_mod_duration or 90)
+        ship:Log("combat", Who(ply), "Schildmodulation angepasst")
+        Notify(ply, "Modulation angepasst - Schilde halten mehr aus", true)
+    else
+        sh.mod.blockUntil = Naval.Now() + (Naval.Settings.shield_mod_cooldown or 20)
+        Notify(ply, "Modulation fehlgeschlagen")
+    end
+end
+
 Commands.engineering.power = function(ply, ship, args)
     local values, sum = {}, 0
     for _, sys in ipairs(Naval.PowerSystems) do
@@ -156,7 +224,10 @@ net.Receive("PD.Naval.CombatCmd", function(_, ply)
     if not ship or not Naval.Combat then return end
     Naval.Combat(ship)
 
-    if ship.state == Naval.State.DISABLED then Notify(ply, "Das Schiff ist kampfunfähig") return end
+    if ship.state == Naval.State.DISABLED and (station == "weapons" or station == "shields" or station == "engineering") then
+        Notify(ply, "Das Schiff ist kampfunfähig")
+        return
+    end
 
     fn(ply, ship, args)
     ship.dirty = true

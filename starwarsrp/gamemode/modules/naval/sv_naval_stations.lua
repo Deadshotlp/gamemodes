@@ -132,9 +132,20 @@ net.Receive("PD.Naval.Helm", function(_, ply)
     local ty, tz = math.Clamp(net.ReadFloat(), -1, 1), math.Clamp(net.ReadFloat(), -1, 1)
     local align = net.ReadBool()
     local cancelAuto = net.ReadBool()
+    local manualThrottle = net.ReadBool()
 
     -- Waehrend eines Sprungs fuehrt der Hyperantrieb
     if ship.state ~= Naval.State.NORMAL then return end
+
+    -- System-Autopilot (Navigationscomputer): jede Handsteuerung schaltet ihn ab
+    if ship.auto then
+        if manualThrottle or align or cancelAuto or p ~= 0 or y ~= 0 or r ~= 0 or ty ~= 0 or tz ~= 0 then
+            Naval.StopAutopilot(ship, "von Hand übernommen")
+        else
+            ship.ctrl.thrust = {x = 0, y = 0, z = 0}
+            return
+        end
+    end
 
     ship.ctrl.throttle = throttle
     ship.ctrl.rate = {p = p, y = y, r = r}
@@ -188,6 +199,21 @@ net.Receive("PD.Naval.Nav", function(_, ply)
     if action == "clear" then
         ship.nav = nil
         Notify(ply, "Kursloesung verworfen.", true)
+        return
+    end
+
+    -- Autopilot im System (Systemkarte)
+    if action == "auto" then
+        local args = util.JSONToTable(net.ReadString() or "") or {}
+        if not Naval.StartAutopilot then return end
+        local ok, reason = Naval.StartAutopilot(ship, args, Who(ply))
+        Notify(ply, ok and "Autopilot aktiv" or reason, ok)
+        return
+    elseif action == "auto_off" then
+        if ship.auto and Naval.StopAutopilot then
+            Naval.StopAutopilot(ship, "abgeschaltet von " .. Who(ply))
+            ship.ctrl.throttle = 0
+        end
         return
     end
 
@@ -255,6 +281,7 @@ net.Receive("PD.Naval.Hyper", function(_, ply)
     if not valid then Notify(ply, reason) return end
 
     if action == "align" then
+        if ship.auto and Naval.StopAutopilot then Naval.StopAutopilot(ship) end
         local from, to = Naval.Systems[ship.systemId], Naval.Systems[ship.nav.target]
         ship.ctrl.autopilot = {dir = Naval.JumpVector(from, to)}
         Notify(ply, "Richte auf den Sprungvektor aus.", true)
@@ -341,6 +368,12 @@ timer.Create("PD.Naval.Status", 0.5, 0, function()
 
     status.pathKey = Naval.PathKey and Naval.PathKey(ship)
     status.combat = Naval.CombatStatus and Naval.CombatStatus(ship)
+
+    -- Schadenskontrolle, Sensoren, Alarm, Autopilot haengen sich hier an
+    for key, fn in pairs(Naval.StatusExtras or {}) do
+        local ok, value = pcall(fn, ship)
+        if ok then status[key] = value end
+    end
 
     local body, dist, limit = Naval.MassShadow(ship)
     if body then status.shadow = {name = body.name, dist = dist, limit = limit} end

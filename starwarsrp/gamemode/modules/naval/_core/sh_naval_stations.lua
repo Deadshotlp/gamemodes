@@ -84,3 +84,40 @@ PD.Naval.HoloRanges = {5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e6, 2
 PD.Naval.HoloDefaultZoom = 4
 
 PD.Naval.StationUseRange = 160
+
+-- Stufe 2b: Schadenskontrolle, Sensoren, Alarmstufe
+PD.Naval.Stations.damagecontrol = {
+    name = "Schadenskontrolle",
+    model = "models/lordtrilobite/starwars/isd/imp_console_large01.mdl",
+    desc = "Schäden, Brandherde, Reparaturtrupps",
+}
+PD.Naval.Stations.sensors = {
+    name = "Sensoren",
+    model = "models/lordtrilobite/starwars/isd/imp_console_medium03.mdl",
+    desc = "Kontakte scannen und identifizieren",
+}
+PD.Naval.Stations.alert = {
+    name = "Alarmstufe",
+    model = "models/lordtrilobite/starwars/isd/imp_console_medium03.mdl",
+    desc = "Normal, Gelb, Rot",
+}
+
+-- Schadenspunkt: Ort, an dem bei Treffern Funken, Rauch oder Feuer entstehen.
+-- Unsichtbar wie der Projektor; welches Subsystem dort sitzt, legt der Admin
+-- im Admin-Tab fest (Konsolen-Daten "sub").
+PD.Naval.Stations.damage_point = {
+    name = "Schadenspunkt",
+    model = "models/hunter/plates/plate025x025.mdl",
+    desc = "Ort für Schäden an Bord",
+    noUse = true,
+    marker = true,
+}
+
+PD.Naval.AlertNames = {[0] = "Normal", [1] = "Alarmstufe Gelb", [2] = "Alarmstufe Rot"}
+
+-- Schadensarten an Bord (Schweregrad = Reparaturaufwand)
+PD.Naval.IncidentKinds = {
+    sparks = {name = "Kurzschluss", severity = 1},
+    smoke = {name = "Rauchentwicklung", severity = 2},
+    fire = {name = "Brand", severity = 3},
+}

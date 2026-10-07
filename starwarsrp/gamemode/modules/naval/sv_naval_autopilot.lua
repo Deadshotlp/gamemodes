@@ -1,0 +1,333 @@
+--[[
+    Naval - Autopilot innerhalb eines Systems (Server).
+
+    Kurs um Himmelskoerper herum: jeder Stern, Planet und Mond hat einen
+    Sicherheitsabstand (Radius x autopilot_clearance + autopilot_margin).
+    Schneidet die Strecke zum Ziel eine solche Kugel, fliegt das Schiff einen
+    Umweg ueber einen Punkt seitlich daneben. Der Weg wird jeden Takt neu
+    berechnet, das Schiff gleitet so an der Kugel entlang. Gebremst wird nach
+    der Restlaenge des ganzen Wegs.
+
+    Map-Schiff (Navigationscomputer -> Systemkarte), ship.auto:
+      {kind = "body"|"point"|"ship"|"jumppoint", id, pos, mode = "stop"|"orbit",
+       alt (m ueber der Oberflaeche bzw. Abstand zum Schiff), speed 0.1..1}
+    Steuereingaben an der Steuerkonsole schalten ihn ab.
+
+    NPC-Befehle move/patrol nutzen dieselbe Ausweichlogik (Naval.AutoSteer).
+]]
+
+PD.Naval = PD.Naval or {}
+
+local Naval = PD.Naval
+local V3 = Naval.V3
+local S = Naval.State
+
+local function Setting(key, default)
+    return tonumber(Naval.Settings and Naval.Settings[key]) or default
+end
+
+--------------------------------------------------------------------------------
+-- Hindernisse und Weg
+--------------------------------------------------------------------------------
+
+local function Clearance(body)
+    return (body.radius or 0) * Setting("autopilot_clearance", 1.6) + Setting("autopilot_margin", 5000)
+end
+Naval.AutopilotClearance = Clearance
+
+local function Obstacles(systemId, from)
+    local list = {}
+    for _, body in ipairs(Naval.BodiesBySystem[systemId] or {}) do
+        if (body.radius or 0) > 0 then
+            local c = Naval.BodyPos(body, Naval.Bodies)
+            local r = Clearance(body)
+            -- Schon im Sicherheitsabstand: nur noch dem Koerper selbst ausweichen
+            if V3.Dist(from, c) < r then r = body.radius * 1.1 end
+            if V3.Dist(from, c) > r then list[#list + 1] = {body = body, c = c, r = r} end
+        end
+    end
+    return list
+end
+
+-- Erstes Hindernis auf der Strecke a -> b (nach Abstand von a)
+local function Blocking(a, b, obstacles)
+    local d = V3.Sub(b, a)
+    local lenSqr = V3.LenSqr(d)
+    if lenSqr < 1 then return nil end
+
+    local best, bestT
+    for _, o in ipairs(obstacles) do
+        if V3.Dist(b, o.c) > o.r then
+            local t = math.Clamp(V3.Dot(V3.Sub(o.c, a), d) / lenSqr, 0, 1)
+            local p = V3.Add(a, V3.Scale(d, t))
+            if V3.Dist(p, o.c) < o.r and (not bestT or t < bestT) then
+                best, bestT = {o = o, p = p}, t
+            end
+        end
+    end
+    return best
+end
+
+-- Punkte von "from" nach "to" um alle Hindernisse herum
+function Naval.AvoidPath(systemId, from, to)
+    local obstacles = Obstacles(systemId, from)
+    local points = {from}
+    local cur = from
+
+    for _ = 1, 4 do
+        local hit = Blocking(cur, to, obstacles)
+        if not hit then break end
+
+        local o = hit.o
+        local side = V3.Sub(hit.p, o.c)
+        if V3.LenSqr(side) < 1 then
+            -- Strecke geht genau durch die Mitte: seitlich (in der Ebene) vorbei
+            local d = V3.Normalize(V3.Sub(to, cur))
+            side = {x = -d.y, y = d.x, z = 0}
+            if V3.LenSqr(side) < 1e-6 then side = {x = 0, y = 0, z = 1} end
+        end
+
+        local wp = V3.Add(o.c, V3.Scale(V3.Normalize(side), o.r * 1.2))
+        points[#points + 1] = wp
+        cur = wp
+    end
+
+    points[#points + 1] = to
+    return points
+end
+
+local function PathLength(points)
+    local len = 0
+    for i = 2, #points do len = len + V3.Dist(points[i - 1], points[i]) end
+    return len
+end
+
+-- Auf den naechsten Wegpunkt zu, Bremsweg nach der Restlaenge
+local function Steer(ship, aim, remaining, tolerance, speedCap)
+    local speed = ship:Speed()
+    speedCap = math.Clamp(speedCap or 1, 0.05, 1)
+
+    if remaining <= tolerance then
+        ship.ctrl.throttle = 0
+        ship.ctrl.autopilot = nil
+        return speed < 50
+    end
+
+    local toAim = V3.Sub(aim, ship.pos)
+    ship.ctrl.autopilot = {dir = toAim}
+
+    local _, _, _, err = Naval.FaceRates(ship, toAim)
+    local maxSpeed = math.max(ship:Stat("maxSpeed"), 1)
+    local decel = math.max(ship:Stat("decel"), 1)
+    local brake = speed * speed / (2 * decel)
+
+    local throttle = err > 25 and 0.1 or speedCap
+    if remaining < brake * 1.3 then
+        throttle = math.Clamp(math.sqrt(2 * decel * remaining) / maxSpeed * 0.8, 0.02, speedCap)
+    end
+
+    ship.ctrl.throttle = throttle
+    return false
+end
+
+-- Fuer KI-Befehle: true, wenn angekommen
+function Naval.AutoSteer(ship, target, tolerance, speedCap)
+    tolerance = tolerance or (((ship:Class() or {}).lengthM or 300) * 3 + 1000)
+    local path = Naval.AvoidPath(ship.systemId, ship.pos, target)
+    return Steer(ship, path[2] or target, PathLength(path), tolerance, speedCap), path
+end
+
+--------------------------------------------------------------------------------
+-- Map-Schiff
+--------------------------------------------------------------------------------
+
+-- Punkt ausserhalb aller Massenschatten entlang des Sprungvektors
+local function JumpPoint(ship)
+    local nav = ship.nav
+    local from, to = Naval.Systems[ship.systemId], nav and Naval.Systems[nav.target or ""]
+    if not from or not to then return nil end
+
+    local dir = V3.Normalize(Naval.JumpVector(from, to))
+    local factor = Setting("mass_shadow_factor", 4)
+    local p = V3.Copy(ship.pos)
+
+    for _ = 1, 40 do
+        local step = 0
+        for _, body in ipairs(Naval.BodiesBySystem[ship.systemId] or {}) do
+            if body.type == "star" or body.type == "planet" or body.type == "moon" then
+                local limit = body.radius * factor
+                local dist = V3.Dist(p, Naval.BodyPos(body, Naval.Bodies))
+                if dist < limit then step = math.max(step, limit - dist + 2000) end
+            end
+        end
+        if step <= 0 then break end
+        p = V3.Add(p, V3.Scale(dir, step))
+    end
+
+    return V3.Add(p, V3.Scale(dir, 3000)), dir
+end
+
+-- Zielpunkt des Autopiloten (oder nil, wenn das Ziel weg ist)
+local function AutoTarget(ship, auto)
+    if auto.kind == "body" then
+        local body = Naval.Bodies[auto.id or ""]
+        if not body or body.systemId ~= ship.systemId then return nil end
+        local c = Naval.BodyPos(body, Naval.Bodies)
+        local r = math.max(body.radius + (auto.alt or body.radius * 0.6), Clearance(body) * 1.02)
+        local away = V3.Sub(ship.pos, c)
+        if V3.LenSqr(away) < 1 then away = {x = 1, y = 0, z = 0} end
+        -- Anflugpunkt einmal festlegen (sonst wandert er mit dem Schiff)
+        auto.dir = auto.dir or V3.Normalize(away)
+        return V3.Add(c, V3.Scale(auto.dir, r)), r, body
+    elseif auto.kind == "ship" then
+        local other = Naval.Ships[auto.id or -1]
+        if not other or other.systemId ~= ship.systemId or other.state == S.HYPERSPACE or other.state == S.DESTROYED then return nil end
+        local rel = V3.Sub(ship.pos, other.pos)
+        if V3.LenSqr(rel) < 1 then rel = {x = 1, y = 0, z = 0} end
+        return V3.Add(other.pos, V3.Scale(V3.Normalize(rel), auto.alt or 5000))
+    elseif auto.kind == "jumppoint" then
+        if not auto.pos then
+            local p, dir = JumpPoint(ship)
+            if not p then return nil end
+            auto.pos, auto.jumpDir = p, dir
+        end
+        return auto.pos
+    elseif auto.kind == "point" and auto.pos then
+        return auto.pos
+    end
+end
+
+local function Stop(ship, reason)
+    ship.auto = nil
+    ship.ctrl.autopilot = nil
+    ship.dirty = true
+    if reason then ship:Log("nav", "", "Autopilot: " .. reason) end
+end
+Naval.StopAutopilot = Stop
+
+local function TickMapShip(ship)
+    local auto = ship.auto
+    if not auto then return end
+
+    if ship.state ~= S.NORMAL then Stop(ship) return end
+
+    local target, orbitR, body = AutoTarget(ship, auto)
+    if not target then Stop(ship, "Ziel verloren") return end
+
+    -- Angekommen
+    if auto.arrived then
+        if auto.mode == "orbit" and body then
+            Naval.AIHandlers.orbit(ship, {bodyId = body.id, radius = orbitR})
+            ship.ctrl.throttle = math.min(ship.ctrl.throttle, 0.4 * (auto.speed or 1))
+        elseif auto.kind == "ship" then
+            -- Folgen: wieder los, sobald das Schiff wegfliegt
+            if V3.Dist(ship.pos, target) > (auto.alt or 5000) * 0.5 + 3000 then auto.arrived = nil end
+            ship.ctrl.throttle = 0
+        elseif auto.kind == "jumppoint" and auto.jumpDir then
+            ship.ctrl.throttle = 0
+            ship.ctrl.autopilot = {dir = auto.jumpDir}
+        else
+            ship.ctrl.throttle = 0
+            ship.ctrl.autopilot = nil
+        end
+        auto.path = {ship.pos}
+        return
+    end
+
+    local tolerance = ((ship:Class() or {}).lengthM or 300) * 2 + 1000
+    local arrived, path = Naval.AutoSteer(ship, target, tolerance, auto.speed)
+    auto.path = path
+
+    if arrived then
+        auto.arrived = true
+        ship:Log("nav", "", "Autopilot: Ziel erreicht - " .. (auto.label or "?"))
+    end
+end
+
+timer.Create("PD.Naval.Autopilot", 0.25, 0, function()
+    if not Naval.SimRunning or Naval.Paused then return end
+    local ship = Naval.GetMapShip()
+    if not ship or not ship.auto then return end
+
+    local ok, err = xpcall(TickMapShip, debug.traceback, ship)
+    if not ok then
+        ship.auto = nil
+        ErrorNoHalt("[Naval] Autopilot: " .. tostring(err) .. "\n")
+    end
+end)
+
+-- Vom Navigationscomputer (sv_naval_stations.lua, Aktion "auto")
+function Naval.StartAutopilot(ship, args, by)
+    if ship.state ~= S.NORMAL then return false, "Nur im Normalflug" end
+
+    local auto = {
+        kind = args.kind, mode = args.mode == "orbit" and "orbit" or "stop",
+        speed = math.Clamp(tonumber(args.speed) or 1, 0.1, 1), by = by,
+    }
+
+    if args.kind == "body" then
+        local body = Naval.Bodies[tostring(args.id or "")]
+        if not body or body.systemId ~= ship.systemId then return false, "Unbekannter Himmelskörper" end
+        auto.id = body.id
+        auto.label = body.name
+        if tonumber(args.alt) then auto.alt = math.Clamp(tonumber(args.alt), 0, body.radius * 50 + 1e7) end
+    elseif args.kind == "ship" then
+        local other = Naval.Ships[tonumber(args.id) or -1]
+        if not other or other == ship or other.systemId ~= ship.systemId then return false, "Unbekanntes Schiff" end
+        auto.id = other.id
+        auto.label = (not Naval.IdentLevel or Naval.IdentLevel(ship, other) >= 1) and other.name or "Unbekannter Kontakt"
+        auto.alt = math.Clamp(tonumber(args.alt) or 5000, 1000, 500000)
+        auto.mode = "stop"
+    elseif args.kind == "point" then
+        local p = istable(args.pos) and {x = tonumber(args.pos.x), y = tonumber(args.pos.y), z = tonumber(args.pos.z) or ship.pos.z}
+        if not p or not p.x or not p.y then return false, "Ungültiger Punkt" end
+
+        -- Punkt in einem Sicherheitsabstand: nach aussen schieben
+        for _, body in ipairs(Naval.BodiesBySystem[ship.systemId] or {}) do
+            local c = Naval.BodyPos(body, Naval.Bodies)
+            local r = Clearance(body)
+            if (body.radius or 0) > 0 and V3.Dist(p, c) < r then
+                local dir = V3.Sub(p, c)
+                if V3.LenSqr(dir) < 1 then dir = {x = 1, y = 0, z = 0} end
+                p = V3.Add(c, V3.Scale(V3.Normalize(dir), r * 1.05))
+            end
+        end
+
+        auto.pos = p
+        auto.label = "Wegpunkt"
+        auto.mode = "stop"
+    elseif args.kind == "jumppoint" then
+        local valid, reason = Naval.NavValid(ship)
+        if not valid then return false, reason end
+        auto.label = "Sprungpunkt " .. ((Naval.Systems[ship.nav.target] or {}).name or "?")
+        auto.mode = "stop"
+    else
+        return false, "Unbekanntes Ziel"
+    end
+
+    ship.auto = auto
+    ship.dirty = true
+    ship:Log("nav", by or "", "Autopilot: Kurs auf " .. auto.label)
+    return true
+end
+
+Naval.StatusExtras = Naval.StatusExtras or {}
+Naval.StatusExtras.auto = function(ship)
+    local auto = ship.auto
+    if not auto then return nil end
+
+    local path = {}
+    for _, p in ipairs(auto.path or {}) do
+        path[#path + 1] = {math.Round(p.x), math.Round(p.y), math.Round(p.z)}
+    end
+
+    local remaining = 0
+    for i = 2, #(auto.path or {}) do remaining = remaining + V3.Dist(auto.path[i - 1], auto.path[i]) end
+    local speed = math.max(ship:Speed(), ship:Stat("maxSpeed") * (auto.speed or 1) * 0.5, 1)
+
+    return {
+        label = auto.label, kind = auto.kind, mode = auto.mode, arrived = auto.arrived == true,
+        path = path, remaining = math.Round(remaining), eta = auto.arrived and 0 or math.Round(remaining / speed),
+        speed = auto.speed,
+    }
+end

@@ -53,6 +53,26 @@ D.Settings = {
     combat_wreck_time = 20,       -- s: Wrack sichtbar, dann entfernt
     holo_radius = 60,             -- Einheiten: Radius des Taktik-Hologramms
     holo_height = 45,             -- Einheiten ueber dem Projektor
+    dc_max_incidents = 6,         -- gleichzeitige Schaeden an Bord
+    dc_incident_chance = 0.35,    -- Chance je Huellentreffer-Takt auf einen neuen Schaden
+    dc_repair_time = 6,           -- s Reparatur (E halten) je Schweregrad
+    dc_repair_sub = 0.25,         -- Anteil Subsystem-Haltbarkeit je behobenem Schaden
+    dc_team_count = 2,            -- Reparaturtrupps
+    dc_team_rate = 0.004,         -- Anteil Haltbarkeit je Sekunde und Trupp
+    dc_fire_damage = 4,           -- Schaden je Sekunde an Spielern im Feuer
+    dc_fire_spread = 90,          -- s bis ein Brand auf einen weiteren Punkt uebergreift
+    alert_auto_yellow = 1,        -- bei Treffern automatisch Gelb (1 = an)
+    alert_defcon_normal = 5,      -- DEFCON bei Normal (0 = nicht aendern)
+    alert_defcon_yellow = 3,      -- DEFCON bei Gelb
+    alert_defcon_red = 2,         -- DEFCON bei Rot
+    alert_alarm_seconds = 20,     -- s Alarmton nach dem Wechsel auf Rot
+    sensor_ident_range = 15000,   -- m: Kontakte naeher als das sind automatisch erkannt
+    sensor_scan_time = 8,         -- s je Scan (laenger mit Entfernung, kuerzer mit Sensorenergie)
+    shield_mod_bonus = 0.35,      -- Schildmodulation: so viel weniger Schildverbrauch
+    shield_mod_duration = 90,     -- s
+    shield_mod_cooldown = 20,     -- s nach einem Fehlversuch
+    autopilot_clearance = 1.6,    -- Autopilot: Sicherheitsabstand in Koerperradien
+    autopilot_margin = 5000,      -- m zusaetzlich
 }
 
 --------------------------------------------------------------------------------

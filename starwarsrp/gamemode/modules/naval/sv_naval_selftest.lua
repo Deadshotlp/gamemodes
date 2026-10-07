@@ -144,6 +144,30 @@ function Naval.SimSelfTest()
             damagedSubs .. " Subsysteme beschädigt")
     end
 
+    -- 9. Autopilot: Weg quer durch den Hauptplaneten fuehrt aussen herum
+    if Naval.AvoidPath then
+        local sysId = Naval.StartSystemId()
+        local main = Naval.MainBody(Naval.BodiesBySystem[sysId] or {})
+        if main and (main.radius or 0) > 0 then
+            local c = Naval.BodyPos(main, Naval.Bodies)
+            local r = main.radius
+            local from = V3.Add(c, {x = -r * 12, y = r * 0.1, z = 0})
+            local to = V3.Add(c, {x = r * 12, y = 0, z = 0})
+            local path = Naval.AvoidPath(sysId, from, to)
+
+            local closest = math.huge
+            for i = 2, #path do
+                local a, b = path[i - 1], path[i]
+                local d = V3.Sub(b, a)
+                local tt = math.Clamp(V3.Dot(V3.Sub(c, a), d) / math.max(V3.LenSqr(d), 1), 0, 1)
+                closest = math.min(closest, V3.Dist(V3.Add(a, V3.Scale(d, tt)), c))
+            end
+
+            check("Autopilot umfliegt " .. main.name, #path > 2 and closest >= r * 1.1,
+                ("%d Wegpunkte, nächster Abstand %.1f Radien"):format(#path, closest / r))
+        end
+    end
+
     -- 8. Netzwerk: Groesse der festen Daten
     if Naval.BuildStaticForTest then
         local payload = Naval.BuildStaticForTest()

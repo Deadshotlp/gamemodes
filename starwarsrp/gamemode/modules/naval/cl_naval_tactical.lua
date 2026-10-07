@@ -19,7 +19,9 @@ local REL_COLOR = {
     ally = Color(90, 170, 255),
     neutral = Color(230, 220, 120),
     hostile = Color(240, 80, 70),
+    unknown = Color(175, 175, 185),
 }
+Naval.RelationColors = REL_COLOR
 
 function Naval.MapShipFaction()
     for _, info in pairs(C.info or {}) do
@@ -28,6 +30,7 @@ function Naval.MapShipFaction()
 end
 
 function Naval.ClientRelation(a, b)
+    if b == "unknown" then return "unknown" end
     if not a or not b then return "neutral" end
     if a == b then return "ally" end
     local rel = C.static and C.static.relations and C.static.relations[a]
@@ -98,7 +101,7 @@ function PANEL:CollectShips(view)
         for _, row in ipairs(admin.ships or {}) do
             if row.rel and not row.map and not out[row.id] then
                 out[row.id] = {pos = V3Add(view.pos, row.rel), state = row.state, info = row}
-            elseif out[row.id] and not out[row.id].info then
+            elseif out[row.id] and (not out[row.id].info or out[row.id].info.ident == 0) then
                 out[row.id].info = row
             end
         end

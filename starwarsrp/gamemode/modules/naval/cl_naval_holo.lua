@@ -6,7 +6,9 @@
     Zustand: GetGlobalBool("PD.Naval.HoloOn"), GetGlobalInt("PD.Naval.HoloZoom").
 
     Ausgerichtet wie das Schiff: was im Hologramm vorn liegt, liegt auch vor
-    dem Bug. Mitte = Map-Schiff, Ringe in der Schiffsebene, Kontakte in
+    dem Bug. Um das eigene Schiff die sechs Schildzonen (blau = voll,
+    rot = schwach), das Ziel des Waffenleitstands mit rotem Ring, unbekannte
+    Kontakte grau. Mitte = Map-Schiff, Ringe in der Schiffsebene, Kontakte in
     Fraktions-/Beziehungsfarben mit Hoehenlinie, Himmelskoerper als
     Drahtkugeln; ausserhalb des Bereichs Richtungsmarken am Rand.
 ]]
@@ -18,7 +20,7 @@ Naval.C = Naval.C or {static = nil, system = nil, info = {}, snaps = {}, events 
 local C = Naval.C
 
 local COL_HOLO = Color(90, 190, 255)
-local REL_COLOR = {ally = Color(90, 170, 255), neutral = Color(235, 220, 120), hostile = Color(255, 80, 70)}
+local REL_COLOR = {ally = Color(90, 170, 255), neutral = Color(235, 220, 120), hostile = Color(255, 80, 70), unknown = Color(190, 190, 200)}
 local MAT_WHITE = Material("models/debug/debugwhite")
 local MAT_WIRE = Material("models/wireframe")
 local MAT_GLOW = Material("sprites/light_glow02_add")
@@ -133,15 +135,21 @@ local function DrawHolo()
     render.MaterialOverride(MAT_WHITE)
 
     -- Map-Schiff in der Mitte (Mindestgroesse, damit erkennbar)
+    local mapLen = 0
     for _, info in pairs(C.info or {}) do
         if info.mapShip then
             local class = static.classes[info.classId]
             if class and class.model then
-                DrawShipModel("map", class.model, center, Q.ToAngle(qbm), class.lengthM * shipScale,
+                mapLen = class.lengthM * shipScale
+                DrawShipModel("map", class.model, center, Q.ToAngle(qbm), mapLen,
                     Color(120, 255, 160), 0.55 * flicker)
             end
         end
     end
+
+    local combat = C.status and C.status.combat
+    local targetId = combat and combat.target and combat.target.id
+    local targetMark
 
     -- Schiffe
     local seen = {map = true}
@@ -159,7 +167,10 @@ local function DrawHolo()
             seen[id] = true
             DrawShipModel(id, class.model, pos, Q.ToAngle(Q.Mul(M, s.rot)), class.lengthM * shipScale, col, 0.6 * flicker)
 
-            labels[#labels + 1] = {pos = pos, text = info.name .. "  " .. FormatDist(dist), col = col, stem = true}
+            local text = info.name .. "  " .. FormatDist(dist)
+            if (info.ident or 2) >= 1 and s.hull then text = text .. "  " .. s.hull .. " %" end
+            labels[#labels + 1] = {pos = pos, text = text, col = col, stem = true}
+            if id == targetId then targetMark = {pos = pos, r = math.max(class.lengthM * shipScale * 0.7, 2.5)} end
         end
     end
 
@@ -200,6 +211,38 @@ local function DrawHolo()
                 labels[#labels + 1] = {pos = pos, text = body.name .. "  " .. FormatDist(dist), col = col}
             end
         end
+    end
+
+    -- Schildzonen um das eigene Schiff
+    if combat and combat.zones and mapLen > 0 then
+        render.SetMaterial(MAT_GLOW)
+        local axes = {front = {1, 0, 0}, back = {-1, 0, 0}, left = {0, 1, 0}, right = {0, -1, 0}, top = {0, 0, 1}, bottom = {0, 0, -1}}
+        for zone, a in pairs(axes) do
+            local z = combat.zones[zone]
+            if z then
+                local frac = (z.e + z.m) / math.max(z.ce + z.cm, 1)
+                local d = Q.RotateVec(qbm, {x = a[1], y = a[2], z = a[3]})
+                local reach = (zone == "front" or zone == "back") and mapLen * 0.62 or mapLen * 0.32
+                local p = center + Vector(d.x, d.y, d.z) * reach
+                local col = combat.up and Color(255 - frac * 175, 80 + frac * 110, 80 + frac * 175, 200 * flicker) or Color(255, 60, 50, 90 * flicker)
+                local size = math.max(mapLen * 0.25, 3) * (0.5 + frac * 0.7)
+                render.DrawSprite(p, size, size, col)
+            end
+        end
+    end
+
+    -- Ziel: drehender roter Ring
+    if targetMark then
+        render.SetColorMaterial()
+        local spin = CurTime() * 90
+        local last
+        for a = 0, 360, 15 do
+            local ang = math.rad(a + spin)
+            local p = targetMark.pos + Vector(math.cos(ang) * targetMark.r, math.sin(ang) * targetMark.r, 0)
+            if last and a % 30 ~= 0 then render.DrawLine(last, p, Color(255, 60, 50, 230 * flicker), true) end
+            last = p
+        end
+        labels[#labels + 1] = {pos = targetMark.pos + Vector(0, 0, targetMark.r), text = "ZIEL", col = Color(255, 70, 60)}
     end
 
     -- Hoehenlinien und Beschriftungen

@@ -161,6 +161,34 @@ Naval.SettingInfo = {
         {"combat_shield_regen_mult", "Nachladen der Schilde", "Faktor"},
         {"combat_wreck_time", "Wrack sichtbar für", "s"},
     }},
+    {"Schadenskontrolle", {
+        {"dc_max_incidents", "Gleichzeitige Schäden an Bord", "Anzahl"},
+        {"dc_incident_chance", "Chance auf Schaden je Treffer", "0..1"},
+        {"dc_repair_time", "Reparatur je Schweregrad", "s"},
+        {"dc_repair_sub", "Subsystem-Reparatur je Schaden", "Anteil"},
+        {"dc_team_count", "Reparaturtrupps", "Anzahl"},
+        {"dc_team_rate", "Trupp-Reparatur je Sekunde", "Anteil"},
+        {"dc_fire_damage", "Feuer: Schaden an Spielern", "pro s"},
+        {"dc_fire_spread", "Feuer greift über nach", "s"},
+    }},
+    {"Alarmstufen", {
+        {"alert_auto_yellow", "Bei Beschuss automatisch Gelb", "1 = an"},
+        {"alert_defcon_normal", "DEFCON bei Normal", "0 = nicht ändern"},
+        {"alert_defcon_yellow", "DEFCON bei Gelb", "0 = nicht ändern"},
+        {"alert_defcon_red", "DEFCON bei Rot", "0 = nicht ändern"},
+        {"alert_alarm_seconds", "Alarmton bei Rot", "s"},
+    }},
+    {"Sensoren und Schildmodulation", {
+        {"sensor_ident_range", "Automatisch erkannt bis", "m"},
+        {"sensor_scan_time", "Dauer eines Scans", "s"},
+        {"shield_mod_bonus", "Modulation: weniger Schildverbrauch", "Anteil"},
+        {"shield_mod_duration", "Modulation hält", "s"},
+        {"shield_mod_cooldown", "Sperre nach Fehlversuch", "s"},
+    }},
+    {"Autopilot", {
+        {"autopilot_clearance", "Sicherheitsabstand", "× Radius"},
+        {"autopilot_margin", "Sicherheitsabstand zusätzlich", "m"},
+    }},
     {"Sensoren und Darstellung", {
         {"sensor_default", "Sensorreichweite (Standard)", "m"},
         {"near_ship_range", "Schiffe als Modell bis", "m"},
@@ -269,7 +297,9 @@ function Naval.AdminMenu(base)
     R.Text("Neue Konsole: auf die Stelle schauen, an der sie stehen soll, Station wählen, \"Aufstellen\". "
         .. "Ausrichten: mit dem Physgun greifen und drehen (nur Admins) oder mit Links/Rechts/Kippen (je 15°), "
         .. "danach \"Speichern\". \"Hierher\" setzt eine Konsole an deinen Blickpunkt (auch den unsichtbaren "
-        .. "Hologramm-Projektor). Taktik-Hologramm: Projektor auf den Holotisch, dazu Ein/Aus, näher, weiter.")
+        .. "Hologramm-Projektor). Taktik-Hologramm: Projektor auf den Holotisch, dazu Ein/Aus, näher, weiter. "
+        .. "Schadenspunkte: unsichtbare Orte für Funken, Rauch und Feuer - je Punkt Subsystem und Ortsname festlegen. "
+        .. "Unsichtbare Punkte siehst du, solange du Physgun oder Toolgun hältst.")
 
     local stations = {}
     for id, def in SortedPairs(Naval.Stations or {}) do stations[#stations + 1] = {id, def.name} end
@@ -288,22 +318,25 @@ function Naval.AdminMenu(base)
 
         local list = ents.FindByClass("pd_naval_console")
         table.sort(list, function(a, b) return a:GetConsoleId() < b:GetConsoleId() end)
-        consoleList:SetTall(math.max(#list * 70, 10))
+        local total = 0
+        for _, ent in ipairs(list) do total = total + (ent:GetStation() == "damage_point" and 104 or 70) end
+        consoleList:SetTall(math.max(total, 10))
 
         for _, ent in ipairs(list) do
             local def = ent:StationDef()
             local id = ent:EntIndex()
+            local isPoint = ent:GetStation() == "damage_point"
 
             local card = vgui.Create("DPanel", consoleList)
             card:Dock(TOP)
             card:DockMargin(0, 0, 0, 6)
-            card:SetTall(64)
+            card:SetTall(isPoint and 98 or 64)
             card.Paint = function(s, w, h)
                 draw.RoundedBox(0, 0, 0, w, h, COL.panel)
                 if not IsValid(ent) then return end
                 local dist = math.Round(LocalPlayer():GetPos():Distance(ent:GetPos()) / 52.5)
                 draw.SimpleText(((def and def.name) or ent:GetStation()) .. " #" .. ent:GetConsoleId(), "MLIB.16", 8, 15, COL.text, nil, TEXT_ALIGN_CENTER)
-                draw.SimpleText(dist .. " m", "MLIB.12", 8, 30, COL.dim)
+                draw.SimpleText(dist .. " m", "MLIB.12", 8, isPoint and h - 24 or 30, COL.dim)
             end
 
             -- Zeile 1: Sperre, Entfernen
@@ -327,6 +360,39 @@ function Naval.AdminMenu(base)
             lock:SetWide(80)
             lock.Think = function(s)
                 if IsValid(ent) then s.Label = ent:GetLocked() and "Gesperrt" or "Frei" end
+            end
+
+            -- Schadenspunkt: Subsystem und Ortsname
+            if isPoint then
+                local mid = vgui.Create("DPanel", card)
+                mid:Dock(TOP)
+                mid:DockMargin(0, 2, 0, 0)
+                mid:SetTall(30)
+                mid.Paint = nil
+
+                local subCombo = vgui.Create("DComboBox", mid)
+                subCombo:Dock(LEFT)
+                subCombo:SetWide(170)
+                subCombo:SetFont("MLIB.14")
+                local current = ent:GetNWString("PD_NavalSub", "")
+                subCombo:AddChoice("Kein Subsystem", "", current == "")
+                subCombo:AddChoice("Hülle", "hull", current == "hull")
+                for subId, name in SortedPairsByValue(Naval.SubsystemNames) do
+                    subCombo:AddChoice(name, subId, current == subId)
+                end
+
+                local labelEntry = vgui.Create("DTextEntry", mid)
+                labelEntry:Dock(FILL)
+                labelEntry:DockMargin(4, 0, 4, 0)
+                labelEntry:SetFont("MLIB.14")
+                labelEntry:SetPlaceholderText("Ortsname, z. B. Hangar 2")
+                labelEntry:SetValue(ent:GetNWString("PD_NavalLabel", ""))
+
+                local apply = UI.Button(mid, "Übernehmen", function()
+                    Send("console_data", {ent = id, sub = R.ComboValue(subCombo) or "", label = labelEntry:GetValue()})
+                end, function() return COL.ok end)
+                apply:Dock(RIGHT)
+                apply:SetWide(90)
             end
 
             -- Zeile 2: Ausrichtung

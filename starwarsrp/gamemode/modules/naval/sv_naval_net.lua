@@ -110,6 +110,8 @@ local function BuildStatic()
         settings = {render_scale = s.render_scale, near_ship_range = s.near_ship_range, render_far = s.render_far,
             jump_align_tolerance = s.jump_align_tolerance, galaxy_unit = s.galaxy_unit,
             holo_radius = s.holo_radius, holo_height = s.holo_height,
+            alert_alarm_seconds = s.alert_alarm_seconds, mass_shadow_factor = s.mass_shadow_factor,
+            autopilot_clearance = s.autopilot_clearance, autopilot_margin = s.autopilot_margin,
             ["mapcal_" .. ((Naval.GetProfile() or {}).key or "")] = Naval.GetProfile() and s["mapcal_" .. Naval.GetProfile().key] or nil},
         classes = classes, factions = factions, relations = Naval.Relations,
         systems = systems, routes = routes,
@@ -170,14 +172,25 @@ local function VisibleShips(mapShip)
     return list
 end
 
+-- Unbekannte Kontakte (Sensoren, Stufe 0): Modell ja (man sieht es), Name
+-- und Fraktion nicht
+local function Ident(mapShip, ship)
+    return mapShip and Naval.IdentLevel and Naval.IdentLevel(mapShip, ship) or 2
+end
+
 local function SendShipInfo(list, target)
     local info = {}
+    local mapShip = Naval.GetMapShip()
 
     for _, ship in ipairs(list) do
-        info[#info + 1] = {ship.id, ship.name, ship.classId, ship.factionId}
+        local level = Ident(mapShip, ship)
+        if level >= 1 then
+            info[#info + 1] = {ship.id, ship.name, ship.classId, ship.factionId, false, level}
+        else
+            info[#info + 1] = {ship.id, "Unbekannter Kontakt", ship.classId, "unknown", false, 0}
+        end
     end
 
-    local mapShip = Naval.GetMapShip()
     if mapShip then
         info[#info + 1] = {mapShip.id, mapShip.name, mapShip.classId, mapShip.factionId, true}
     end
@@ -215,7 +228,7 @@ local function SendSnap()
 
     local list = VisibleShips(mapShip)
     local ids = {}
-    for _, s in ipairs(list) do ids[#ids + 1] = s.id .. ":" .. s.factionId .. ":" .. s.name end
+    for _, s in ipairs(list) do ids[#ids + 1] = s.id .. ":" .. s.factionId .. ":" .. s.name .. ":" .. Ident(mapShip, s) end
     local key = table.concat(ids, ",")
 
     if key ~= visibleKey then

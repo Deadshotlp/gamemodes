@@ -18,8 +18,17 @@ local function Cmd(station, action, args)
     net.SendToServer()
 end
 
+Naval.CombatCmd = Cmd
+
 local function Combat()
     return C.status and C.status.combat
+end
+
+-- Erkennungsstufe eines Kontakts (Sensoren): 0 unbekannt, 1, 2 genau
+function Naval.ContactLevel(id)
+    local info = C.info[id]
+    if info and info.ident then return info.ident end
+    return 2
 end
 
 local ZONE_SHORT = {front = "B", back = "H", left = "BB", right = "SB", top = "O", bottom = "U"}
@@ -72,7 +81,7 @@ local function OpenWeapons(console)
         return list
     end
 
-    local REL_COL = {hostile = COL.bad, neutral = COL.warn, ally = COL.accent}
+    local REL_COL = {hostile = COL.bad, neutral = COL.warn, ally = COL.accent, unknown = Color(175, 175, 185)}
 
     for i = 1, 30 do
         local row = contacts:Add("DButton")
@@ -97,9 +106,11 @@ local function OpenWeapons(console)
             surface.DrawRect(0, 0, 4, h)
             local class = C.static and C.static.classes[c.classId]
             draw.SimpleText(c.name, "MLIB.16", 12, 4, COL.text)
-            draw.SimpleText(class and class.name or c.classId, "MLIB.12", 12, 24, COL.dim)
+            local known = Naval.ContactLevel(c.id) >= 1
+            draw.SimpleText(known and (class and class.name or c.classId) or ("Größe ca. " .. math.Round((class and class.lengthM or 0) / 50) * 50 .. " m"),
+                "MLIB.12", 12, 24, COL.dim)
             draw.SimpleText(DistText(c.dist), "MLIB.14", w - 8, 4, COL.text, TEXT_ALIGN_RIGHT)
-            HullBar(UI, w - 88, 26, 80, 10, c.hull / 100)
+            if known then HullBar(UI, w - 88, 26, 80, 10, c.hull / 100) end
             if selected then draw.SimpleText("ZIEL", "MLIB.12", w - 8, 36, COL.bad, TEXT_ALIGN_RIGHT) end
         end
         rows[i] = row
@@ -120,7 +131,8 @@ local function OpenWeapons(console)
         local t = cs.target
         if t then
             draw.SimpleText("ZIEL: " .. t.name, "MLIB.22", 14, 10, COL.bad)
-            draw.SimpleText(("%s  -  liegt %s  -  Hülle %d %%"):format(DistText(t.dist), Naval.ZoneNames[t.zone] or "?", t.hull),
+            local known = Naval.ContactLevel(t.id) >= 1
+            draw.SimpleText(("%s  -  liegt %s%s"):format(DistText(t.dist), Naval.ZoneNames[t.zone] or "?", known and ("  -  Hülle " .. t.hull .. " %") or ""),
                 "MLIB.16", 14, 40, COL.text)
         else
             draw.SimpleText("Kein Ziel - Kontakt links wählen", "MLIB.18", 14, 14, COL.dim)
@@ -176,6 +188,48 @@ local function OpenWeapons(console)
             if b then s.Label = b.on and "AN" or "AUS" end
         end
         batteryButtons[i] = toggle
+    end
+
+    -- Subsystem-Ziel (nach genauem Scan an den Sensoren)
+    local subRow = vgui.Create("DPanel", main)
+    subRow:SetPos(8, main:GetTall() - 48)
+    subRow:SetSize(main:GetWide() - 16, 40)
+    subRow.Paint = function(s, w, h)
+        local cs = Combat()
+        draw.RoundedBox(0, 0, 0, w, h, Color(30, 38, 50))
+        draw.SimpleText("Subsystem-Ziel", "MLIB.16", 8, h / 2, COL.text, nil, TEXT_ALIGN_CENTER)
+        if cs and cs.target and Naval.ContactLevel(cs.target.id) < 2 then
+            draw.SimpleText("erst an den Sensoren genau scannen", "MLIB.14", w - 8, h / 2, COL.dim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+        end
+    end
+
+    local subCombo = vgui.Create("DComboBox", subRow)
+    subCombo:SetPos(150, 6)
+    subCombo:SetSize(300, 28)
+    subCombo:SetFont("MLIB.14")
+    subCombo.OnSelect = function(_, _, _, data)
+        surface.PlaySound("buttons/button15.wav")
+        Cmd("weapons", "subtarget", {sub = data})
+    end
+    local subKey
+    subCombo.Think = function(s)
+        local cs = Combat()
+        local tid = cs and cs.target and cs.target.id
+        local open = tid and Naval.ContactLevel(tid) >= 2
+        s:SetVisible(open == true)
+        if not open then subKey = nil return end
+
+        local key = tostring(tid) .. ":" .. tostring(cs.targetSub)
+        if key == subKey or s:IsMenuOpen() then return end
+        subKey = key
+
+        s:Clear()
+        s:AddChoice("Ganzes Schiff", "", cs.targetSub == nil)
+        local sens = C.status and C.status.sensors
+        local contact = sens and sens.contacts and sens.contacts[tostring(tid)]
+        for _, sub in ipairs(contact and contact.subs or {}) do
+            s:AddChoice(("%s (%d %%)"):format(Naval.SubsystemNames[sub.id] or sub.id, sub.pct), sub.id, cs.targetSub == sub.id)
+        end
     end
 
     local fire = UI.Button(frame, "", function()
@@ -313,6 +367,30 @@ local function OpenShields(console)
     even:SetPos(frame:GetWide() - 330, 620)
     even:SetSize(300, 40)
 
+    local mod = UI.Button(frame, "Modulation anpassen", function()
+        Cmd("shields", "mod_start", {})
+    end, function()
+        local cs = Combat()
+        return cs and cs.modLeft and COL.ok or COL.accent
+    end)
+    mod:SetPos(30, 620)
+    mod:SetSize(330, 40)
+
+    local modInfo = vgui.Create("DPanel", frame)
+    modInfo:SetPos(370, 620)
+    modInfo:SetSize(frame:GetWide() - 710, 40)
+    modInfo.Paint = function(s, w, h)
+        local cs = Combat()
+        if not cs then return end
+        if cs.modLeft then
+            draw.SimpleText("Modulation aktiv: " .. Naval.UI.Fmt(cs.modLeft), "MLIB.14", 4, h / 2, COL.ok, nil, TEXT_ALIGN_CENTER)
+        elseif cs.modBlocked then
+            draw.SimpleText(("Modulator kühlt ab: %d s"):format(cs.modBlocked), "MLIB.14", 4, h / 2, COL.warn, nil, TEXT_ALIGN_CENTER)
+        else
+            draw.SimpleText("Modulation: Standard", "MLIB.14", 4, h / 2, COL.dim, nil, TEXT_ALIGN_CENTER)
+        end
+    end
+
     local baseThink = frame.Think
     frame.Think = function(s)
         if baseThink then baseThink(s) end
@@ -320,6 +398,77 @@ local function OpenShields(console)
         toggle.Label = cs and cs.up and "SCHILDE SENKEN" or "SCHILDE HEBEN"
     end
 end
+
+--------------------------------------------------------------------------------
+-- Schildmodulation (Minispiel): eigene Welle auf die feindliche Frequenz
+-- und Phase einstellen, dann uebernehmen. 30 s Zeit.
+--------------------------------------------------------------------------------
+
+local function OpenModGame(targetF, targetP)
+    local UI = Naval.UI
+    local COL = UI.COL
+    local frame = UI.Frame("SCHILDMODULATION", 760, 480)
+    local started = CurTime()
+    local f, p = 5, 180
+
+    local wave = vgui.Create("DPanel", frame)
+    wave:SetPos(20, 55)
+    wave:SetSize(frame:GetWide() - 40, 230)
+    wave.Paint = function(s, w, h)
+        draw.RoundedBox(0, 0, 0, w, h, Color(6, 10, 16))
+        local t = CurTime()
+        local function DrawWave(freq, phase, col, noise)
+            local last
+            for x = 0, w, 3 do
+                local a = x / w * math.pi * 2 * freq * 0.5 + math.rad(phase)
+                local y = h / 2 - math.sin(a) * h * 0.35 + (noise and math.sin(x * 0.7 + t * 9) * 4 or 0)
+                if last then
+                    surface.SetDrawColor(col)
+                    surface.DrawLine(last[1], last[2], x, y)
+                end
+                last = {x, y}
+            end
+        end
+        DrawWave(targetF, targetP, Color(255, 110, 90), true)
+        DrawWave(f, p, Color(110, 200, 255), false)
+        draw.SimpleText("Feindliche Waffenfrequenz", "MLIB.14", 8, 6, Color(255, 110, 90))
+        draw.SimpleText("Schildmodulation", "MLIB.14", 8, 24, Color(110, 200, 255))
+        draw.SimpleText(("Zeit: %d s"):format(math.max(0, 30 - (CurTime() - started))), "MLIB.14", w - 8, 6, COL.text, TEXT_ALIGN_RIGHT)
+    end
+
+    local function Slider(y, label, min, max, decimals, get, set)
+        local sl = vgui.Create("DNumSlider", frame)
+        sl:SetPos(20, y)
+        sl:SetSize(frame:GetWide() - 40, 40)
+        sl:SetText(label)
+        sl:SetMin(min) sl:SetMax(max) sl:SetDecimals(decimals)
+        sl:SetValue(get())
+        sl.Label:SetTextColor(COL.text)
+        sl.Label:SetFont("MLIB.16")
+        sl.OnValueChanged = function(_, v) set(v) end
+        return sl
+    end
+
+    Slider(300, "Frequenz", 1, 9, 1, function() return f end, function(v) f = v end)
+    Slider(345, "Phase", 0, 359, 0, function() return p end, function(v) p = v end)
+
+    local apply = UI.Button(frame, "ÜBERNEHMEN", function()
+        Cmd("shields", "mod_submit", {f = f, p = p})
+        frame:Close()
+    end, function() return COL.ok end)
+    apply:SetPos(20, frame:GetTall() - 70)
+    apply:SetSize(frame:GetWide() - 40, 50)
+
+    frame.Think = function(s)
+        if CurTime() - started > 30 then s:Close() end
+    end
+end
+
+net.Receive("PD.Naval.ModGame", function()
+    local f = net.ReadFloat()
+    local p = net.ReadUInt(9)
+    OpenModGame(f, p)
+end)
 
 --------------------------------------------------------------------------------
 -- Maschinenraum

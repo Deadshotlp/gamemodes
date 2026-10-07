@@ -3,6 +3,11 @@
 
     Links Systemsuche, rechts 2D-Galaxiekarte (Draufsicht, x/y in Parsec) mit
     Hyperraumrouten. Ziehen = verschieben, Mausrad = zoomen, Klick = Ziel.
+
+    Umschalter oben rechts: Systemkarte (Draufsicht auf das aktuelle System,
+    Meter). Dort Himmelskoerper, Schiffe oder einen freien Punkt waehlen und
+    den Autopiloten starten (sv_naval_autopilot.lua): Anflug mit Umweg um
+    Planeten, Halten oder Orbit, Sprungpunkt ausserhalb des Massenschattens.
 ]]
 
 PD.Naval = PD.Naval or {}
@@ -15,6 +20,13 @@ local function SendNav(action, systemId)
     net.Start("PD.Naval.Nav")
     net.WriteString(action)
     if systemId then net.WriteString(systemId) end
+    net.SendToServer()
+end
+
+local function SendAuto(args)
+    net.Start("PD.Naval.Nav")
+    net.WriteString("auto")
+    net.WriteString(util.TableToJSON(args) or "{}")
     net.SendToServer()
 end
 
@@ -217,6 +229,368 @@ end
 
 Naval.CreateGalaxyMap = CreateMap
 
+--------------------------------------------------------------------------------
+-- Systemkarte (Draufsicht x/y, Meter, logarithmischer Zoom)
+--------------------------------------------------------------------------------
+
+local BODY_COLOR = {star = Color(255, 220, 120), planet = Color(120, 200, 180), moon = Color(170, 175, 185)}
+
+local function DrawCircle(x, y, r, col)
+    if r < 1 or r > 40000 then return end
+    surface.SetDrawColor(col)
+    local segments = math.Clamp(math.floor(r / 2), 16, 72)
+    local lx, ly
+    for i = 0, segments do
+        local a = i / segments * math.pi * 2
+        local px, py = x + math.cos(a) * r, y + math.sin(a) * r
+        if lx then surface.DrawLine(lx, ly, px, py) end
+        lx, ly = px, py
+    end
+end
+
+local function CreateSystemMap(parent, onSelect)
+    local UI = Naval.UI
+    local COL = UI.COL
+
+    local map = vgui.Create("DPanel", parent)
+    map.Scale = 1 / 20000       -- Pixel je Meter
+    map.Center = nil            -- nil = eigenes Schiff
+    map.Selected = nil          -- {kind, id, pos, name}
+
+    local function Origin(s)
+        if s.Center then return s.Center end
+        local view = C.View and C.View()
+        return view and view.pos or {x = 0, y = 0, z = 0}
+    end
+
+    local function ToScreen(s, p)
+        local o = Origin(s)
+        return s:GetWide() / 2 + (p.x - o.x) * s.Scale, s:GetTall() / 2 - (p.y - o.y) * s.Scale
+    end
+
+    local function ToWorld(s, sx, sy)
+        local o = Origin(s)
+        return {x = o.x + (sx - s:GetWide() / 2) / s.Scale, y = o.y - (sy - s:GetTall() / 2) / s.Scale, z = o.z}
+    end
+
+    map.Paint = function(s, w, h)
+        draw.RoundedBox(0, 0, 0, w, h, Color(6, 9, 14))
+        local view = C.View and C.View()
+        local system = C.system
+        if not view or not system or not system.bodiesById then
+            draw.SimpleText("Keine Systemdaten", "MLIB.18", w / 2, h / 2, COL.dim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+            return
+        end
+
+        local px, py = s:LocalToScreen(0, 0)
+        render.SetScissorRect(px, py, px + w, py + h, true)
+
+        local settings = (C.static and C.static.settings) or {}
+        local shadow = settings.mass_shadow_factor or 4
+        local clearF, clearM = settings.autopilot_clearance or 1.6, settings.autopilot_margin or 5000
+        local mx, my = s:CursorPos()
+        local hover, hoverD = nil, 14
+        local now = Naval.Now()
+
+        -- Himmelskoerper
+        for _, body in pairs(system.bodiesById) do
+            local pos = Naval.BodyPos(body, system.bodiesById, now)
+            local x, y = ToScreen(s, pos)
+            local r = math.max((body.radius or 0) * s.Scale, 3)
+            local col = BODY_COLOR[body.type] or Color(150, 160, 170)
+
+            if x + r * shadow > 0 and x - r * shadow < w and y + r * shadow > 0 and y - r * shadow < h then
+                -- Massenschatten und Sicherheitsabstand
+                if body.type == "star" or body.type == "planet" or body.type == "moon" then
+                    DrawCircle(x, y, (body.radius or 0) * shadow * s.Scale, Color(240, 190, 70, 40))
+                end
+                DrawCircle(x, y, ((body.radius or 0) * clearF + clearM) * s.Scale, Color(240, 90, 80, 50))
+
+                draw.NoTexture()
+                surface.SetDrawColor(col.r, col.g, col.b, 60)
+                if r > 4 and r < 4000 then
+                    local poly = {}
+                    for i = 0, 31 do
+                        local a = i / 32 * math.pi * 2
+                        poly[#poly + 1] = {x = x + math.cos(a) * r, y = y + math.sin(a) * r}
+                    end
+                    surface.DrawPoly(poly)
+                end
+                DrawCircle(x, y, r, col)
+
+                if body.type ~= "moon" or s.Scale * (body.radius or 0) > 1 then
+                    draw.SimpleText(body.name, "MLIB.14", x + r + 4, y - 8, col)
+                end
+
+                local d = math.sqrt((mx - x) ^ 2 + (my - y) ^ 2)
+                if d < math.max(r, 10) and d < hoverD + r then
+                    hover, hoverD = {kind = "body", id = body.id, name = body.name, pos = pos}, d - r
+                end
+            end
+        end
+
+        -- Schiffe
+        local myFaction = Naval.MapShipFaction and Naval.MapShipFaction()
+        local REL = Naval.RelationColors or {}
+        for id, sh in pairs(view.ships or {}) do
+            local info = C.info[id]
+            if info and sh.state ~= "destroyed" then
+                local x, y = ToScreen(s, sh.pos)
+                if x > -10 and x < w + 10 and y > -10 and y < h + 10 then
+                    local col = REL[Naval.ClientRelation(myFaction, info.factionId)] or COL.text
+                    draw.RoundedBox(0, x - 3, y - 3, 6, 6, col)
+                    draw.SimpleText(info.name, "MLIB.12", x + 6, y - 6, col)
+
+                    local d = math.sqrt((mx - x) ^ 2 + (my - y) ^ 2)
+                    if d < hoverD then hover, hoverD = {kind = "ship", id = id, name = info.name, pos = sh.pos}, d end
+                end
+            end
+        end
+
+        -- Geplanter Weg des Autopiloten
+        local auto = C.status and C.status.auto
+        if auto and auto.path and #auto.path > 1 then
+            surface.SetDrawColor(COL.ok)
+            for i = 2, #auto.path do
+                local a, b = auto.path[i - 1], auto.path[i]
+                local x1, y1 = ToScreen(s, {x = a[1], y = a[2]})
+                local x2, y2 = ToScreen(s, {x = b[1], y = b[2]})
+                surface.DrawLine(x1, y1, x2, y2)
+                surface.DrawLine(x1 + 1, y1, x2 + 1, y2)
+                draw.RoundedBox(0, x2 - 2, y2 - 2, 5, 5, COL.ok)
+            end
+        end
+
+        -- Eigenes Schiff mit Bugrichtung
+        local x, y = ToScreen(s, view.pos)
+        local fwd = Naval.Q.Forward(view.rot)
+        local fl = math.sqrt(fwd.x * fwd.x + fwd.y * fwd.y)
+        local fx, fy = fl > 0.01 and fwd.x / fl or 1, fl > 0.01 and fwd.y / fl or 0
+        surface.SetDrawColor(COL.ok)
+        surface.DrawLine(x, y, x + fx * 18, y - fy * 18)
+        draw.RoundedBox(4, x - 4, y - 4, 8, 8, COL.ok)
+
+        -- Auswahl
+        local sel = s.Selected
+        if sel then
+            local p = sel.kind == "ship" and view.ships[sel.id] and view.ships[sel.id].pos
+                or (sel.kind == "body" and system.bodiesById[sel.id] and Naval.BodyPos(system.bodiesById[sel.id], system.bodiesById, now))
+                or sel.pos
+            if p then
+                local sx, sy = ToScreen(s, p)
+                surface.SetDrawColor(COL.warn)
+                surface.DrawOutlinedRect(sx - 8, sy - 8, 17, 17, 2)
+                if sel.kind == "point" then draw.SimpleText("Wegpunkt", "MLIB.14", sx + 10, sy - 8, COL.warn) end
+            end
+        end
+
+        s.Hover = hover
+        if hover then
+            local hx, hy = ToScreen(s, hover.pos)
+            surface.SetDrawColor(COL.accent)
+            surface.DrawOutlinedRect(hx - 7, hy - 7, 15, 15, 1)
+        end
+
+        render.SetScissorRect(0, 0, 0, 0, false)
+
+        local per100 = 100 / s.Scale
+        draw.SimpleText("100 px = " .. (Naval.FormatDist and Naval.FormatDist(per100) or math.Round(per100 / 1000) .. " km"), "MLIB.14", 8, h - 22, COL.dim)
+        draw.SimpleText(s.Center and "Rechtsklick: zurück zum Schiff" or "Mitte: eigenes Schiff", "MLIB.12", w - 8, h - 20, COL.dim, TEXT_ALIGN_RIGHT)
+        draw.SimpleText("gelb = Massenschatten, rot = Sicherheitsabstand", "MLIB.12", w - 8, 8, COL.dim, TEXT_ALIGN_RIGHT)
+    end
+
+    map.OnMousePressed = function(s, code)
+        if code == MOUSE_RIGHT then
+            s.Center = nil
+            return
+        end
+        if code ~= MOUSE_LEFT then return end
+        s.DragStart = {s:CursorPos()}
+        s.DragCenter = Origin(s)
+        s.Moved = false
+        s:MouseCapture(true)
+    end
+
+    map.OnMouseReleased = function(s, code)
+        if code ~= MOUSE_LEFT then return end
+        s:MouseCapture(false)
+        s.DragStart = nil
+        if s.Moved then return end
+
+        if s.Hover then
+            s.Selected = s.Hover
+        else
+            local mx, my = s:CursorPos()
+            s.Selected = {kind = "point", pos = ToWorld(s, mx, my), name = "Wegpunkt"}
+        end
+        if onSelect then onSelect(s.Selected) end
+    end
+
+    map.Think = function(s)
+        if not s.DragStart then return end
+        local mx, my = s:CursorPos()
+        local dx, dy = mx - s.DragStart[1], my - s.DragStart[2]
+        if math.abs(dx) + math.abs(dy) > 4 then s.Moved = true end
+        if s.Moved then
+            s.Center = {x = s.DragCenter.x - dx / s.Scale, y = s.DragCenter.y + dy / s.Scale, z = s.DragCenter.z}
+        end
+    end
+
+    map.OnMouseWheeled = function(s, delta)
+        local mx, my = s:CursorPos()
+        local before = ToWorld(s, mx, my)
+        s.Scale = math.Clamp(s.Scale * (delta > 0 and 1.3 or 1 / 1.3), 1e-11, 0.05)
+        local after = ToWorld(s, mx, my)
+        local o = Origin(s)
+        s.Center = {x = o.x + before.x - after.x, y = o.y + before.y - after.y, z = o.z}
+        return true
+    end
+
+    return map
+end
+
+local function CreateSystemSide(parent, map)
+    local UI = Naval.UI
+    local COL = UI.COL
+
+    local side = vgui.Create("DPanel", parent)
+    side.Paint = nil
+    local state = {mode = "stop", speed = 1, alt = nil}
+
+    local info = vgui.Create("DPanel", side)
+    info:Dock(TOP)
+    info:SetTall(250)
+    info.Paint = function(s, w, h)
+        draw.RoundedBox(0, 0, 0, w, h, COL.panel)
+        local y = 8
+        local function Line(text, col)
+            if #text > 44 then text = string.sub(text, 1, 42) .. "..." end
+            draw.SimpleText(text, "MLIB.16", 10, y, col or COL.text)
+            y = y + 22
+        end
+
+        local sel = map.Selected
+        local view = C.View and C.View()
+        Line("System: " .. Naval.SystemName(C.status and C.status.system), COL.dim)
+        if sel and view then
+            Line("Ziel: " .. (sel.name or "?"), COL.accent)
+            local p = sel.pos
+            if sel.kind == "ship" and view.ships[sel.id] then p = view.ships[sel.id].pos end
+            if p then Line("Entfernung: " .. (Naval.FormatDist and Naval.FormatDist(Naval.V3.Dist({x = p.x, y = p.y, z = p.z or view.pos.z}, view.pos)) or "?")) end
+            if sel.kind == "body" then
+                local body = C.system and C.system.bodiesById[sel.id]
+                if body then Line(("Radius %s"):format(Naval.FormatDist and Naval.FormatDist(body.radius or 0) or "?"), COL.dim) end
+            end
+        else
+            Line("Ziel auf der Karte wählen:", COL.dim)
+            Line("Planet, Mond, Stern, Schiff", COL.dim)
+            Line("oder freier Punkt", COL.dim)
+        end
+
+        y = y + 8
+        local auto = C.status and C.status.auto
+        if auto then
+            Line("Autopilot: " .. (auto.label or "?"), COL.ok)
+            if auto.arrived then
+                Line(auto.mode == "orbit" and "Im Orbit" or "Ziel erreicht", COL.ok)
+            else
+                Line(("Rest %s - ca. %s"):format(Naval.FormatDist and Naval.FormatDist(auto.remaining or 0) or "?", UI.Fmt(auto.eta)), COL.text)
+                if auto.path and #auto.path > 2 then Line("Umweg um Himmelskörper", COL.warn) end
+            end
+        else
+            Line("Autopilot aus", COL.dim)
+        end
+    end
+
+    local function Row(height)
+        local p = vgui.Create("DPanel", side)
+        p:Dock(TOP)
+        p:DockMargin(0, 6, 0, 0)
+        p:SetTall(height)
+        p.Paint = nil
+        return p
+    end
+
+    -- Ankunft: halten oder Orbit
+    local modeRow = Row(34)
+    local stopBtn = UI.Button(modeRow, "Anfliegen + halten", function() state.mode = "stop" end,
+        function() return state.mode == "stop" and COL.ok or COL.dim end)
+    local orbitBtn = UI.Button(modeRow, "Orbit", function() state.mode = "orbit" end,
+        function() return state.mode == "orbit" and COL.ok or COL.dim end)
+    modeRow.PerformLayout = function(s, w, h)
+        stopBtn:SetPos(0, 0) stopBtn:SetSize(w * 0.6 - 3, h)
+        orbitBtn:SetPos(w * 0.6 + 3, 0) orbitBtn:SetSize(w * 0.4 - 3, h)
+    end
+
+    -- Geschwindigkeit
+    local speedRow = Row(34)
+    local speeds = {{"25 %", 0.25}, {"50 %", 0.5}, {"75 %", 0.75}, {"Voll", 1}}
+    local speedBtns = {}
+    for i, sp in ipairs(speeds) do
+        speedBtns[i] = UI.Button(speedRow, sp[1], function() state.speed = sp[2] end,
+            function() return state.speed == sp[2] and COL.ok or COL.dim end)
+    end
+    speedRow.PerformLayout = function(s, w, h)
+        local bw = (w - 18) / 4
+        for i, b in ipairs(speedBtns) do b:SetPos((i - 1) * (bw + 6), 0) b:SetSize(bw, h) end
+    end
+
+    -- Abstand
+    local altRow = Row(34)
+    altRow.Paint = function(s, w, h)
+        draw.SimpleText("Abstand (km, leer = automatisch)", "MLIB.14", 0, h / 2, COL.dim, nil, TEXT_ALIGN_CENTER)
+    end
+    local altEntry = vgui.Create("DTextEntry", altRow)
+    altEntry:Dock(RIGHT)
+    altEntry:SetWide(90)
+    altEntry:SetFont("MLIB.16")
+    altEntry:SetNumeric(true)
+
+    local goRow = Row(42)
+    local goBtn = UI.Button(goRow, "AUTOPILOT STARTEN", function()
+        local sel = map.Selected
+        if not sel then return end
+        local km = tonumber(altEntry:GetValue())
+        local args = {kind = sel.kind, mode = state.mode, speed = state.speed, alt = km and km * 1000 or nil}
+        if sel.kind == "point" then
+            args.pos = {x = sel.pos.x, y = sel.pos.y, z = sel.pos.z}
+        else
+            args.id = sel.id
+        end
+        SendAuto(args)
+    end, function() return COL.ok end)
+    goBtn:Dock(FILL)
+
+    local jumpRow = Row(38)
+    local jumpBtn = UI.Button(jumpRow, "Zum Sprungpunkt (aus dem Massenschatten)", function()
+        SendAuto({kind = "jumppoint", speed = state.speed})
+    end)
+    jumpBtn:Dock(FILL)
+
+    local offRow = Row(38)
+    local offBtn = UI.Button(offRow, "Autopilot aus", function() SendNav("auto_off") end, function() return COL.bad end)
+    offBtn:Dock(FILL)
+
+    local hintRow = Row(60)
+    hintRow.Paint = function(s, w, h)
+        draw.SimpleText("Ziehen = verschieben, Mausrad = zoomen,", "MLIB.12", 0, 4, COL.dim)
+        draw.SimpleText("Rechtsklick = Ansicht aufs Schiff.", "MLIB.12", 0, 20, COL.dim)
+        draw.SimpleText("Steuern an der Steuerkonsole schaltet ab.", "MLIB.12", 0, 36, COL.dim)
+    end
+
+    side.Think = function()
+        local st = C.status or {}
+        local sel = map.Selected
+        goBtn.Disabled = not sel or st.state ~= "normal"
+        orbitBtn.Disabled = not sel or sel.kind ~= "body"
+        if orbitBtn.Disabled and state.mode == "orbit" then state.mode = "stop" end
+        jumpBtn.Disabled = not (st.nav and st.nav.ready and st.nav.valid) or st.state ~= "normal"
+        offBtn.Disabled = st.auto == nil
+    end
+
+    return side
+end
+
 local function OpenNavcomputer(console)
     local UI = Naval.UI
     local COL = UI.COL
@@ -338,11 +712,38 @@ local function OpenNavcomputer(console)
         end
     end
 
+    -- Systemkarte (Autopilot im System)
+    local sysMap = CreateSystemMap(frame)
+    sysMap:SetPos(360, 55)
+    sysMap:SetSize(frame:GetWide() - 380, frame:GetTall() - 75)
+
+    local sysSide = CreateSystemSide(frame, sysMap)
+    sysSide:SetPos(20, 55)
+    sysSide:SetSize(330, frame:GetTall() - 75)
+
+    local mode = "galaxy"
+    local function SetMode(m)
+        mode = m
+        side:SetVisible(m == "galaxy")
+        map:SetVisible(m == "galaxy")
+        sysSide:SetVisible(m == "system")
+        sysMap:SetVisible(m == "system")
+    end
+
+    local toggle = UI.Button(frame, "", function() SetMode(mode == "galaxy" and "system" or "galaxy") end)
+    toggle:SetPos(frame:GetWide() - 330, 10)
+    toggle:SetSize(270, 32)
+
+    -- Mit laufendem Autopiloten direkt die Systemkarte zeigen
+    SetMode(C.status and C.status.auto and "system" or "galaxy")
+
     frame.Think = function(s)
         if IsValid(s.Console) and LocalPlayer():GetPos():Distance(s.Console:GetPos()) > (Naval.StationUseRange or 160) * 1.5 then
             s:Close()
             return
         end
+
+        toggle.Label = mode == "galaxy" and "Wechseln: Systemkarte" or "Wechseln: Galaxiekarte"
 
         local st = C.status or {}
         calc.Disabled = not selected or st.state ~= "normal" or (st.system == (selected and selected.id))

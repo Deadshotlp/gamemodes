@@ -31,6 +31,11 @@ local function SpawnConsole(row)
     ent:Spawn()
     ent:Activate()
 
+    -- Zusatzdaten (Schadenspunkt: Subsystem und Ortsname)
+    local data = Naval.DB and Naval.DB.DecodeTable and Naval.DB.DecodeTable(row.data) or util.JSONToTable(row.data or "") or {}
+    ent:SetNWString("PD_NavalSub", tostring(data.sub or ""))
+    ent:SetNWString("PD_NavalLabel", tostring(data.label or ""))
+
     return ent
 end
 

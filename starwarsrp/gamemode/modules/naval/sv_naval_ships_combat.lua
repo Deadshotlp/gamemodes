@@ -173,12 +173,15 @@ local function ShipLength(ship)
     return (ship:Class() or {}).lengthM or 300
 end
 
--- Ein Subsystem der Zone (oder irgendeins) beschaedigen
-local function DamageSubsystem(ship, zone, amount)
+-- Ein Subsystem der Zone (oder irgendeins) beschaedigen; preferred =
+-- vom Waffenleitstand gezielt beschossenes Subsystem (nach Sensor-Scan)
+local function DamageSubsystem(ship, zone, amount, preferred)
     local subs = ship.subs
     local list = Naval.ZoneSubsystems[zone] or {}
     local id = list[math.random(#list)]
-    if not id or subs.hp[id] == nil or math.random() < 0.25 then
+    if preferred and subs.hp[preferred] ~= nil and math.random() < 0.7 then
+        id = preferred
+    elseif not id or subs.hp[id] == nil or math.random() < 0.25 then
         local all = table.GetKeys(subs.hp)
         id = all[math.random(#all)]
     end
@@ -186,6 +189,8 @@ local function DamageSubsystem(ship, zone, amount)
 
     local before = subs.hp[id]
     subs.hp[id] = math.max(0, before - amount)
+
+    if ship:IsPlayerShip() then hook.Run("PD.Naval.SubDamaged", ship, id, amount) end
 
     if before > 0 and subs.hp[id] <= 0 then
         Naval.Event(ship, "sub_offline", {sub = id})
@@ -240,10 +245,18 @@ function Naval.ApplyHit(target, attacker, wtype, amount)
         toShield = amount * 1.5
     end
 
-    local key = kind == "matter" and "m" or "e"
-    local absorbed = math.min(z[key], toShield)
-    z[key] = z[key] - absorbed
+    -- Schildmodulation: Schilde verbrauchen weniger je Treffer
+    local eff = 1
+    if sh.mod and (sh.mod.untilT or 0) > Naval.Now() then
+        eff = 1 - math.Clamp(Naval.Settings.shield_mod_bonus or 0.35, 0, 0.9)
+    end
 
+    local key = kind == "matter" and "m" or "e"
+    local cost = toShield * eff
+    local absorbedCost = math.min(z[key], cost)
+    z[key] = z[key] - absorbedCost
+
+    local absorbed = absorbedCost / eff
     local rest = toShield - absorbed
     if kind == "ion" then
         -- Ionen: kaum Huellenschaden, dafuer Subsysteme
@@ -258,7 +271,8 @@ function Naval.ApplyHit(target, attacker, wtype, amount)
         target.hull = math.max(0, (target.hull or 0) - toHull)
     end
     if toSub > 0 then
-        DamageSubsystem(target, zone, toSub)
+        local focus = attacker and attacker.subs and attacker.subs.target == target.id and attacker.subs.targetSub or nil
+        DamageSubsystem(target, zone, focus and toSub * 1.5 or toSub, focus)
     end
 
     target.lastAttacker = attacker and attacker.id
@@ -511,6 +525,7 @@ function Naval.CombatTick()
         local fx = mapShip.hitFx
         mapShip.hitFx = nil
         Naval.Event(mapShip, "hit", {shield = math.Round(fx.shield), hull = math.Round(fx.hull), zones = table.GetKeys(fx.zones)})
+        hook.Run("PD.Naval.MapShipHit", mapShip, fx)
     end
 
     -- Schuesse an die Spieler
@@ -560,4 +575,5 @@ function Naval.Repair(ship)
     Naval.Combat(ship)
     ship.dirty = true
     Naval.SaveShip(ship)
+    hook.Run("PD.Naval.Repaired", ship)
 end

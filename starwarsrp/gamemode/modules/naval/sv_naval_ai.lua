@@ -94,6 +94,14 @@ local function FlyTo(ship, target, tolerance)
     return false
 end
 
+Naval.FlyTo = FlyTo
+
+-- Mit Ausweichen um Himmelskoerper (sv_naval_autopilot.lua), sonst direkt
+local function Travel(ship, target, tolerance)
+    if Naval.AutoSteer then return (Naval.AutoSteer(ship, target, tolerance)) end
+    return FlyTo(ship, target, tolerance)
+end
+
 local Handlers = {}
 Naval.AIHandlers = Handlers
 
@@ -107,7 +115,7 @@ Handlers.move = function(ship, order)
     local target = OrderTarget(ship, order)
     if not target then return true end
 
-    return FlyTo(ship, target)
+    return Travel(ship, target)
 end
 
 Handlers.patrol = function(ship, order)
@@ -117,7 +125,7 @@ Handlers.patrol = function(ship, order)
     order.index = order.index or 1
     local target = points[order.index]
 
-    if FlyTo(ship, target, ((ship:Class() or {}).lengthM or 300) * 5 + 3000) then
+    if Travel(ship, target, ((ship:Class() or {}).lengthM or 300) * 5 + 3000) then
         order.index = order.index + 1
 
         if order.index > #points then

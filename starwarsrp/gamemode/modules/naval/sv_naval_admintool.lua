@@ -328,6 +328,23 @@ Actions.console_rotate = function(ply, args)
     Naval.SaveConsole(ent)
 end
 
+-- Zusatzdaten einer Konsole (Schadenspunkt: Subsystem, Ortsname)
+Actions.console_data = function(ply, args)
+    local ent = ConsoleArg(args)
+    if not ent then return end
+
+    local sub = tostring(args.sub or "")
+    if sub ~= "" and sub ~= "hull" and not Naval.SubsystemNames[sub] then sub = "" end
+    local label = string.sub(string.Trim(tostring(args.label or "")), 1, 60)
+
+    ent:SetNWString("PD_NavalSub", sub)
+    ent:SetNWString("PD_NavalLabel", label)
+    PD.SQL.Query("UPDATE `pd_naval_consoles` SET `data` = " .. PD.SQL.EscapeString(util.TableToJSON({sub = sub, label = label}))
+        .. " WHERE `id` = " .. ent:GetConsoleId())
+    Notify(ply, "Gespeichert", true)
+    Log(ply, "Konsole " .. ent:GetStation() .. " #" .. ent:GetConsoleId() .. ": " .. (label ~= "" and label or "-") .. " / " .. (sub ~= "" and sub or "-"))
+end
+
 Actions.console_remove = function(ply, args)
     local ent = Entity(tonumber(args.ent) or -1)
     if not IsValid(ent) or ent:GetClass() ~= "pd_naval_console" then return end
