@@ -255,28 +255,71 @@ end
 -- Laenge und Mitte (Modell-Einheiten) aus den Eckpunkten, je Modell gemerkt
 local meshInfo = {}
 
+-- Eckpunkte liegen in der Grundhaltung der Knochen; gezeichnet wird mit der
+-- Standardhaltung des Modells. Manche Modelle (z. B. die Venator) haben den
+-- Wurzelknochen verschoben - ohne Umrechnung laege die Mitte daneben.
+-- Gerechnet werden drei Varianten (roh, Knochen x Bindung, Knochen x
+-- invertierte Bindung); genommen wird die, deren Mitte den gezeichneten
+-- Grenzen des Modells am naechsten liegt und deren Laenge passt.
+local function Bounds(meshes, mats)
+    local mins = Vector(math.huge, math.huge, math.huge)
+    local maxs = Vector(-math.huge, -math.huge, -math.huge)
+    for _, part in ipairs(meshes) do
+        for _, v in ipairs(part.triangles or {}) do
+            local p = v.pos
+            local w = mats and v.weights and v.weights[1]
+            if w and mats[w.bone] then p = mats[w.bone] * p end
+            if p.x < mins.x then mins.x = p.x end
+            if p.y < mins.y then mins.y = p.y end
+            if p.z < mins.z then mins.z = p.z end
+            if p.x > maxs.x then maxs.x = p.x end
+            if p.y > maxs.y then maxs.y = p.y end
+            if p.z > maxs.z then maxs.z = p.z end
+        end
+    end
+    if maxs.x <= mins.x then return nil end
+    return {length = math.max(maxs.x - mins.x, maxs.y - mins.y), center = (mins + maxs) * 0.5}
+end
+
 function Naval.ModelInfo(path)
     if meshInfo[path] ~= nil then return meshInfo[path] end
 
     local info = false
-    local ok, meshes = pcall(util.GetModelMeshes, path, 0)
+    local ok, meshes, bindPose = pcall(util.GetModelMeshes, path, 0)
 
     if ok and meshes then
-        local mins = Vector(math.huge, math.huge, math.huge)
-        local maxs = Vector(-math.huge, -math.huge, -math.huge)
-        for _, part in ipairs(meshes) do
-            for _, v in ipairs(part.triangles or {}) do
-                local p = v.pos
-                if p.x < mins.x then mins.x = p.x end
-                if p.y < mins.y then mins.y = p.y end
-                if p.z < mins.z then mins.z = p.z end
-                if p.x > maxs.x then maxs.x = p.x end
-                if p.y > maxs.y then maxs.y = p.y end
-                if p.z > maxs.z then maxs.z = p.z end
+        info = Bounds(meshes) or false
+
+        local ent = istable(bindPose) and ClientsideModel(path, RENDERGROUP_OTHER)
+        if info and IsValid(ent) then
+            ent:SetPos(Vector(0, 0, 0))
+            ent:SetAngles(Angle(0, 0, 0))
+            ent:SetupBones()
+            local rmins, rmaxs = ent:GetRenderBounds()
+            local renderCenter = (rmins + rmaxs) * 0.5
+
+            local direct, inverse = {}, {}
+            for bone = 0, ent:GetBoneCount() - 1 do
+                local boneMat = ent:GetBoneMatrix(bone)
+                local bind = bindPose[bone] or bindPose[bone + 1]
+                if boneMat and bind and bind.matrix then
+                    direct[bone] = boneMat * bind.matrix
+                    inverse[bone] = boneMat * bind.matrix:GetInverse()
+                end
             end
-        end
-        if maxs.x > mins.x then
-            info = {length = math.max(maxs.x - mins.x, maxs.y - mins.y), center = (mins + maxs) * 0.5}
+            ent:Remove()
+
+            local best, bestD = info, info.center:Distance(renderCenter)
+            for _, mats in ipairs({direct, inverse}) do
+                local cand = next(mats) and Bounds(meshes, mats)
+                if cand and math.abs(cand.length - info.length) < info.length * 0.05 then
+                    local d = cand.center:Distance(renderCenter)
+                    if d < bestD then best, bestD = cand, d end
+                end
+            end
+            info = best
+        elseif IsValid(ent) then
+            ent:Remove()
         end
     end
 
