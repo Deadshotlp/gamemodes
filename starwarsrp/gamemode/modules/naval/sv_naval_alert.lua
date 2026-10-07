@@ -43,6 +43,18 @@ function Naval.AlertButtons()
     return istable(list) and list or {}
 end
 
+-- Aus der Datenbank laden (die Datenbank ist massgeblich, z. B. nach
+-- Aenderungen ueber das Web-Panel); bei jedem Laden des Moduls und Sim-Start
+function Naval.LoadAlertButtons()
+    if not PD.SQL or not PD.SQL.FetchAll then return end
+    PD.SQL.FetchAll("SELECT `config_value` FROM `pd_naval_settings` WHERE `config_key` = " .. PD.SQL.EscapeString(ButtonKey()), function(rows)
+        local row = rows and rows[1]
+        if row and Naval.Settings then Naval.Settings[ButtonKey()] = util.JSONToTable(row.config_value or "") or {} end
+    end)
+end
+
+hook.Add("PD.Naval.SimStarted", "PD.Naval.AlertButtons", Naval.LoadAlertButtons)
+
 function Naval.SaveAlertButtons(list)
     Naval.Settings[ButtonKey()] = list
     PD.SQL.Query("REPLACE INTO `pd_naval_settings` (`config_key`, `config_value`) VALUES ("
@@ -150,6 +162,8 @@ Naval.StatusExtras = Naval.StatusExtras or {}
 Naval.StatusExtras.alert = function()
     return Naval.GetAlert()
 end
+
+if Naval.SimRunning then Naval.LoadAlertButtons() end
 
 concommand.Add("pd_naval_alert", function(ply, _, args)
     if IsValid(ply) and not ply:IsAdmin() then return end
