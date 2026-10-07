@@ -63,6 +63,8 @@ local function OrderTarget(ship, order)
     end
 end
 
+Naval.OrderTarget = OrderTarget
+
 -- Fliegt auf target zu, bremst rechtzeitig. Gibt true zurueck, wenn da.
 local function FlyTo(ship, target, tolerance)
     local toTarget = V3.Sub(target, ship.pos)

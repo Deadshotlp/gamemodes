@@ -129,6 +129,71 @@ hook.Add("PlayerDisconnected", "PD.Naval.AdminTool", function(ply) watchers[ply]
 --------------------------------------------------------------------------------
 
 local function Round(v, d) return math.Round(v, d or 0) end
+local function P(v) return {Round(v.x), Round(v.y), Round(v.z)} end
+
+-- Geplanter Weg eines Schiffs fuer die Karte: Punkte (Systemmeter) der
+-- Befehle in Reihenfolge, mit Umwegen um Himmelskoerper fuer den aktuellen
+-- Abschnitt; dazu Orbit-Kreis und Sprungziel. Map-Schiff: Autopilot.
+local function Route(ship)
+    local pts, extra = {}, {}
+
+    if ship:IsPlayerShip() then
+        local auto = ship.auto
+        if not auto then return nil end
+        for i, p in ipairs(auto.path or {}) do
+            if i > 1 then pts[#pts + 1] = P(p) end
+        end
+        for _, leg in ipairs(auto.queue or {}) do
+            local p = leg.pos
+            if leg.kind == "body" and Naval.Bodies[leg.id or ""] then p = Naval.BodyPos(Naval.Bodies[leg.id], Naval.Bodies)
+            elseif leg.kind == "ship" and Naval.Ships[leg.id or -1] then p = Naval.Ships[leg.id].pos end
+            if p then pts[#pts + 1] = P(p) end
+        end
+        return #pts > 0 and {pts = pts} or nil
+    end
+
+    for i, order in ipairs(ship.orders.queue) do
+        if i > 6 then break end
+        if order.type == "move" and Naval.OrderTarget then
+            local t = Naval.OrderTarget(ship, order)
+            if t then
+                if i == 1 and Naval.AvoidPath then
+                    local path = Naval.AvoidPath(ship.systemId, ship.pos, t)
+                    for k = 2, #path do pts[#pts + 1] = P(path[k]) end
+                else
+                    pts[#pts + 1] = P(t)
+                end
+            end
+        elseif order.type == "patrol" and istable(order.points) then
+            local n = #order.points
+            local start = order.index or 1
+            for k = 0, n - 1 do
+                local p = order.points[(start - 1 + k) % n + 1]
+                if p then pts[#pts + 1] = P(p) end
+            end
+            if order.loop ~= false and n > 1 then extra.loop = true end
+        elseif order.type == "orbit" then
+            local body = Naval.Bodies[order.bodyId or ""]
+            if body then extra.orbit = {c = P(Naval.BodyPos(body, Naval.Bodies)), r = Round(order.radius or body.radius * 4)} end
+        elseif order.type == "jump" then
+            extra.jumpTo = order.systemId
+        end
+    end
+
+    -- Flottenmitglied ohne Befehl: sein Platz in der Formation
+    if #ship.orders.queue == 0 and Naval.Fleets and Naval.FormationSlot then
+        local fleet = Naval.Fleets[ship.fleetId or 0]
+        local flag = fleet and Naval.Ships[fleet.flagshipId]
+        if flag and flag ~= ship and flag.systemId == ship.systemId then
+            pts[#pts + 1] = P(Naval.FormationSlot(fleet, ship, flag))
+            extra.slot = true
+        end
+    end
+
+    if #pts == 0 and not extra.orbit and not extra.jumpTo then return nil end
+    extra.pts = pts
+    return extra
+end
 
 local function LiveData()
     local now = Naval.Now()
@@ -153,6 +218,9 @@ local function LiveData()
                 surrendered = ship.flags and ship.flags.surrendered or nil,
                 interdictor = ship.flags and ship.flags.interdictor and ship.subs and ship.subs.interdict ~= false or nil,
             }
+
+            local okRoute, route = pcall(Route, ship)
+            if okRoute then row.route = route end
 
             local sh = ship.shields
             if istable(sh) and istable(sh.zones) then
