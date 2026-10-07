@@ -140,15 +140,15 @@ Naval.CombatCommands.sensors.scan = function(ply, ship, args)
     if not target or target == ship or target.systemId ~= ship.systemId then return end
 
     if V3.Dist(target.pos, ship.pos) > ship:Stat("sensorRange") then
-        PD.Notify("Außerhalb der Sensorreichweite", Color(255, 90, 90), false, ply)
+        Naval.Feedback(ply, "Außerhalb der Sensorreichweite")
         return
     end
     if Naval.SubFactor(ship, "sensors") <= 0 then
-        PD.Notify("Sensoren ausgefallen", Color(255, 90, 90), false, ply)
+        Naval.Feedback(ply, "Sensoren ausgefallen")
         return
     end
     if Naval.IdentLevel(ship, target) >= 2 then
-        PD.Notify("Kontakt ist bereits genau gescannt", Color(240, 190, 70), false, ply)
+        Naval.Feedback(ply, "Kontakt ist bereits genau gescannt")
         return
     end
 

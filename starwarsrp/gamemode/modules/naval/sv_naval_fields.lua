@@ -252,9 +252,6 @@ local function Announce(ship, f, entering)
         text = text .. (" - sichere Fahrt unter %d %%"):format(Setting("field_asteroid_safe", 0.35) * 100)
     end
     ship:Log("nav", "", text)
-    for _, ply in ipairs(player.GetHumans()) do
-        if ply.PD_NavalReady then PD.Notify("[Navigation] " .. text, Color(240, 200, 90), false, ply) end
-    end
 end
 
 local function Step(ship)

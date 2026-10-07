@@ -197,7 +197,7 @@ end
 C.distress = function(ply, ship)
     local now = CurTime()
     if (Naval.DistressReady or 0) > now then
-        PD.Notify(("Notruf erst wieder in %d s"):format(Naval.DistressReady - now), Color(255, 90, 90), false, ply)
+        Naval.Feedback(ply, ("Notruf erst wieder in %d s"):format(Naval.DistressReady - now))
         return
     end
     Naval.DistressReady = now + Setting("comms_distress_cooldown", 300)

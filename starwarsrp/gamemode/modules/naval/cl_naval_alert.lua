@@ -15,10 +15,7 @@ local Naval = PD.Naval
 Naval.C = Naval.C or {static = nil, system = nil, info = {}, snaps = {}, events = {}}
 local C = Naval.C
 
-local COLORS = {[1] = Color(240, 200, 60), [2] = Color(240, 70, 60)}
-
 local lastLevel
-local messages = {}
 
 net.Receive("PD.Naval.AlertLight", function()
     render.RedownloadAllLightmaps(false, false)
@@ -48,19 +45,16 @@ hook.Add("RenderScreenspaceEffects", "PD.Naval.Alert", function()
     })
 end)
 
-function Naval.ShipMessage(text, col)
-    table.insert(messages, 1, {text = text, col = col or Color(225, 230, 240), t = CurTime()})
-    while #messages > 4 do table.remove(messages) end
+-- Bordmeldungen gibt es nicht mehr auf dem Bildschirm (nur an den Konsolen);
+-- die Funktion bleibt fuer aeltere Aufrufer erhalten.
+function Naval.ShipMessage()
 end
 
 hook.Add("PD.Naval.ClientEvent", "PD.Naval.Alert", function(kind, data)
     if kind == "comms" and not data.own then
         surface.PlaySound("buttons/button17.wav")
-        Naval.ShipMessage(("Funk %s: %s"):format(data.from or "?", string.sub(data.text or "", 1, 120)), Color(140, 220, 255))
     elseif kind == "contact_arrival" then
         surface.PlaySound("buttons/blip1.wav")
-        Naval.ShipMessage(("Sensoren: Hyperraum-Austritt - %s in %s"):format(data.name or "unbekannter Kontakt",
-            Naval.FormatDist and Naval.FormatDist(tonumber(data.dist) or 0) or "?"), Color(120, 190, 255))
     end
 end)
 
@@ -68,40 +62,7 @@ hook.Add("Think", "PD.Naval.Alert", function()
     if not Naval.IsNavalMap or not Naval.IsNavalMap() then return end
 
     local level = GetGlobalInt("PD.Naval.Alert", 0)
-    if lastLevel ~= nil and level ~= lastLevel then
-        if level == 1 then surface.PlaySound("ambient/alarms/warningbell1.wav") end
-        if level >= 1 then Naval.ShipMessage(Naval.AlertNames[level], COLORS[level]) end
-        if level == 0 and lastLevel > 0 then Naval.ShipMessage("Alarm aufgehoben", Color(90, 210, 130)) end
-    end
+    if lastLevel ~= nil and level ~= lastLevel and level == 1 then surface.PlaySound("ambient/alarms/warningbell1.wav") end
     lastLevel = level
-
 end)
 
-hook.Add("HUDPaint", "PD.Naval.Alert", function()
-    if not Naval.IsNavalMap or not Naval.IsNavalMap() then return end
-
-    local level = GetGlobalInt("PD.Naval.Alert", 0)
-    local w = ScrW()
-
-    if level > 0 then
-        local col = COLORS[level]
-        local text = string.upper(Naval.AlertNames[level] or "")
-        surface.SetFont("MLIB.16")
-        local tw = surface.GetTextSize(text)
-        draw.RoundedBox(4, w / 2 - tw / 2 - 14, 8, tw + 28, 28, Color(14, 18, 24, 200))
-        surface.SetDrawColor(col)
-        surface.DrawOutlinedRect(w / 2 - tw / 2 - 14, 8, tw + 28, 28, 2)
-        draw.SimpleText(text, "MLIB.16", w / 2, 22, col, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-    end
-
-    -- Bordmeldungen (8 s sichtbar)
-    local y = 44
-    for i = #messages, 1, -1 do
-        if CurTime() - messages[i].t > 8 then table.remove(messages, i) end
-    end
-    for _, m in ipairs(messages) do
-        local alpha = math.Clamp((8 - (CurTime() - m.t)) * 255, 0, 255)
-        draw.SimpleTextOutlined(m.text, "MLIB.16", w / 2, y, Color(m.col.r, m.col.g, m.col.b, alpha), TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP, 1, Color(0, 0, 0, alpha * 0.7))
-        y = y + 22
-    end
-end)

@@ -549,7 +549,7 @@ local FC = Naval.CombatCommands.fleetcmd
 local function OwnFleet(ply, ship)
     local fleet = Naval.Fleets[ship.fleetId or 0]
     if not fleet or fleet.flagshipId ~= ship.id then
-        PD.Notify("Wir führen keine Flotte", Color(255, 90, 90), false, ply)
+        Naval.Feedback(ply, "Wir führen keine Flotte")
         return nil
     end
     return fleet

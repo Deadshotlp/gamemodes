@@ -139,8 +139,11 @@ hook.Add("Think", "PD.Naval.DamageFX", function()
     end
 end)
 
--- Hinweis beim Hinschauen
-hook.Add("HUDPaint", "PD.Naval.DamageHint", function()
+-- Hinweis beim Hinschauen: am Schadensort (3D2D) statt auf dem Bildschirm
+surface.CreateFont("PD.Naval.Damage3D2D", {font = "Roboto", size = 40, weight = 700, extended = true})
+
+hook.Add("PostDrawTranslucentRenderables", "PD.Naval.DamageHint", function(depth, sky)
+    if depth or sky or Naval.ClientShutdown then return end
     if not next(incidents) then return end
     local ply = LocalPlayer()
     if not IsValid(ply) or not ply:Alive() then return end
@@ -159,13 +162,14 @@ hook.Add("HUDPaint", "PD.Naval.DamageHint", function()
     if not best then return end
 
     local kind = Naval.IncidentKinds[best.kind] or {}
-    local w, h = 360, 54
-    local x, y = ScrW() / 2 - w / 2, ScrH() * 0.62
-
-    draw.RoundedBox(4, x, y, w, h, Color(14, 18, 24, 220))
-    draw.SimpleText((kind.name or "Schaden") .. " - E gedrückt halten", "MLIB.16", ScrW() / 2, y + 8, Color(225, 230, 240), TEXT_ALIGN_CENTER)
-    draw.RoundedBox(0, x + 12, y + 34, w - 24, 10, Color(40, 46, 56))
-    draw.RoundedBox(0, x + 12, y + 34, (w - 24) * math.Clamp(best.progress or 0, 0, 1), 10, Color(90, 210, 130))
+    local w = 360
+    local ang = Angle(0, ply:EyeAngles().y - 90, 90)
+    cam.Start3D2D(best.ent:GetPos() + Vector(0, 0, 40), ang, 0.1)
+        draw.RoundedBox(4, -w / 2, 0, w, 64, Color(14, 18, 24, 220))
+        draw.SimpleText((kind.name or "Schaden") .. " - E halten", "PD.Naval.Damage3D2D", 0, 6, Color(225, 230, 240), TEXT_ALIGN_CENTER)
+        draw.RoundedBox(0, -w / 2 + 12, 48, w - 24, 8, Color(40, 46, 56))
+        draw.RoundedBox(0, -w / 2 + 12, 48, (w - 24) * math.Clamp(best.progress or 0, 0, 1), 8, Color(90, 210, 130))
+    cam.End3D2D()
 end)
 
 -- Beim Verlassen der Map: Emitter abschliessen, Toene stoppen

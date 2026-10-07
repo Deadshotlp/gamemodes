@@ -24,7 +24,7 @@ util.AddNetworkString("PD.Naval.ModGame")
 local function Who(ply) return IsValid(ply) and ply:Nick() or "?" end
 
 local function Notify(ply, text, ok)
-    PD.Notify(text, ok and Color(80, 200, 120) or Color(255, 90, 90), false, ply)
+    Naval.Feedback(ply, text, ok)
 end
 
 --------------------------------------------------------------------------------

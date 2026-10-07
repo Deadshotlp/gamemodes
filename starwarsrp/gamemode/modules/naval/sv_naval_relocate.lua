@@ -35,10 +35,9 @@ local function Setting(key, default)
     return tonumber(Naval.Settings and Naval.Settings[key]) or default
 end
 
-local function NotifyAll(text, col)
-    for _, ply in ipairs(player.GetHumans()) do
-        PD.Notify("[Umstationierung] " .. text, col or Color(120, 200, 255), false, ply)
-    end
+-- Keine Bildschirm-Meldungen: die Konsole Umstationierung zeigt alles an
+local function NotifyAll(text)
+    Naval.DebugLog("[Umstationierung] " .. text)
 end
 
 local function MapExists(map)
@@ -185,9 +184,6 @@ local function Trigger(ent)
         end
     end
     local text = (armed.back and "Rückflug zum Schiff" or ("Landeanflug auf " .. armed.name)) .. (" - Mapwechsel in %d s"):format(seconds)
-    if PD.Announce then
-        PD.Announce({title = "Umstationierung", text = text, color = Color(30, 90, 178), duration = seconds})
-    end
     NotifyAll(text .. (#who > 0 and (" (" .. table.concat(who, ", ") .. ")") or ""))
     timer.Create("PD.Naval.RelocateGo", seconds, 1, Change)
 end
@@ -303,7 +299,7 @@ net.Receive("PD.Naval.Relocate", function(_, ply)
             end
             if not entry then return end
             if not MapExists(entry.map) then
-                PD.Notify("Map " .. entry.map .. " ist auf dem Server nicht installiert", Color(255, 90, 90), false, ply)
+                Naval.Feedback(ply, "Map " .. entry.map .. " ist auf dem Server nicht installiert")
                 return
             end
             armed = {map = entry.map, name = entry.name, bodyId = body.id, bodyName = body.name, by = ply:Nick(),

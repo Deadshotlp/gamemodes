@@ -347,7 +347,7 @@ Naval.CombatCommands.tractor = Naval.CombatCommands.tractor or {}
 local TC = Naval.CombatCommands.tractor
 
 local function Fail(ply, text)
-    PD.Notify(text, Color(255, 90, 90), false, ply)
+    Naval.Feedback(ply, text)
 end
 
 TC.lock = function(ply, ship, args)

@@ -52,10 +52,9 @@ local function Markers(station)
     return list
 end
 
-local function NotifyAll(text, col)
-    for _, ply in ipairs(player.GetHumans()) do
-        PD.Notify("[Logistik] " .. text, col or Color(120, 220, 160), false, ply)
-    end
+-- Keine Bildschirm-Meldungen: der Logistik-Leitstand zeigt alles an
+local function NotifyAll(text)
+    Naval.DebugLog("[Logistik] " .. text)
 end
 
 --------------------------------------------------------------------------------
@@ -206,10 +205,8 @@ local function Deliver(ship, gift)
     Naval.Event(ship, "supply_arrived", {count = n})
 end
 
-local function NotifyNear(pos, text, col)
-    for _, ply in ipairs(ents.FindInSphere(pos, 600)) do
-        if ply:IsPlayer() then PD.Notify("[Logistik] " .. text, col, false, ply) end
-    end
+local function NotifyNear(_, text)
+    Naval.DebugLog("[Logistik] " .. text)
 end
 
 local function Intake(ship)
@@ -330,9 +327,9 @@ end
 
 LC.order = function(ply, ship, args)
     local crates, total = ReadOrder(args)
-    if total <= 0 then PD.Notify("Keine Kisten gewählt", Color(255, 90, 90), false, ply) return end
+    if total <= 0 then Naval.Feedback(ply, "Keine Kisten gewählt") return end
     local ok, reason = Naval.SupplyCheck(ship)
-    if not ok then PD.Notify(reason, Color(255, 90, 90), false, ply) return end
+    if not ok then Naval.Feedback(ply, reason) return end
 
     local delay = Setting("supply_delivery_time", 90)
     ship.subs.supply = {eta = os.time() + delay, crates = crates}

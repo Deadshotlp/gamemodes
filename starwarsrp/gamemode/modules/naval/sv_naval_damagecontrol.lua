@@ -159,9 +159,6 @@ local function Resolve(inc, players)
     end
 
     if IsValid(inc.ent) then inc.ent:EmitSound("buttons/button9.wav", 70) end
-    for _, ply in ipairs(players or {}) do
-        PD.Notify("Schaden behoben", Color(80, 200, 120), false, ply)
-    end
 
     Sync()
 end

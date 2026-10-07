@@ -26,9 +26,20 @@ util.AddNetworkString("PD.Naval.Nav")
 util.AddNetworkString("PD.Naval.Hyper")
 util.AddNetworkString("PD.Naval.ShipLog")
 util.AddNetworkString("PD.Naval.Status")
+util.AddNetworkString("PD.Naval.Feedback")
+
+-- Rueckmeldung an den Bediener einer Konsole: erscheint im geoeffneten
+-- Konsolenfenster (keine Bildschirm-Meldungen, cl_naval_stations.lua)
+function Naval.Feedback(ply, text, ok)
+    if not IsValid(ply) then return end
+    net.Start("PD.Naval.Feedback")
+    net.WriteString(tostring(text or ""))
+    net.WriteBool(ok == true)
+    net.Send(ply)
+end
 
 local function Notify(ply, text, ok)
-    PD.Notify(text, ok and Color(80, 200, 120) or Color(255, 90, 90), false, ply)
+    Naval.Feedback(ply, text, ok)
 end
 
 local function Who(ply)
@@ -364,10 +375,6 @@ net.Receive("PD.Naval.Hyper", function(_, ply)
 
         if ok then
             local to = Naval.Systems[ship.nav.target]
-            if PD.Announce then
-                PD.Announce({title = "Hyperantrieb", text = "Sprung nach " .. (to and to.name or "?") .. " eingeleitet",
-                    color = Color(120, 190, 255), duration = 8})
-            end
             if PD.LOGS and PD.LOGS.Add then
                 PD.LOGS.Add("Naval", Who(ply) .. " springt nach " .. (to and to.name or "?"), Color(120, 170, 255))
             end

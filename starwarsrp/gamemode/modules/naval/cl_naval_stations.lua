@@ -83,8 +83,28 @@ end
 -- Gemeinsame Bausteine
 --------------------------------------------------------------------------------
 
+-- Rueckmeldungen des Servers zur Bedienung (Naval.Feedback)
+net.Receive("PD.Naval.Feedback", function()
+    local text, ok = net.ReadString(), net.ReadBool()
+    Naval.LastFeedback = {text = text, ok = ok, t = CurTime()}
+    -- Kein Konsolenfenster offen (z. B. gesperrte Konsole): kurz am Fadenkreuz
+    if not IsValid(Naval.OpenFrame) then Naval.LooseFeedback = Naval.LastFeedback end
+end)
+
+-- Ohne offenes Fenster: Text kurz unter dem Fadenkreuz (nur Antwort auf eigene Bedienung)
+hook.Add("HUDPaint", "PD.Naval.Feedback", function()
+    local f = Naval.LooseFeedback
+    if not f then return end
+    local age = CurTime() - f.t
+    if age > 3 then Naval.LooseFeedback = nil return end
+    local a = math.Clamp((3 - age) * 255, 0, 255)
+    draw.SimpleTextOutlined(f.text, "MLIB.16", ScrW() / 2, ScrH() / 2 + 40, Color(255, 120, 110, a), TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP, 1, Color(0, 0, 0, a * 0.7))
+end)
+
 function UI.Frame(title, w, h)
     local frame = vgui.Create("DFrame")
+    Naval.OpenFrame = frame
+    local opened = CurTime()
     frame:SetSize(math.min(w, ScrW() - 40), math.min(h, ScrH() - 40))
     frame:Center()
     frame:SetTitle("")
@@ -96,6 +116,17 @@ function UI.Frame(title, w, h)
         surface.SetDrawColor(COL_ACCENT)
         surface.DrawRect(0, 0, pw, 3)
         draw.SimpleText(title, "MLIB.22", 14, 14, COL_TEXT)
+    end
+
+    -- Statuszeile: letzte Rueckmeldung (6 s)
+    frame.PaintOver = function(s, pw, ph)
+        local f = Naval.LastFeedback
+        if not f or f.t < opened or CurTime() - f.t > 6 then return end
+        local col = f.ok and COL_OK or COL_BAD
+        draw.RoundedBox(0, 0, ph - 30, pw, 30, Color(14, 18, 24, 235))
+        surface.SetDrawColor(col)
+        surface.DrawRect(0, ph - 30, 4, 30)
+        draw.SimpleText(f.text, "MLIB.16", 14, ph - 15, col, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
     end
 
     local close = vgui.Create("DButton", frame)

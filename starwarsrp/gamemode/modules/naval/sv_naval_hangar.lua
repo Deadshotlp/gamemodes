@@ -347,12 +347,12 @@ HC.launch = function(ply, ship, args)
     if not kind then return end
     local target = task == "attack" and ship.subs and ship.subs.target or nil
     if task == "attack" and not target then
-        PD.Notify("Kein Ziel aufgeschaltet (Waffenleitstand)", Color(255, 90, 90), false, ply)
+        Naval.Feedback(ply, "Kein Ziel aufgeschaltet (Waffenleitstand)")
         return
     end
     local sq = Naval.LaunchSquadron(ship, kind, task, target)
     if not sq then
-        PD.Notify("Keine Maschinen bereit", Color(255, 90, 90), false, ply)
+        Naval.Feedback(ply, "Keine Maschinen bereit")
         return
     end
     ship:Log("combat", ply:Nick(), Naval.SquadronTypes[kind].name .. " " .. sq.id .. " startet")
@@ -363,7 +363,7 @@ HC.task = function(ply, ship, args)
     if not sq or sq.carrierId ~= ship.id or not TASKS[args.task or ""] then return end
     if args.task == "attack" then
         local target = ship.subs and ship.subs.target
-        if not target then PD.Notify("Kein Ziel aufgeschaltet (Waffenleitstand)", Color(255, 90, 90), false, ply) return end
+        if not target then Naval.Feedback(ply, "Kein Ziel aufgeschaltet (Waffenleitstand)") return end
         sq.targetId = target
     end
     sq.task = args.task
