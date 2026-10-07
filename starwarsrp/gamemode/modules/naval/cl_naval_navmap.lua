@@ -308,33 +308,33 @@ local function CreateSystemMap(parent, onSelect)
         -- Umlaufbahnen (weiss): Mond um Planet, Planet um Stern. Gleiche
         -- Formel wie Naval.BodyPos, nur ueber den ganzen Umlauf - der Koerper
         -- liegt so genau auf seiner Bahn (geneigte Bahnen von oben = Ellipse).
-        for _, body in pairs(system.bodiesById) do
+        local function DrawOrbit(body)
             local orbit = body.orbit
-            local parent = body.parentId and system.bodiesById[body.parentId]
-            if orbit and (orbit.radius or 0) > 0 then
-                local pr = orbit.radius * s.PxPerM
-                if pr > 3 and pr < 200000 then
-                    local center = parent and Naval.BodyPos(parent, system.bodiesById, now) or {x = 0, y = 0, z = 0}
-                    local incl = math.rad(orbit.incl or 0)
-                    local alpha = body.type == "moon" and 45 or 70
-                    surface.SetDrawColor(255, 255, 255, alpha)
+            if not orbit or (orbit.radius or 0) <= 0 then return end
 
-                    local segments = math.Clamp(math.floor(pr / 3), 48, 180)
-                    local lx, ly
-                    for i = 0, segments do
-                        local a = i / segments * math.pi * 2
-                        local px2, py2 = ToScreen(s, {
-                            x = center.x + math.cos(a) * orbit.radius,
-                            y = center.y + math.sin(a) * orbit.radius * math.cos(incl),
-                        })
-                        if lx and math.max(lx, px2) >= 0 and math.min(lx, px2) <= w and math.max(ly, py2) >= 0 and math.min(ly, py2) <= h then
-                            surface.DrawLine(lx, ly, px2, py2)
-                        end
-                        lx, ly = px2, py2
-                    end
-                end
+            local pr = orbit.radius * s.PxPerM
+            if pr <= 3 or pr >= 200000 then return end
+
+            local around = body.parentId and system.bodiesById[body.parentId]
+            local center = around and Naval.BodyPos(around, system.bodiesById, now) or {x = 0, y = 0, z = 0}
+            local incl = math.rad(orbit.incl or 0)
+            surface.SetDrawColor(255, 255, 255, body.type == "moon" and 45 or 70)
+
+            local segments = math.Clamp(math.floor(pr / 3), 48, 180)
+            local lx, ly
+            for i = 0, segments do
+                local a = i / segments * math.pi * 2
+                local px2, py2 = ToScreen(s, {
+                    x = center.x + math.cos(a) * orbit.radius,
+                    y = center.y + math.sin(a) * orbit.radius * math.cos(incl),
+                })
+                local visible = lx and math.max(lx, px2) >= 0 and math.min(lx, px2) <= w and math.max(ly, py2) >= 0 and math.min(ly, py2) <= h
+                if visible then surface.DrawLine(lx, ly, px2, py2) end
+                lx, ly = px2, py2
             end
         end
+
+        for _, body in pairs(system.bodiesById) do DrawOrbit(body) end
 
         -- Himmelskoerper
         for _, body in pairs(system.bodiesById) do
