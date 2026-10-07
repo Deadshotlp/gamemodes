@@ -156,6 +156,7 @@ function Naval.Tick()
         end
     end
 
+    if Naval.TractorTick then Naval.TractorTick(dt) end
     if Naval.HyperspaceTick then Naval.HyperspaceTick() end
 end
 

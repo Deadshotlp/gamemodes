@@ -85,6 +85,12 @@ D.Settings = {
     comms_distress_cooldown = 300, -- s zwischen zwei Notrufen
     interdict_range = 1000000,    -- m: Abfangfeld eines Abfangkreuzers
     ship_inertia = 0,             -- 1 = Traegheit (Rutschen nach dem Drehen, Nachlaufen der Drehung)
+    tractor_range = 5000,         -- m: Reichweite des Traktorstrahls (x Staerke der Klasse)
+    tractor_reel_speed = 150,     -- m/s: Heranziehen
+    boarding_time = 90,           -- s: Entern eines 600-m-Schiffs (kapituliert halb so lang)
+    boarding_cooldown = 120,      -- s nach einem abgewehrten Enterversuch
+    boarding_live = 0,            -- 1 = Spielleitung entscheidet den Ausgang beim Entern durch das Map-Schiff
+    boarding_ai = 1,              -- KI-Schiffe entern kapitulierte Feinde in Reichweite
 }
 
 --------------------------------------------------------------------------------

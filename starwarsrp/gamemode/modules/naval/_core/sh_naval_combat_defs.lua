@@ -203,3 +203,18 @@ function Naval.ClassHangar(class)
     local d = Naval.HangarDefaults[class.id] or {}
     return {fighter = d.fighter or 0, bomber = d.bomber or 0}
 end
+
+--[[
+    Traktorstrahl (Stufe 4e): Staerke je Klasse (0 = keiner). Bestimmt
+    Reichweite und wie gut sich nicht wehrlose Ziele losreissen koennen.
+    class.tractor (Panel) ueberschreibt Naval.TractorDefaults.
+]]
+Naval.TractorDefaults = {
+    venator = 1, acclamator = 0.7, arquitens = 0.4, consular = 0.3, pelta = 0.5,
+    providence = 1, lucrehulk = 1.4, recusant = 0.7, munificent = 0.6, bulwark = 1,
+}
+
+function Naval.ClassTractor(class)
+    if not class then return 0 end
+    return tonumber(class.tractor) or Naval.TractorDefaults[class.id] or 0
+end

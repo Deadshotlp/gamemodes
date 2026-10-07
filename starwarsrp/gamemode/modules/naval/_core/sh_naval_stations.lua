@@ -168,3 +168,10 @@ PD.Naval.Stations.hangar = {
     model = "models/lordtrilobite/starwars/isd/imp_console_large01.mdl",
     desc = "Staffeln starten, einsetzen, zurückrufen",
 }
+
+-- Stufe 4e: Traktorstrahl und Enterkommando
+PD.Naval.Stations.tractor = {
+    name = "Traktorstrahl & Entern",
+    model = "models/lordtrilobite/starwars/isd/imp_console_large01.mdl",
+    desc = "Schiffe greifen, heranziehen und entern",
+}

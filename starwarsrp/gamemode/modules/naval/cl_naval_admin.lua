@@ -198,6 +198,14 @@ Naval.SettingInfo = {
         {"comms_distress_cooldown", "Notruf-Sperre", "s"},
         {"interdict_range", "Abfangfeld-Reichweite", "m"},
     }},
+    {"Traktorstrahl und Entern", {
+        {"tractor_range", "Traktorstrahl-Reichweite", "m × Klassenstärke"},
+        {"tractor_reel_speed", "Heranziehen", "m/s"},
+        {"boarding_time", "Entern dauert (600-m-Schiff)", "s"},
+        {"boarding_cooldown", "Sperre nach abgewehrtem Entern", "s"},
+        {"boarding_live", "Spielleitung entscheidet Entern", "1 = an"},
+        {"boarding_ai", "KI entert kapitulierte Feinde", "1 = an"},
+    }},
     {"Autopilot", {
         {"autopilot_clearance", "Sicherheitsabstand", "× Radius"},
         {"autopilot_margin", "Sicherheitsabstand zusätzlich", "m"},

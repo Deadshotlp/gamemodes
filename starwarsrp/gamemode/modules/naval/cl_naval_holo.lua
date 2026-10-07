@@ -222,6 +222,20 @@ local function DrawTactical(center, radius, labels, flicker)
         end
     end
 
+    -- Traktorstrahl (cl_naval_tractor.lua)
+    local held = C.status and C.status.tractor and C.status.tractor.held
+    local heldShip = held and view.ships and view.ships[held.id]
+    if heldShip then
+        local rel = Naval.V3.Sub(heldShip.pos, view.pos)
+        if Naval.V3.Len(rel) <= range then
+            render.SetColorMaterial()
+            local p = ToHolo(rel)
+            local col = Color(120, 200, 255, 230 * flicker)
+            render.DrawLine(center, p, col, true)
+            render.DrawLine(center + Vector(0, 0, 0.15), p + Vector(0, 0, 0.15), col, true)
+        end
+    end
+
     for key, m in pairs(models) do
         if not seen[key] then
             if IsValid(m) then m:Remove() end

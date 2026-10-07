@@ -269,6 +269,7 @@ function Naval.AITick()
 
         local state = ship.state
         if state == S.DESTROYED or state == S.DISABLED then continue end
+        if Naval.TractorHeld and Naval.TractorHeld[ship.id] then continue end
 
         -- Kapituliert / gefangen: stillhalten
         if ship.flags and (ship.flags.surrendered or ship.flags.prisoner) then

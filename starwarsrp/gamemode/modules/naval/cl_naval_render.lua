@@ -580,6 +580,7 @@ function Naval.RenderSpace()
             end
             if Naval.DrawFX then Naval.DrawFX(view, toRender) end
             if Naval.DrawSquadrons then Naval.DrawSquadrons(view, toRender) end
+            if Naval.DrawTractor then Naval.DrawTractor(view, toRender) end
         cam.End3D()
     end
 

@@ -272,6 +272,45 @@ function Naval.SimSelfTest()
             ok and ("Hülle %d -> %d, Bomber übrig %.1f von 12"):format(hull0, enemy.hull, craftLeft) or tostring(runErr))
     end
 
+    -- 15. Traktorstrahl und Entern: kapituliertes Schiff heranziehen und uebernehmen
+    if Naval.TractorTick and Naval.BoardingStepForTest then
+        local holder, prize = TestShip("venator"), TestShip("munificent")
+        holder.id, prize.id = 64031, 64032
+        holder.flags = {test = true, hidden = true}
+        prize.flags = {test = true, hidden = true}
+        holder.systemId, prize.systemId = "__test__", "__test__"
+        prize.pos = {x = 3000, y = 500, z = 0}
+        Naval.Ships[holder.id], Naval.Ships[prize.id] = holder, prize
+        Naval.Combat(holder)
+        Naval.Combat(prize)
+        local fromFaction = prize.factionId
+
+        local ok, runErr = pcall(function()
+            prize.flags.surrendered = true
+            prize.shields.up = false
+            local locked, why = Naval.TractorLock(holder, prize)
+            if not locked then error("Greifen: " .. tostring(why)) end
+            holder.subs.tractor.pull = true
+            for _ = 1, 400 do -- 40 s
+                Naval.StepShip(holder, 0.1)
+                Naval.StepShip(prize, 0.1)
+                Naval.TractorTick(0.1)
+            end
+            local boarded, why2 = Naval.Board(holder, prize)
+            if not boarded then error("Entern: " .. tostring(why2)) end
+            holder.subs.boarding.done = os.time() - 1
+            Naval.BoardingStepForTest(holder)
+        end)
+
+        local dist = V3.Dist(holder.pos, prize.pos)
+        Naval.TractorRelease(holder)
+        Naval.Ships[holder.id], Naval.Ships[prize.id] = nil, nil
+        Naval.TractorHeld[prize.id] = nil
+
+        check("Traktorstrahl und Entern: herangezogen und übernommen", ok and prize.factionId == holder.factionId and prize.factionId ~= fromFaction,
+            ok and ("Abstand %.0f m, Fraktion %s -> %s"):format(dist, fromFaction, prize.factionId) or tostring(runErr))
+    end
+
     -- 12. Moral: schwer beschaedigtes Schiff will fliehen
     if Naval.MoraleTarget then
         local probe = TestShip("munificent")
