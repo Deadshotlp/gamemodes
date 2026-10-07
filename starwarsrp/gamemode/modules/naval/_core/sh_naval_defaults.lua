@@ -75,6 +75,15 @@ D.Settings = {
     shield_mod_cooldown = 20,     -- s nach einem Fehlversuch
     autopilot_clearance = 1.6,    -- Autopilot: Sicherheitsabstand in Koerperradien
     autopilot_margin = 5000,      -- m zusaetzlich
+    fleet_spacing = 2.5,          -- Formationsabstand in Schiffslaengen (groesstes Schiff)
+    morale_enabled = 1,           -- KI-Moral (Flucht und Kapitulation), 0 = nur Fluchtregel bei 20 % Huelle
+    morale_flee = 30,             -- unter dieser Moral flieht ein KI-Schiff
+    morale_surrender = 12,        -- darunter kapituliert es (wenn es nicht fliehen kann)
+    comms_auto_reply = 1,         -- KI-Schiffe beantworten Funkrufe selbst (0 = nur Spielleitung)
+    comms_distress_range = 3000,  -- pc: Notruf erreicht verbuendete Schiffe bis hier
+    comms_distress_ships = 3,     -- so viele Schiffe kommen hoechstens
+    comms_distress_cooldown = 300, -- s zwischen zwei Notrufen
+    interdict_range = 1000000,    -- m: Abfangfeld eines Abfangkreuzers
     ship_inertia = 0,             -- 1 = Traegheit (Rutschen nach dem Drehen, Nachlaufen der Drehung)
 }
 

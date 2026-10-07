@@ -55,6 +55,8 @@ local function SetIdent(observer, id, level)
     observer.dirty = true
 end
 
+Naval.SetIdentLevel = SetIdent
+
 local function ScanDuration(ship, target)
     local factor = Naval.PowerFactors and Naval.PowerFactors(ship).sensors or 1
     local dist = V3.Dist(ship.pos, target.pos)
@@ -169,7 +171,7 @@ Naval.StatusExtras.sensors = function(ship)
         if other ~= ship and other.systemId == ship.systemId and other.state ~= S.HYPERSPACE
             and not (other.flags and other.flags.hidden) and V3.Dist(other.pos, ship.pos) <= range then
             local level = Naval.IdentLevel(ship, other)
-            local c = {level = level}
+            local c = {level = level, surrendered = other.flags and other.flags.surrendered or nil}
 
             if level >= 2 and Naval.Combat then
                 local osubs, osh, occ = Naval.Combat(other)
@@ -180,6 +182,8 @@ Naval.StatusExtras.sensors = function(ship)
                 end
                 c.shield = math.Round(shield / math.max(cap, 1) * 100)
                 c.up = osh.up
+                c.morale = osubs.morale and math.Round(osubs.morale) or nil
+                c.interdictor = other.flags and other.flags.interdictor or nil
 
                 local list = {}
                 for _, s in ipairs((other:Class() or {}).subsystems or {}) do

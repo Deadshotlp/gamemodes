@@ -187,6 +187,17 @@ Naval.SettingInfo = {
         {"shield_mod_duration", "Modulation hält", "s"},
         {"shield_mod_cooldown", "Sperre nach Fehlversuch", "s"},
     }},
+    {"Flotten, Moral und Funk", {
+        {"fleet_spacing", "Formationsabstand", "× Schiffslänge"},
+        {"morale_enabled", "KI-Moral (Flucht, Kapitulation)", "1 = an"},
+        {"morale_flee", "Flucht unter Moral", "0..100"},
+        {"morale_surrender", "Kapitulation unter Moral", "0..100"},
+        {"comms_auto_reply", "KI beantwortet Funkrufe", "1 = an"},
+        {"comms_distress_range", "Notruf erreicht Schiffe bis", "pc"},
+        {"comms_distress_ships", "Notruf: höchstens Schiffe", "Anzahl"},
+        {"comms_distress_cooldown", "Notruf-Sperre", "s"},
+        {"interdict_range", "Abfangfeld-Reichweite", "m"},
+    }},
     {"Autopilot", {
         {"autopilot_clearance", "Sicherheitsabstand", "× Radius"},
         {"autopilot_margin", "Sicherheitsabstand zusätzlich", "m"},

@@ -60,6 +60,11 @@ local function BuildData()
             hull = math.Round((ship.hull or 0) / math.max((ship:Class() or {}).hull or 1, 1) * 100),
             roe = ship.subs and ship.subs.roe or nil,
             target = ship.subs and ship.subs.target or nil,
+            fleetId = (ship.fleetId or 0) > 0 and ship.fleetId or nil,
+            morale = ship.subs and ship.subs.morale and math.Round(ship.subs.morale) or nil,
+            surrendered = ship.flags and ship.flags.surrendered or nil,
+            prisoner = ship.flags and ship.flags.prisoner or nil,
+            interdictor = ship.flags and ship.flags.interdictor and ship.subs and ship.subs.interdict ~= false or nil,
         }
 
         if mapShip and ship.systemId == mapShip.systemId then
@@ -74,12 +79,25 @@ local function BuildData()
         ships[#ships + 1] = row
     end
 
+    local fleets = {}
+    for id, fleet in SortedPairs(Naval.Fleets or {}) do
+        fleets[#fleets + 1] = {id = id, name = fleet.name, flagshipId = fleet.flagshipId, formation = fleet.formation,
+            mode = fleet.mode, factionId = fleet.factionId}
+    end
+
+    local comms = {}
+    local log = Naval.CommsLog or {}
+    for i = math.max(1, #log - 14), #log do comms[#comms + 1] = log[i] end
+
     return {
         paused = Naval.Paused == true,
         running = Naval.SimRunning == true,
         mapShipId = mapShip and mapShip.id,
         systemId = mapShip and mapShip.systemId,
         ships = ships,
+        fleets = fleets,
+        comms = comms,
+        commsLive = Naval.CommsLive == true,
     }
 end
 
@@ -359,6 +377,100 @@ end
 --------------------------------------------------------------------------------
 -- Map-Knoepfe fuer die Alarmstufen (sv_naval_alert.lua)
 --------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- Flotten, Abfangfeld, Kapitulation, Funk (Stufe 3)
+--------------------------------------------------------------------------------
+
+local function FleetArg(args)
+    return Naval.Fleets and Naval.Fleets[tonumber(args.fleetId) or -1]
+end
+
+Actions.fleet_create = function(ply, args)
+    local ship = Naval.Ships[tonumber(args.id) or -1]
+    if not ship or not Naval.CreateFleet then return end
+    local name = string.sub(string.Trim(tostring(args.name or "")), 1, 64)
+    local fleet = Naval.CreateFleet(name, ship)
+    Notify(ply, "Flotte " .. fleet.name .. " gebildet (Flaggschiff " .. ship.name .. ")", true)
+    Log(ply, "Flotte " .. fleet.name .. " gebildet, Flaggschiff #" .. ship.id)
+end
+
+Actions.fleet_add = function(ply, args)
+    local fleet, ship = FleetArg(args), Naval.Ships[tonumber(args.id) or -1]
+    if not fleet or not ship then return end
+    Naval.FleetAdd(fleet, ship)
+    Log(ply, ship.name .. " -> Flotte " .. fleet.name)
+end
+
+Actions.fleet_remove = function(ply, args)
+    local ship = Naval.Ships[tonumber(args.id) or -1]
+    if not ship then return end
+    Naval.FleetRemove(ship)
+    Naval.SaveShip(ship)
+    Log(ply, ship.name .. " aus der Flotte genommen")
+end
+
+Actions.fleet_flagship = function(ply, args)
+    local ship = Naval.Ships[tonumber(args.id) or -1]
+    local fleet = ship and Naval.Fleets[ship.fleetId or 0]
+    if not fleet then Notify(ply, "Schiff ist in keiner Flotte") return end
+    Naval.SetFlagship(fleet, ship)
+    Log(ply, "Flotte " .. fleet.name .. ": Flaggschiff " .. ship.name)
+end
+
+Actions.fleet_set = function(ply, args)
+    local fleet = FleetArg(args)
+    if not fleet then return end
+    for _, f in ipairs(Naval.Formations) do if f.id == args.formation then fleet.formation = f.id end end
+    for _, m in ipairs(Naval.FleetModes) do if m.id == args.mode then fleet.mode = m.id end end
+    if args.spacing ~= nil then fleet.spacing = tonumber(args.spacing) and math.Clamp(tonumber(args.spacing), 300, 200000) or nil end
+    if args.name and string.Trim(tostring(args.name)) ~= "" then fleet.name = string.sub(string.Trim(tostring(args.name)), 1, 64) end
+    Naval.SaveFleet(fleet)
+    Log(ply, "Flotte " .. fleet.name .. ": " .. fleet.formation .. ", " .. fleet.mode)
+end
+
+Actions.fleet_delete = function(ply, args)
+    local fleet = FleetArg(args)
+    if not fleet then return end
+    Naval.DeleteFleet(fleet)
+    Log(ply, "Flotte " .. fleet.name .. " aufgelöst")
+end
+
+Actions.interdict = function(ply, args)
+    local ship = Naval.Ships[tonumber(args.id) or -1]
+    if not ship or not Naval.SetInterdictor then return end
+    Naval.SetInterdictor(ship, args.on == true)
+    Notify(ply, ship.name .. ": Abfangfeld " .. (args.on and "an" or "aus"), true)
+    Log(ply, ship.name .. ": Abfangfeld " .. (args.on and "an" or "aus"))
+end
+
+Actions.surrender = function(ply, args)
+    local ship = Naval.Ships[tonumber(args.id) or -1]
+    if not ship or ship:IsPlayerShip() or not Naval.Surrender then return end
+    if args.undo then
+        ship.flags.surrendered = nil
+        ship.flags.prisoner = nil
+        if ship.subs then ship.subs.morale = 60 ship.subs.roe = "return" end
+        ship.dirty = true
+        Log(ply, ship.name .. ": Kapitulation aufgehoben")
+    else
+        Naval.Surrender(ship, ply:Nick())
+        Log(ply, ship.name .. ": Kapitulation ausgelöst")
+    end
+end
+
+Actions.comms_live = function(ply, args)
+    Naval.CommsLive = args.on == true
+    Notify(ply, Naval.CommsLive and "Funk: Spielleitung antwortet selbst" or "Funk: KI antwortet", true)
+end
+
+Actions.comms_reply = function(ply, args)
+    local ship = Naval.Ships[tonumber(args.id) or -1]
+    local text = string.Trim(string.sub(tostring(args.text or ""), 1, 300))
+    if text == "" or not Naval.CommsMessage then return end
+    Naval.CommsMessage(ship or string.sub(tostring(args.from or "Funk"), 1, 40), text, "reply")
+    Log(ply, "Funk als " .. (ship and ship.name or tostring(args.from or "Funk")) .. ": " .. text)
+end
 
 Actions.alertbtn_add = function(ply, args)
     local ent = ply:GetEyeTrace().Entity

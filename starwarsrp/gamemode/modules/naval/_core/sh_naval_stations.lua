@@ -121,3 +121,32 @@ PD.Naval.IncidentKinds = {
     smoke = {name = "Rauchentwicklung", severity = 2},
     fire = {name = "Brand", severity = 3},
 }
+
+-- Stufe 3: Kommunikation und Flottenfuehrung
+PD.Naval.Stations.comms = {
+    name = "Kommunikation",
+    model = "models/lordtrilobite/starwars/isd/imp_console_medium03.mdl",
+    desc = "Rufen, Kapitulation, Notruf",
+}
+PD.Naval.Stations.fleetcmd = {
+    name = "Flottenführung",
+    model = "models/lordtrilobite/starwars/isd/imp_console_large01.mdl",
+    desc = "Formation und Befehle an die eigene Flotte",
+}
+
+-- Formationen (Plaetze relativ zum Flaggschiff: x vorn, y links, z oben)
+PD.Naval.Formations = {
+    {id = "line", name = "Linie"},
+    {id = "column", name = "Kolonne"},
+    {id = "wedge", name = "Keil"},
+    {id = "wall", name = "Wand"},
+    {id = "sphere", name = "Kugel"},
+}
+
+-- Flottenmodus: formation = Formation halten und auf das Ziel des
+-- Flaggschiffs feuern, engage = ausschwaermen und angreifen, hold = Position halten
+PD.Naval.FleetModes = {
+    {id = "formation", name = "Formation halten"},
+    {id = "engage", name = "Angreifen"},
+    {id = "hold", name = "Position halten"},
+}

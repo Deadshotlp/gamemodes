@@ -220,11 +220,23 @@ function Naval.OpenFleetCommand()
         draw.SimpleText(line, "MLIB.14", 8, 46, COL.text)
     end)
 
-    B.Info(26, function(s, w, h)
+    B.Info(46, function(s, w, h)
         local r = selected and AdminShip(selected)
-        if not r or r.map then return end
+        if not r then return end
+        local fleet
+        for _, f in ipairs((C.admin and C.admin.fleets) or {}) do if f.id == r.fleetId then fleet = f end end
+        local fleetText = fleet and ("Flotte " .. fleet.name .. (fleet.flagshipId == r.id and " (Flaggschiff)" or "")) or "keine Flotte"
+        if r.map then
+            draw.SimpleText(fleetText, "MLIB.14", 8, 5, COL.text)
+            return
+        end
         local target = r.target and AdminShip(r.target)
         draw.SimpleText((ROE_LABEL[r.roe] or "-") .. (target and ("  -  Ziel: " .. target.name) or ""), "MLIB.14", 8, 5, COL.text)
+        local flags = {fleetText}
+        if r.morale then flags[#flags + 1] = "Moral " .. r.morale .. " %" end
+        if r.surrendered then flags[#flags + 1] = r.prisoner and "gefangen" or "kapituliert" end
+        if r.interdictor then flags[#flags + 1] = "Abfangfeld an" end
+        draw.SimpleText(table.concat(flags, "  -  "), "MLIB.14", 8, 25, r.surrendered and COL.warn or COL.dim)
     end)
 
     local cRoe = B.Combo({{"hold", ROE_LABEL.hold}, {"return", ROE_LABEL["return"]}, {"free", ROE_LABEL.free}}, "return")
@@ -319,6 +331,121 @@ function Naval.OpenFleetCommand()
                 Select(nil)
             end, "Abbrechen")
         end, COL.bad},
+    })
+
+    B.Buttons({
+        {"Abfangfeld an/aus", function()
+            local r = selected and AdminShip(selected)
+            if r and not r.map then Send("interdict", {id = r.id, on = not r.interdictor}) end
+        end},
+        {"Kapitulation an/aus", function()
+            local r = selected and AdminShip(selected)
+            if r and not r.map then Send("surrender", {id = r.id, undo = r.surrendered == true}) end
+        end, COL.warn},
+    })
+
+    ----------------------------------------------------------------------------
+    -- Flotten
+    ----------------------------------------------------------------------------
+
+    B.Header("Flotten")
+    B.Text("Begleitschiffe folgen ihrem Flaggschiff (auch der Venator), springen mit und feuern auf dessen Ziel. "
+        .. "Auf der Venator steuert die Konsole Flottenführung die eigene Flotte.")
+
+    local cFleet = B.Combo({})
+    local fleetKey
+    local function FillFleets()
+        if not IsValid(cFleet) then return end
+        local fleets = (C.admin and C.admin.fleets) or {}
+        local parts = {}
+        for _, f in ipairs(fleets) do parts[#parts + 1] = f.id .. f.name .. f.flagshipId end
+        local key = table.concat(parts, "|")
+        if key == fleetKey then return end
+        fleetKey = key
+
+        local current = B.ComboValue(cFleet)
+        cFleet:Clear()
+        for _, f in ipairs(fleets) do
+            local flag = AdminShip(f.flagshipId)
+            cFleet:AddChoice(f.name .. " (Flaggschiff " .. (flag and flag.name or "?") .. ")", f.id, f.id == current)
+        end
+    end
+    hook.Add("PD.Naval.AdminData", cFleet, FillFleets)
+    FillFleets()
+
+    local eFleetName = B.Entry("Name der neuen Flotte")
+    B.Buttons({
+        {"Neue Flotte (Flaggschiff = Auswahl)", function()
+            if selected then Send("fleet_create", {id = selected, name = eFleetName:GetValue()}) eFleetName:SetValue("") end
+        end, COL.ok},
+    })
+    B.Buttons({
+        {"Auswahl hinzufügen", function()
+            if selected and B.ComboValue(cFleet) then Send("fleet_add", {fleetId = B.ComboValue(cFleet), id = selected}) end
+        end},
+        {"Aus Flotte nehmen", function() if selected then Send("fleet_remove", {id = selected}) end end},
+        {"Zum Flaggschiff", function() if selected then Send("fleet_flagship", {id = selected}) end end},
+    })
+
+    local formations, modes = {}, {}
+    for _, f in ipairs(Naval.Formations) do formations[#formations + 1] = {f.id, "Formation: " .. f.name} end
+    for _, m in ipairs(Naval.FleetModes) do modes[#modes + 1] = {m.id, m.name} end
+    local cFormation = B.Combo(formations, "wedge")
+    local cMode = B.Combo(modes, "formation")
+    B.Buttons({
+        {"Übernehmen", function()
+            local id = B.ComboValue(cFleet)
+            if id then Send("fleet_set", {fleetId = id, formation = B.ComboValue(cFormation), mode = B.ComboValue(cMode)}) end
+        end, COL.ok},
+        {"Flotte auflösen", function()
+            local id = B.ComboValue(cFleet)
+            if not id then return end
+            Derma_Query("Flotte auflösen? Die Schiffe bleiben erhalten.", "Flottenkommando", "Auflösen", function()
+                Send("fleet_delete", {fleetId = id})
+            end, "Abbrechen")
+        end, COL.bad},
+    })
+
+    ----------------------------------------------------------------------------
+    -- Funk (Spielleitung)
+    ----------------------------------------------------------------------------
+
+    B.Header("Funk")
+    B.Info(190, function(s, w, h)
+        local log = (C.admin and C.admin.comms) or {}
+        local y = h - 6
+        for i = #log, 1, -1 do
+            local e = log[i]
+            y = y - 18
+            if y < 4 then break end
+            local text = (e.from or "?") .. (e.to and (" -> " .. e.to) or "") .. ": " .. (e.text or "")
+            if #text > 70 then text = string.sub(text, 1, 68) .. "..." end
+            draw.SimpleText(os.date("%H:%M ", e.t or 0) .. text, "MLIB.12", 6, y, e.own and COL.accent or COL.text)
+        end
+        if #log == 0 then draw.SimpleText("Noch kein Funkverkehr", "MLIB.14", 6, 6, COL.dim) end
+    end)
+
+    local liveBtn = B.Buttons({{"", function()
+        Send("comms_live", {on = not (C.admin and C.admin.commsLive)})
+    end}})[1]
+    liveBtn.Think = function(btn)
+        btn.Label = (C.admin and C.admin.commsLive) and "Funk: Spielleitung antwortet selbst" or "Funk: KI antwortet automatisch"
+    end
+
+    local eReply = B.Entry("Antwort ...")
+    B.Buttons({
+        {"Als Auswahl antworten", function()
+            if selected and string.Trim(eReply:GetValue()) ~= "" then
+                Send("comms_reply", {id = selected, text = eReply:GetValue()})
+                eReply:SetValue("")
+            end
+        end, COL.ok},
+        {"Als \"Funk\" antworten", function()
+            if string.Trim(eReply:GetValue()) ~= "" then
+                Send("comms_reply", {from = "Funk", text = eReply:GetValue()})
+                eReply:SetValue("")
+            end
+        end},
     })
 
     ----------------------------------------------------------------------------

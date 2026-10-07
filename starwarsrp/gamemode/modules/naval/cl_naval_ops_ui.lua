@@ -285,6 +285,9 @@ local function OpenSensors(console)
         end
 
         Line(("Schilde: %d %% (%s)"):format(c.shield or 0, c.up and "oben" or "unten"), c.up and COL.accent or COL.warn)
+        if c.morale then Line(("Moral der Besatzung: %d %%"):format(c.morale), c.morale > 50 and COL.ok or (c.morale > 25 and COL.warn or COL.bad)) end
+        if c.surrendered then Line("Hat kapituliert", COL.warn) end
+        if c.interdictor then Line("Abfangkreuzer (Abfangfeld)", COL.bad) end
         y = y + 8
         Line("SUBSYSTEME", COL.dim, "MLIB.14")
         for _, sub in ipairs(c.subs or {}) do

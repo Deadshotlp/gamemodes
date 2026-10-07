@@ -169,6 +169,8 @@ local function DrawHolo()
 
             local text = info.name .. "  " .. FormatDist(dist)
             if (info.ident or 2) >= 1 and s.hull then text = text .. "  " .. s.hull .. " %" end
+            local sc = C.status and C.status.sensors and C.status.sensors.contacts and C.status.sensors.contacts[tostring(id)]
+            if sc and sc.surrendered then text = text .. "  [kapituliert]" end
             labels[#labels + 1] = {pos = pos, text = text, col = col, stem = true}
             if id == targetId then targetMark = {pos = pos, r = math.max(class.lengthM * shipScale * 0.7, 2.5)} end
         end

@@ -18,6 +18,13 @@
       pd_naval_jump <systemname>          Map-Schiff ausrichten und springen
       pd_naval_abort                      Sprung waehrend des Hochfahrens abbrechen
       pd_naval_pause                      Simulation an/aus
+      pd_naval_fleet create <flaggschiff_id> [name...]
+      pd_naval_fleet add <flotten_id> <schiff_id> | remove <schiff_id>
+      pd_naval_fleet flagship <schiff_id> | delete <flotten_id>
+      pd_naval_fleet formation <flotten_id> <line|column|wedge|wall|sphere>
+      pd_naval_fleet mode <flotten_id> <formation|engage|hold>
+      pd_naval_interdict <id> on|off      Abfangfeld
+      pd_naval_surrender <id> [undo]      Kapitulation ausloesen/aufheben
 ]]
 
 PD.Naval = PD.Naval or {}
@@ -334,5 +341,82 @@ timer.Create("PD.Naval.PendingJump", 0.5, 0, function()
         local ok, result = Naval.StartJump(ship, pending.systemId, pending.by)
         Naval.PendingMapJump = nil
         Reply(pending.ply, ok and ("Sprung eingeleitet, Dauer " .. math.Round(result) .. " s") or ("Sprung nicht moeglich: " .. tostring(result)))
+    end
+end)
+
+
+--------------------------------------------------------------------------------
+-- Stufe 3: Flotten, Abfangfeld, Kapitulation
+--------------------------------------------------------------------------------
+
+concommand.Add("pd_naval_fleet", function(ply, _, args)
+    if not Allowed(ply) or not NeedSim(ply) or not Naval.CreateFleet then return end
+    local sub = string.lower(args[1] or "")
+
+    if sub == "create" then
+        local ship = Naval.Ships[tonumber(args[2]) or -1]
+        if not ship then Reply(ply, "Schiff nicht gefunden") return end
+        local fleet = Naval.CreateFleet(table.concat(args, " ", 3), ship)
+        Reply(ply, "Flotte #" .. fleet.id .. " " .. fleet.name .. " gebildet")
+        Log(ply, "Flotte " .. fleet.name .. " gebildet")
+    elseif sub == "add" then
+        local fleet, ship = Naval.Fleets[tonumber(args[2]) or -1], Naval.Ships[tonumber(args[3]) or -1]
+        if not fleet or not ship then Reply(ply, "Flotte oder Schiff nicht gefunden") return end
+        Naval.FleetAdd(fleet, ship)
+        Reply(ply, ship.name .. " -> " .. fleet.name)
+    elseif sub == "remove" then
+        local ship = Naval.Ships[tonumber(args[2]) or -1]
+        if not ship then Reply(ply, "Schiff nicht gefunden") return end
+        Naval.FleetRemove(ship)
+        Naval.SaveShip(ship)
+        Reply(ply, ship.name .. " aus der Flotte genommen")
+    elseif sub == "flagship" then
+        local ship = Naval.Ships[tonumber(args[2]) or -1]
+        local fleet = ship and Naval.Fleets[ship.fleetId or 0]
+        if not fleet then Reply(ply, "Schiff ist in keiner Flotte") return end
+        Naval.SetFlagship(fleet, ship)
+        Reply(ply, fleet.name .. ": Flaggschiff " .. ship.name)
+    elseif sub == "delete" then
+        local fleet = Naval.Fleets[tonumber(args[2]) or -1]
+        if not fleet then Reply(ply, "Flotte nicht gefunden") return end
+        Naval.DeleteFleet(fleet)
+        Reply(ply, "Flotte aufgelöst")
+        Log(ply, "Flotte " .. fleet.name .. " aufgelöst")
+    elseif sub == "formation" or sub == "mode" then
+        local fleet = Naval.Fleets[tonumber(args[2]) or -1]
+        if not fleet then Reply(ply, "Flotte nicht gefunden") return end
+        local list = sub == "formation" and Naval.Formations or Naval.FleetModes
+        for _, e in ipairs(list) do
+            if e.id == args[3] then fleet[sub] = e.id end
+        end
+        Naval.SaveFleet(fleet)
+        Reply(ply, fleet.name .. ": " .. fleet.formation .. ", " .. fleet.mode)
+    else
+        Reply(ply, "pd_naval_fleet create|add|remove|flagship|delete|formation|mode ...")
+    end
+end)
+
+concommand.Add("pd_naval_interdict", function(ply, _, args)
+    if not Allowed(ply) or not NeedSim(ply) or not Naval.SetInterdictor then return end
+    local ship = Naval.Ships[tonumber(args[1]) or -1]
+    if not ship then Reply(ply, "Schiff nicht gefunden") return end
+    Naval.SetInterdictor(ship, args[2] ~= "off")
+    Reply(ply, ship.name .. ": Abfangfeld " .. (args[2] ~= "off" and "an" or "aus"))
+    Log(ply, ship.name .. ": Abfangfeld " .. (args[2] ~= "off" and "an" or "aus"))
+end)
+
+concommand.Add("pd_naval_surrender", function(ply, _, args)
+    if not Allowed(ply) or not NeedSim(ply) or not Naval.Surrender then return end
+    local ship = Naval.Ships[tonumber(args[1]) or -1]
+    if not ship or ship:IsPlayerShip() then Reply(ply, "Schiff nicht gefunden") return end
+    if args[2] == "undo" then
+        ship.flags.surrendered = nil
+        ship.flags.prisoner = nil
+        if ship.subs then ship.subs.morale = 60 ship.subs.roe = "return" end
+        ship.dirty = true
+        Reply(ply, ship.name .. ": Kapitulation aufgehoben")
+    else
+        Naval.Surrender(ship, IsValid(ply) and ply:Nick() or "Konsole")
+        Reply(ply, ship.name .. " kapituliert")
     end
 end)

@@ -54,7 +54,10 @@ function Naval.ShipMessage(text, col)
 end
 
 hook.Add("PD.Naval.ClientEvent", "PD.Naval.Alert", function(kind, data)
-    if kind == "contact_arrival" then
+    if kind == "comms" and not data.own then
+        surface.PlaySound("buttons/button17.wav")
+        Naval.ShipMessage(("Funk %s: %s"):format(data.from or "?", string.sub(data.text or "", 1, 120)), Color(140, 220, 255))
+    elseif kind == "contact_arrival" then
         surface.PlaySound("buttons/blip1.wav")
         Naval.ShipMessage(("Sensoren: Hyperraum-Austritt - %s in %s"):format(data.name or "unbekannter Kontakt",
             Naval.FormatDist and Naval.FormatDist(tonumber(data.dist) or 0) or "?"), Color(120, 190, 255))

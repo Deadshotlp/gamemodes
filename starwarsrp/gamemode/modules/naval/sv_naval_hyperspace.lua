@@ -128,7 +128,8 @@ function Naval.StartJump(ship, toSystemId, by, opts)
         arrive = arrive,
         arriveRot = Q.Copy(ship.rot),
         dir = dir,
-        arriveNear = opts and opts.arriveNear or nil,
+        -- Feindlicher Abfangkreuzer im Zielsystem zieht den Austritt zu sich
+        arriveNear = (opts and opts.arriveNear) or (Naval.InterdictorIn and (Naval.InterdictorIn(toSystemId, ship) or {}).id) or nil,
     }
 
     ship.ctrl.autopilot = {dir = dir}

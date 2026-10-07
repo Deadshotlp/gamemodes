@@ -376,6 +376,8 @@ local function OpenHyperdrive(console)
 
         if st.shadow then
             Line(("Massenschatten %s - noch %.0f km"):format(st.shadow.name, (st.shadow.limit - st.shadow.dist) / 1000), COL_BAD)
+        elseif st.interdict then
+            Line("Abfangfeld aktiv: " .. st.interdict, COL_BAD)
         else
             Line("Kein Massenschatten", COL_OK)
         end
@@ -410,7 +412,7 @@ local function OpenHyperdrive(console)
 
         local st = C.status or {}
         local tol = (C.static and C.static.settings.jump_align_tolerance) or 2
-        local ready = st.state == "normal" and st.nav and st.nav.ready and st.nav.valid and not st.shadow and (st.align or 99) <= tol
+        local ready = st.state == "normal" and st.nav and st.nav.ready and st.nav.valid and not st.shadow and not st.interdict and (st.align or 99) <= tol
         jump.Disabled = not ready
         align.Disabled = not (st.state == "normal" and st.nav and st.nav.ready and st.nav.valid)
         abort.Disabled = st.state ~= "spooling"

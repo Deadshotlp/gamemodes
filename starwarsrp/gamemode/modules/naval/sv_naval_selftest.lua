@@ -160,6 +160,51 @@ function Naval.SimSelfTest()
             ("angekommen nach %s s, %.0f m über das Ziel hinaus"):format(arrivedAt and math.Round(arrivedAt) or "-", overshoot))
     end
 
+    -- 11. Flotte: Begleitschiff findet seinen Platz im Keil hinter einem
+    -- fahrenden Flaggschiff und haelt ihn
+    if Naval.FleetStep and Naval.FormationSlot then
+        local flag, escort = TestShip("venator"), TestShip("arquitens")
+        flag.id, escort.id = 64011, 64012
+        flag.flags = {test = true, hidden = true}
+        escort.flags = {test = true, hidden = true}
+        flag.systemId, escort.systemId = "__test__", "__test__"
+        escort.pos = {x = -20000, y = 15000, z = 3000}
+        flag.ctrl.throttle = 0.3
+
+        local fleet = {id = 64000, name = "Test", flagshipId = flag.id, formation = "wedge", mode = "formation"}
+        flag.fleetId, escort.fleetId = fleet.id, fleet.id
+        Naval.Ships[flag.id], Naval.Ships[escort.id] = flag, escort
+        Naval.Fleets[fleet.id] = fleet
+
+        local ok, runErr = pcall(function()
+            for _ = 1, 1200 do -- 600 s
+                Naval.FleetStep(escort)
+                for _ = 1, 5 do
+                    Naval.StepShip(flag, 0.1)
+                    Naval.StepShip(escort, 0.1)
+                end
+            end
+        end)
+
+        local slotDist = ok and V3.Dist(escort.pos, Naval.FormationSlot(fleet, escort, flag)) or -1
+        Naval.Ships[flag.id], Naval.Ships[escort.id] = nil, nil
+        Naval.Fleets[fleet.id] = nil
+
+        check("Flotte: Begleitschiff hält Formation", ok and slotDist >= 0 and slotDist < 3000,
+            ok and ("%.1f km vom Platz, Flaggschiff fährt %.0f m/s"):format(slotDist / 1000, flag:Speed()) or tostring(runErr))
+    end
+
+    -- 12. Moral: schwer beschaedigtes Schiff will fliehen
+    if Naval.MoraleTarget then
+        local probe = TestShip("munificent")
+        probe.systemId = "__test__"
+        probe.hull = probe:Class().hull * 0.08
+        probe.subs = {hp = {}}
+        local moraleTarget = Naval.MoraleTarget(probe)
+        check("Moral: bei 8 % Hülle unter der Fluchtschwelle", moraleTarget < (tonumber(Naval.Settings.morale_flee) or 30),
+            ("Zielmoral %d"):format(moraleTarget))
+    end
+
     -- 9. Autopilot: Weg quer durch den Hauptplaneten fuehrt aussen herum
     if Naval.AvoidPath then
         local sysId = Naval.StartSystemId()

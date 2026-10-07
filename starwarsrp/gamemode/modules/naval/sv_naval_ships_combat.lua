@@ -275,6 +275,17 @@ function Naval.ApplyHit(target, attacker, wtype, amount)
         DamageSubsystem(target, zone, focus and toSub * 1.5 or toSub, focus)
     end
 
+    -- Waffenruhe (Kapitulation des Map-Schiffs angenommen): Beschuss beendet sie
+    if attacker and attacker:IsPlayerShip() and target.subs and target.subs.ceasefire then
+        target.subs.ceasefire = nil
+        target.subs.roe = "free"
+        if Naval.CommsMessage then Naval.CommsMessage(target, "Verrat! Feuer frei auf " .. attacker.name .. "!", "combat") end
+    end
+    if attacker and attacker:IsPlayerShip() and target.flags and target.flags.surrendered and not target.firedOnSurrender then
+        target.firedOnSurrender = true
+        attacker:Log("combat", "", "Feuer auf das kapitulierte Schiff " .. target.name)
+    end
+
     target.lastAttacker = attacker and attacker.id
     target.lastAttacked = CurTime()
     target.dirty = true
@@ -499,7 +510,7 @@ function Naval.CombatTick()
             if ship:IsPlayerShip() then
                 canFire = ship.subs.fire == true
             else
-                canFire = ship.subs.roe ~= "hold"
+                canFire = ship.subs.roe ~= "hold" and not (ship.flags and (ship.flags.surrendered or ship.flags.prisoner))
             end
 
             if canFire and ship.state == S.NORMAL then

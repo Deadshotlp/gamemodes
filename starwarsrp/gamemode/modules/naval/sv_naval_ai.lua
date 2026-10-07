@@ -222,15 +222,14 @@ Handlers.attack = function(ship, order)
 end
 
 -- Flucht: KI-Schiffe unter 20 % Huelle springen ins naechste System
-local function CheckFlee(ship)
-    if ship.fleeing or (ship.flags and ship.flags.noFlee) or ship.state ~= S.NORMAL then return end
-
-    local class = ship:Class()
-    if not class or (ship.hull or class.hull) > class.hull * 0.2 then return end
-    if ship.subs and Naval.SubFactor and Naval.SubFactor(ship, "hyperdrive") <= 0 then return end
+-- Ins naechste System springen (Flucht). false, wenn nicht moeglich.
+function Naval.AIFlee(ship)
+    if ship.fleeing then return true end
+    if ship.subs and Naval.SubFactor and Naval.SubFactor(ship, "hyperdrive") <= 0 then return false end
+    if Naval.InterdictorFor and Naval.InterdictorFor(ship) then return false end
 
     local here = Naval.Systems[ship.systemId]
-    if not here then return end
+    if not here then return false end
 
     local best, bestD
     for id, s in pairs(Naval.Systems) do
@@ -240,11 +239,26 @@ local function CheckFlee(ship)
         end
     end
 
-    if best then
-        ship.fleeing = true
-        Naval.SetOrders(ship, {{type = "jump", systemId = best.id}}, "KI (Flucht)")
-        Naval.Event(ship, "flee", {to = best.id})
+    if not best then return false end
+
+    ship.fleeing = true
+    Naval.SetOrders(ship, {{type = "jump", systemId = best.id}}, "KI (Flucht)")
+    Naval.Event(ship, "flee", {to = best.id})
+    return true
+end
+
+local function CheckFlee(ship)
+    if ship.fleeing or (ship.flags and ship.flags.noFlee) or ship.state ~= S.NORMAL then return end
+
+    -- Mit Moral (sv_naval_morale.lua) entscheidet diese ueber Flucht und Kapitulation
+    if Naval.MoraleDecide and (tonumber(Naval.Settings.morale_enabled) or 1) == 1 then
+        Naval.MoraleDecide(ship)
+        return
     end
+
+    local class = ship:Class()
+    if not class or (ship.hull or class.hull) > class.hull * 0.2 then return end
+    Naval.AIFlee(ship)
 end
 
 function Naval.AITick()
@@ -254,10 +268,22 @@ function Naval.AITick()
         local state = ship.state
         if state == S.DESTROYED or state == S.DISABLED then continue end
 
+        -- Kapituliert / gefangen: stillhalten
+        if ship.flags and (ship.flags.surrendered or ship.flags.prisoner) then
+            if state == S.NORMAL then
+                ship.ctrl.throttle = 0
+                ship.ctrl.autopilot = nil
+            end
+            continue
+        end
+
         CheckFlee(ship)
 
         local queue = ship.orders and ship.orders.queue
         local order = queue and queue[1]
+
+        -- Flottenmitglied ohne eigenen Befehl: dem Flaggschiff folgen
+        if not order and Naval.FleetStep and Naval.FleetStep(ship) then continue end
 
         if not order then
             -- Ohne Befehl: anhalten (Hyperraum laeuft weiter)
