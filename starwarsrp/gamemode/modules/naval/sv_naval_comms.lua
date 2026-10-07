@@ -254,6 +254,6 @@ Naval.CombatCommands.comms = C
 Naval.StatusExtras = Naval.StatusExtras or {}
 Naval.StatusExtras.comms = function()
     local log = {}
-    for i = math.max(1, #Naval.CommsLog - 24), #Naval.CommsLog do log[#log + 1] = Naval.CommsLog[i] end
+    for i = math.max(1, #Naval.CommsLog - 14), #Naval.CommsLog do log[#log + 1] = Naval.CommsLog[i] end
     return {log = log, distressIn = math.max(0, math.Round((Naval.DistressReady or 0) - CurTime()))}
 end

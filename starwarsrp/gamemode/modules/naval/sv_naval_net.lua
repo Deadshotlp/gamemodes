@@ -22,7 +22,11 @@ util.AddNetworkString("PD.Naval.Data")
 util.AddNetworkString("PD.Naval.Snap")
 util.AddNetworkString("PD.Naval.Event")
 
-local CHUNK = 60000
+-- Kleine Teile mit Abstand: grosse Sendungen fuellen sonst den zuverlaessigen
+-- Kanal, und bei mehreren Reloads kurz hintereinander fliegen Spieler raus
+-- ("overflowed reliable channel")
+local CHUNK = 24000
+local CHUNK_DELAY = 0.25
 local serial = 0
 
 -- Zustaende als Zahl fuers Netz
@@ -36,16 +40,33 @@ local function Recipients()
     return list
 end
 
--- Tabelle komprimiert (in Teilen) senden; target = Spieler oder Liste
-function Naval.SendData(kind, payload, target)
-    local data = util.Compress(util.TableToJSON(payload) or "{}") or ""
+-- Tabelle komprimiert (in Teilen) senden; target = Spieler oder Liste.
+-- crcField (optional): nur an Spieler, die genau diesen Stand noch nicht
+-- haben (Pruefsumme am Spieler gemerkt; uebersteht Lua-Reloads)
+function Naval.SendData(kind, payload, target, crcField)
+    local json = util.TableToJSON(payload) or "{}"
+
+    if crcField then
+        local crc = util.CRC(json)
+        local list = {}
+        for _, p in ipairs(istable(target) and target or {target}) do
+            if IsValid(p) and p[crcField] ~= crc then
+                p[crcField] = crc
+                list[#list + 1] = p
+            end
+        end
+        if #list == 0 then return 0 end
+        target = list
+    end
+
+    local data = util.Compress(json) or ""
     local total = math.max(1, math.ceil(#data / CHUNK))
 
     serial = (serial % 65535) + 1
     local id = serial
 
     for index = 1, total do
-        timer.Simple((index - 1) * 0.1, function()
+        timer.Simple((index - 1) * CHUNK_DELAY, function()
             -- Empfaenger zuerst: eine begonnene, nie gesendete Nachricht
             -- blockiert sonst die naechste (auch anderer Module)
             local valid = {}
@@ -138,7 +159,7 @@ end
 Naval.BuildStaticForTest = BuildStatic
 
 function Naval.SendStatic(target)
-    local size = Naval.SendData("static", BuildStatic(), target or Recipients())
+    local size = Naval.SendData("static", BuildStatic(), target or Recipients(), "PD_NavalStaticCRC")
     Naval.DebugLog("Static gesendet: " .. math.Round(size / 1024, 1) .. " KB")
 end
 
@@ -146,7 +167,7 @@ function Naval.SendSystem(target)
     local ship = Naval.GetMapShip()
     if not ship then return end
 
-    Naval.SendData("system", BuildSystem(ship.systemId), target or Recipients())
+    Naval.SendData("system", BuildSystem(ship.systemId), target or Recipients(), "PD_NavalSystemCRC")
 end
 
 --------------------------------------------------------------------------------
@@ -306,9 +327,13 @@ hook.Add("PD.Naval.SimStarted", "PD.Naval.Net", function()
     visibleKey = ""
     lastSystem = nil
 
-    for _, ply in ipairs(player.GetHumans()) do
-        SendAllTo(ply)
-    end
+    -- Mehrere Reloads kurz hintereinander (Code-Updates) zu einer Sendung
+    -- zusammenfassen; unveraenderte Daten gehen ohnehin nicht noch einmal raus
+    timer.Create("PD.Naval.Resync", 3, 1, function()
+        for _, ply in ipairs(player.GetHumans()) do
+            SendAllTo(ply)
+        end
+    end)
 
     -- Snapshot nach jedem Simulationsschritt (sv_naval_sim), nicht per
     -- eigenem Timer - zwei gleich schnelle Timer laufen gegeneinander und

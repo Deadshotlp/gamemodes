@@ -389,7 +389,13 @@ timer.Create("PD.Naval.Status", 0.5, 0, function()
     end
     if #recipients == 0 then return end
 
+    -- Komprimiert: der Status ist mit Kampf, Sensoren, Funk usw. gross, und er
+    -- geht 2x pro Sekunde zuverlaessig an alle
+    local data = util.Compress(util.TableToJSON(status) or "{}") or ""
+    if #data > 60000 then return end
+
     net.Start("PD.Naval.Status")
-    net.WriteString(util.TableToJSON(status) or "{}")
+    net.WriteUInt(#data, 16)
+    net.WriteData(data, #data)
     net.Send(recipients)
 end)

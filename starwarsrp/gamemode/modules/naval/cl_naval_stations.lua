@@ -30,7 +30,9 @@ UI.COL = {bg = COL_BG, panel = COL_PANEL, accent = COL_ACCENT, ok = COL_OK, warn
 --------------------------------------------------------------------------------
 
 net.Receive("PD.Naval.Status", function()
-    C.status = util.JSONToTable(net.ReadString()) or {}
+    local size = net.ReadUInt(16)
+    local json = util.Decompress(net.ReadData(size))
+    C.status = json and util.JSONToTable(json) or C.status or {}
     C.statusTime = CurTime()
 end)
 
