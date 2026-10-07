@@ -133,7 +133,30 @@ HC.rotate = function(ply, ship, args)
     SetGlobalInt(key, (GetGlobalInt(key, 0) + step) % 360)
 end
 
+-- Dauerrotation: Achse, Tempo (Grad/s, Vorzeichen = Richtung) und Startzeit;
+-- die Clients rechnen den Winkel selbst. Beim Stoppen rastet der Winkel auf
+-- den naechsten 45-Grad-Schritt ein.
+local ROT_KEY = {p = "PD.Naval.HoloRotP", y = "PD.Naval.HoloRotY", r = "PD.Naval.HoloRotR"}
+
+local function StopSpin()
+    local axis = GetGlobalString("PD.Naval.HoloSpinAxis", "")
+    if not ROT_KEY[axis] then return end
+    local angle = GetGlobalInt(ROT_KEY[axis], 0)
+        + GetGlobalFloat("PD.Naval.HoloSpinSpeed", 0) * (CurTime() - GetGlobalFloat("PD.Naval.HoloSpinStart", CurTime()))
+    SetGlobalInt(ROT_KEY[axis], (math.Round(angle / 45) * 45) % 360)
+    SetGlobalString("PD.Naval.HoloSpinAxis", "")
+end
+
+HC.spin = function(ply, ship, args)
+    StopSpin()
+    if not ROT_KEY[args.axis or ""] then return end
+    SetGlobalFloat("PD.Naval.HoloSpinSpeed", math.Clamp(tonumber(args.speed) or 20, -90, 90))
+    SetGlobalFloat("PD.Naval.HoloSpinStart", CurTime())
+    SetGlobalString("PD.Naval.HoloSpinAxis", args.axis)
+end
+
 HC.reset = function()
+    StopSpin()
     SetGlobalInt("PD.Naval.HoloRotP", 0)
     SetGlobalInt("PD.Naval.HoloRotY", 0)
     SetGlobalInt("PD.Naval.HoloRotR", 0)

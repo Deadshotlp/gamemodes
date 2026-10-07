@@ -370,7 +370,7 @@ end
 local function OpenHoloControl(console)
     local UI = Naval.UI
     local COL = UI.COL
-    local frame = UI.Frame("HOLOGRAMM-STEUERUNG", 780, 600)
+    local frame = UI.Frame("HOLOGRAMM-STEUERUNG", 780, 690)
     frame.Console = console
 
     local function Galaxy() return GetGlobalInt("PD.Naval.HoloMode", 0) == 1 end
@@ -448,8 +448,34 @@ local function OpenHoloControl(console)
         timer.Simple(0.4, function() Naval.CombatCmd("holo_control", "rotate", {axis = "p", delta = 1}) end)
     end)
 
+    -- Dauerrotation
+    local spin = Section(395, 80, "DAUERROTATION (BEIM STOPPEN RASTET SIE AUF DEN NÄCHSTEN 45°-SCHRITT EIN)")
+    local spinState = {speed = 20}
+    local function SpinAxis() return GetGlobalString("PD.Naval.HoloSpinAxis", "") end
+    local function StartSpin(axis) Naval.CombatCmd("holo_control", "spin", {axis = axis, speed = spinState.speed}) end
+    local spinAxes = {{"", "Aus"}, {"y", "Drehen"}, {"p", "Kippen"}, {"r", "Rollen"}}
+    for i, a in ipairs(spinAxes) do
+        Btn(spin, a[2], 10 + (i - 1) * 92, 34, 86, function() StartSpin(a[1]) end, function()
+            return SpinAxis() == a[1] and (a[1] == "" and COL.warn or COL.ok) or COL.dim
+        end)
+    end
+    local speeds = {{10, "langsam"}, {20, "mittel"}, {45, "schnell"}}
+    for i, sp in ipairs(speeds) do
+        Btn(spin, sp[2], 390 + (i - 1) * 86, 34, 80, function()
+            spinState.speed = (spinState.speed < 0 and -1 or 1) * sp[1]
+            if SpinAxis() ~= "" then StartSpin(SpinAxis()) end
+        end, function() return math.abs(spinState.speed) == sp[1] and COL.ok or COL.dim end)
+    end
+    local dir = Btn(spin, "", spin:GetWide() - 100, 34, 90, function()
+        spinState.speed = -spinState.speed
+        if SpinAxis() ~= "" then StartSpin(SpinAxis()) end
+    end)
+    dir.Think = function(b) b.Label = spinState.speed < 0 and "↻ rechts" or "↺ links" end
+    -- Laufende Rotation uebernehmen (Tempo/Richtung)
+    if SpinAxis() ~= "" then spinState.speed = math.Round(GetGlobalFloat("PD.Naval.HoloSpinSpeed", 20)) end
+
     -- Ebenen
-    local layers = Section(395, 130, "EBENEN")
+    local layers = Section(485, 130, "EBENEN")
     for i, l in ipairs(Naval.HoloLayers) do
         local col = (i - 1) % 3
         local row = math.floor((i - 1) / 3)

@@ -463,6 +463,13 @@ local function DrawHolo()
     local height = settings.holo_height or 45
     local base = projector:GetPos()
     local rp, ry, rr = GetGlobalInt("PD.Naval.HoloRotP", 0), GetGlobalInt("PD.Naval.HoloRotY", 0), GetGlobalInt("PD.Naval.HoloRotR", 0)
+
+    -- Dauerrotation (Steuerkonsole): Winkel aus Startzeit und Tempo
+    local spinAxis = GetGlobalString("PD.Naval.HoloSpinAxis", "")
+    if spinAxis ~= "" then
+        local add = GetGlobalFloat("PD.Naval.HoloSpinSpeed", 0) * (CurTime() - GetGlobalFloat("PD.Naval.HoloSpinStart", CurTime()))
+        if spinAxis == "p" then rp = rp + add elseif spinAxis == "y" then ry = ry + add elseif spinAxis == "r" then rr = rr + add end
+    end
     local rotated = rp ~= 0 or ry ~= 0 or rr ~= 0
     local galaxy = GetGlobalInt("PD.Naval.HoloMode", 0) == 1
     local flicker = 0.85 + math.sin(CurTime() * 23) * 0.04 + math.sin(CurTime() * 3.1) * 0.05
