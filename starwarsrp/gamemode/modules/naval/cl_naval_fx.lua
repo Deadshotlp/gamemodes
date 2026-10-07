@@ -51,11 +51,21 @@ net.Receive("PD.Naval.Shots", function()
         local typeIdx = net.ReadUInt(4)
         local hit = net.ReadBool()
         local travel = net.ReadFloat()
+        local src = net.ReadUInt(8)
 
         if #bolts < MAX_BOLTS then
             local wtype = Naval.WeaponTypeList[typeIdx] or "turbolaser"
-            -- Versatz entlang der Schiffe, damit nicht alles aus einem Punkt kommt
-            local function Offset(id)
+            -- Versatz entlang der Schiffe, damit nicht alles aus einem Punkt kommt;
+            -- mit Geschuetzstellung (src) genau von dort
+            local function Offset(id, hpIdx)
+                local hp = hpIdx and hpIdx > 0 and Naval.ShipHardpoints and Naval.ShipHardpoints(id)
+                hp = hp and hp[hpIdx]
+                if hp then
+                    local info = C.info[id]
+                    local class = info and C.static and C.static.classes[info.classId]
+                    local len = class and class.lengthM or 300
+                    return {x = (tonumber(hp.x) or 0) * len, y = (tonumber(hp.y) or 0) * len, z = (tonumber(hp.z) or 0) * len, body = true}
+                end
                 local info = C.info[id]
                 local class = info and C.static and C.static.classes[info.classId]
                 local len = (class and class.lengthM or 300) * 0.4
@@ -67,7 +77,7 @@ net.Receive("PD.Naval.Shots", function()
             bolts[#bolts + 1] = {
                 from = from, to = to, type = wtype, hit = hit,
                 t0 = now + delay, t1 = now + delay + math.max(travel, 0.3),
-                ofrom = Offset(from), oto = Offset(to),
+                ofrom = Offset(from, src), oto = Offset(to),
                 color = TYPE_COLOR[wtype] or FactionColor(from),
                 miss = not hit and {x = (math.random() - 0.5) * 2000, y = (math.random() - 0.5) * 2000, z = (math.random() - 0.5) * 1000} or nil,
             }
@@ -78,6 +88,19 @@ end)
 --------------------------------------------------------------------------------
 -- Zeichnen (vom Renderpass aufgerufen)
 --------------------------------------------------------------------------------
+
+-- Geschuetzstellungen eines Schiffs (Map-Schiff: aus dem Map-Profil)
+function Naval.ShipHardpoints(id)
+    local info = C.info[id]
+    if not info or not C.static then return nil end
+    if info.mapShip then
+        local profile = Naval.GetProfile and Naval.GetProfile()
+        local list = profile and C.static.settings and C.static.settings["hardpoints_" .. profile.key]
+        if istable(list) and #list > 0 then return list end
+    end
+    local class = C.static.classes[info.classId]
+    return class and class.hardpoints
+end
 
 -- Mitte des Schiffs (eigenes Schiff: Mittelpunkt, Kamera ist darin)
 local function ShipPos(view, id)
@@ -101,7 +124,13 @@ function Naval.DrawFX(view, toRender)
 
         local fromPos, toPos = ShipPos(view, b.from), ShipPos(view, b.to)
         if fromPos and toPos and now >= b.t0 then
-            local a = Naval.V3.Add(fromPos, b.ofrom)
+            -- Stellungs-Versatz in Schiffsachsen: mit der Lage des Schiffs drehen
+            local fromOff = b.ofrom
+            if fromOff.body then
+                local rot = b.from == view.id and view.rot or (view.ships[b.from] and view.ships[b.from].rot)
+                if rot then fromOff = Naval.Q.RotateVec(rot, fromOff) end
+            end
+            local a = Naval.V3.Add(fromPos, fromOff)
             local z = Naval.V3.Add(toPos, b.oto)
             if b.miss then z = Naval.V3.Add(z, b.miss) end
 

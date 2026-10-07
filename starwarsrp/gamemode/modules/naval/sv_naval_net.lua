@@ -80,7 +80,8 @@ local function BuildStatic()
     local classes, factions, systems, routes = {}, {}, {}, {}
 
     for id, c in pairs(Naval.Classes) do
-        classes[id] = {name = c.name, model = c.model, lodModel = c.lodModel, lengthM = c.lengthM, faction = c.faction}
+        classes[id] = {name = c.name, model = c.model, lodModel = c.lodModel, lengthM = c.lengthM, faction = c.faction,
+            hardpoints = istable(c.hardpoints) and #c.hardpoints > 0 and c.hardpoints or nil}
     end
 
     for id, f in pairs(Naval.Factions) do
@@ -113,7 +114,8 @@ local function BuildStatic()
             alert_alarm_seconds = s.alert_alarm_seconds, mass_shadow_factor = s.mass_shadow_factor,
             alert_red_light = s.alert_red_light,
             autopilot_clearance = s.autopilot_clearance, autopilot_margin = s.autopilot_margin,
-            ["mapcal_" .. ((Naval.GetProfile() or {}).key or "")] = Naval.GetProfile() and s["mapcal_" .. Naval.GetProfile().key] or nil},
+            ["mapcal_" .. ((Naval.GetProfile() or {}).key or "")] = Naval.GetProfile() and s["mapcal_" .. Naval.GetProfile().key] or nil,
+            ["hardpoints_" .. ((Naval.GetProfile() or {}).key or "")] = Naval.GetProfile() and s["hardpoints_" .. Naval.GetProfile().key] or nil},
         classes = classes, factions = factions, relations = Naval.Relations,
         systems = systems, routes = routes,
     }

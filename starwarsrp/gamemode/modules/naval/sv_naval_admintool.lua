@@ -472,6 +472,81 @@ Actions.comms_reply = function(ply, args)
     Log(ply, "Funk als " .. (ship and ship.name or tostring(args.from or "Funk")) .. ": " .. text)
 end
 
+--------------------------------------------------------------------------------
+-- Geschuetzstellungen (Stufe 4a): Klasse oder Map-Schiff (target "__map")
+--------------------------------------------------------------------------------
+
+local function CleanHardpoints(list)
+    local out = {}
+    for i, hp in ipairs(istable(list) and list or {}) do
+        if i > 64 then break end
+        if istable(hp) and Naval.WeaponTypes[tostring(hp.type or "")] then
+            local wt = Naval.WeaponTypes[hp.type]
+            out[#out + 1] = {
+                group = string.sub(string.Trim(tostring(hp.group or "")), 1, 40),
+                type = hp.type,
+                count = math.Clamp(math.floor(tonumber(hp.count) or 1), 1, 50),
+                x = math.Clamp(tonumber(hp.x) or 0, -0.7, 0.7),
+                y = math.Clamp(tonumber(hp.y) or 0, -0.7, 0.7),
+                z = math.Clamp(tonumber(hp.z) or 0, -0.7, 0.7),
+                yaw = math.Clamp(tonumber(hp.yaw) or 0, -180, 180),
+                pitch = math.Clamp(tonumber(hp.pitch) or 0, -90, 90),
+                arcH = math.Clamp(tonumber(hp.arcH) or 90, 1, 180),
+                arcV = math.Clamp(tonumber(hp.arcV) or 60, 1, 90),
+                ammo = wt.ammo and math.Clamp(math.floor(tonumber(hp.ammo) or 50), 0, 10000) or nil,
+            }
+        end
+    end
+    return out
+end
+
+-- Gespeicherte Zustaende passen nicht mehr zu den neuen Stellungen
+local function ResetHardpointState(match)
+    for _, ship in pairs(Naval.Ships) do
+        if match(ship) and istable(ship.subs) then
+            ship.subs.hphp = nil
+            ship.subs.ammo = nil
+            ship.subs.due = nil
+            ship.subs.off = nil
+            ship.dirty = true
+        end
+    end
+end
+
+Actions.hardpoints_save = function(ply, args)
+    local list = CleanHardpoints(args.list)
+    local target = tostring(args.target or "")
+
+    if target == "__map" then
+        local profile = Naval.GetProfile()
+        if not profile then return end
+        local key = "hardpoints_" .. profile.key
+        Naval.Settings[key] = #list > 0 and list or nil
+        PD.SQL.Query("REPLACE INTO `pd_naval_settings` (`config_key`, `config_value`) VALUES ("
+            .. PD.SQL.EscapeString(key) .. ", " .. PD.SQL.EscapeString(Naval.DB.Encode(list)) .. ")")
+        ResetHardpointState(function(ship) return ship:IsPlayerShip() end)
+        if Naval.SendStatic then Naval.SendStatic() end
+        Notify(ply, #list .. " Stellungen des Map-Schiffs gespeichert", true)
+        Log(ply, #list .. " Geschützstellungen des Map-Schiffs gespeichert")
+        return
+    end
+
+    if not Naval.Classes[target] then return end
+    PD.SQL.FetchOne("SELECT `data` FROM `pd_naval_classes` WHERE `id` = " .. PD.SQL.EscapeString(target), function(row)
+        if not row then return end
+        local data = Naval.DB.DecodeTable(row.data)
+        data.hardpoints = #list > 0 and list or nil
+        PD.SQL.Query("UPDATE `pd_naval_classes` SET `data` = " .. PD.SQL.EscapeString(util.TableToJSON(data) or "{}")
+            .. " WHERE `id` = " .. PD.SQL.EscapeString(target), function()
+            Naval.ReloadConfig(function()
+                ResetHardpointState(function(ship) return ship.classId == target and not Naval.HardpointsFor(ship) end)
+                if IsValid(ply) then Notify(ply, #list .. " Stellungen für " .. Naval.Classes[target].name .. " gespeichert", true) end
+            end)
+        end)
+    end)
+    Log(ply, #list .. " Geschützstellungen für Klasse " .. target .. " gespeichert")
+end
+
 Actions.alertbtn_add = function(ply, args)
     local ent = ply:GetEyeTrace().Entity
     if not IsValid(ent) or ent:MapCreationID() == -1 then

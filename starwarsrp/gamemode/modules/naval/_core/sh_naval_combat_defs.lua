@@ -80,15 +80,74 @@ Naval.CombatDefaults = {
     frachter = {B("laser", 2, ALL)},
 }
 
--- Kampfwerte einer Klasse: Panel-Daten (class.combat) vor Standard
-function Naval.ClassCombat(class)
+--[[
+    Geschuetzstellungen (Stufe 4a). Liste je Klasse (class.hardpoints, in den
+    Klassendaten) bzw. je Map-Profil fuer das Map-Schiff
+    (Einstellung hardpoints_<profil>):
+      {group = "Turbolaser Backbord", type = "turbolaser", count = 2,
+       x, y, z  = Lage am Schiff in Schiffslaengen (x vorn, y links, z oben,
+                  0 = Mitte, -0.5..0.5),
+       yaw, pitch = Richtung der Stellung in Grad (0/0 = nach vorn,
+                  yaw + = nach links, pitch + = nach oben),
+       arcH, arcV = halber Feuerbogen waagerecht/senkrecht in Grad,
+       ammo     = Munition (nur Raketen/Torpedos)}
+    Stellungen derselben Gruppe bilden eine Batterie (Waffenleitstand). Eine
+    Stellung feuert nur, wenn das Ziel in ihrem Bogen liegt. Ohne Stellungen
+    gelten die pauschalen Batterien mit Zonen-Boegen.
+]]
+
+function Naval.HardpointDir(hp)
+    local yaw, pitch = math.rad(tonumber(hp.yaw) or 0), math.rad(tonumber(hp.pitch) or 0)
+    return {x = math.cos(pitch) * math.cos(yaw), y = math.cos(pitch) * math.sin(yaw), z = math.sin(pitch)}
+end
+
+-- dir: Richtung von der Stellung zum Ziel in Schiffsachsen (normiert)
+function Naval.InArc(hp, dir)
+    local arcH, arcV = tonumber(hp.arcH) or 90, tonumber(hp.arcV) or 60
+    local pitch = math.deg(math.asin(math.Clamp(dir.z, -1, 1)))
+    if math.abs(pitch - (tonumber(hp.pitch) or 0)) > arcV then return false end
+    if arcH >= 180 or math.abs(dir.x) + math.abs(dir.y) < 1e-6 then return true end
+    local yaw = math.deg(math.atan2(dir.y, dir.x))
+    return math.abs(math.AngleDifference(yaw, tonumber(hp.yaw) or 0)) <= arcH
+end
+
+-- Stellungen zu Batterien buendeln (je Gruppe, Reihenfolge des ersten Auftretens)
+local function GroupHardpoints(list)
+    local weapons, byName = {}, {}
+    for i, hp in ipairs(list) do
+        if Naval.WeaponTypes[hp.type or ""] then
+            local name = (hp.group and hp.group ~= "") and hp.group or ((Naval.WeaponTypes[hp.type].name or hp.type) .. " " .. i)
+            local key = name .. "|" .. hp.type
+            local b = byName[key]
+            if not b then
+                b = {type = hp.type, count = 0, group = name, hps = {}, ammo = 0}
+                byName[key] = b
+                weapons[#weapons + 1] = b
+            end
+            b.count = b.count + (tonumber(hp.count) or 1)
+            b.ammo = b.ammo + (tonumber(hp.ammo) or 0)
+            b.hps[#b.hps + 1] = i
+        end
+    end
+    for _, b in ipairs(weapons) do
+        if b.ammo <= 0 then b.ammo = nil end
+    end
+    return weapons
+end
+
+-- Kampfwerte einer Klasse: Panel-Daten (class.combat) vor Standard.
+-- hardpoints (optional): Stellungen, die die Batterien ersetzen (Map-Profil);
+-- sonst die der Klasse.
+function Naval.ClassCombat(class, hardpoints)
     if not class then return {weapons = {}, shields = {perZone = 0, regen = 0, ratio = 0.7}, reactor = 100} end
 
     local custom = istable(class.combat) and class.combat or {}
     local hull = class.hull or 1000
+    local hps = (istable(hardpoints) and #hardpoints > 0) and hardpoints or (istable(class.hardpoints) and #class.hardpoints > 0 and class.hardpoints) or nil
 
     return {
-        weapons = istable(custom.weapons) and custom.weapons or Naval.CombatDefaults[class.id] or {},
+        hardpoints = hps,
+        weapons = hps and GroupHardpoints(hps) or (istable(custom.weapons) and custom.weapons or Naval.CombatDefaults[class.id] or {}),
         shields = {
             perZone = custom.shields and tonumber(custom.shields.perZone) or math.Round(hull * 0.25),
             regen = custom.shields and tonumber(custom.shields.regen) or math.Round(hull * 0.002, 1),

@@ -161,9 +161,16 @@ local function OpenWeapons(console)
             draw.SimpleText(("%s  ×%d"):format(b.name, b.count), "MLIB.16", 8, 4, b.on and COL.text or COL.dim)
             if b.ammo then draw.SimpleText(("Munition %d / %d"):format(b.ammo, b.maxAmmo), "MLIB.12", 8, 22, b.ammo > 0 and COL.dim or COL.bad) end
 
-            local arc = {}
-            for _, z in ipairs(b.arc or {}) do arc[#arc + 1] = ZONE_SHORT[z] or z end
-            draw.SimpleText(table.concat(arc, " "), "MLIB.14", w * 0.42 - 8, 12, COL.dim)
+            if b.stations then
+                -- Geschuetzstellungen: intakt / im Bogen des Ziels
+                local text = (b.alive or 0) .. " intakt"
+                if cs.target then text = (b.inArcCount or 0) .. " im Bogen, " .. text end
+                draw.SimpleText(text, "MLIB.14", w * 0.42 - 8, 12, (b.alive or 0) < (b.count or 0) and COL.warn or COL.dim)
+            else
+                local arc = {}
+                for _, z in ipairs(b.arc or {}) do arc[#arc + 1] = ZONE_SHORT[z] or z end
+                draw.SimpleText(table.concat(arc, " "), "MLIB.14", w * 0.42 - 8, 12, COL.dim)
+            end
             draw.SimpleText(DistText(b.range or 0), "MLIB.14", w * 0.55 - 8, 12, COL.dim)
 
             if cs.target then

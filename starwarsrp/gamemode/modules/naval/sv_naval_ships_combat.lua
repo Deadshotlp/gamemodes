@@ -48,9 +48,41 @@ local function SubMax(ship, id)
     return 1
 end
 
+-- Geschuetzstellungen des Map-Schiffs aus dem Map-Profil (sonst die der Klasse)
+function Naval.HardpointsFor(ship)
+    if not ship:IsPlayerShip() then return nil end
+    local profile = Naval.GetProfile()
+    local list = profile and Naval.Settings["hardpoints_" .. profile.key]
+    return (istable(list) and #list > 0) and list or nil
+end
+
+function Naval.HardpointMax(class, hp)
+    return math.max(10, ((class and class.hull) or 1000) * 0.02 * (tonumber(hp.count) or 1))
+end
+
+-- Stellungen einer Batterie, die intakt sind und das Ziel im Bogen haben.
+-- localRel: Ziel relativ zum Schiff in Schiffsachsen. Liefert Anzahl
+-- Geschuetze und die Liste der Stellungen.
+function Naval.HardpointsInArc(ship, cc, battery, localRel)
+    local len = (ship:Class() or {}).lengthM or 300
+    local hphp = ship.subs and ship.subs.hphp or {}
+    local count, list = 0, {}
+    for _, idx in ipairs(battery.hps or {}) do
+        local hp = cc.hardpoints[idx]
+        if hp and (hphp[idx] or 1) > 0 then
+            local off = {x = (tonumber(hp.x) or 0) * len, y = (tonumber(hp.y) or 0) * len, z = (tonumber(hp.z) or 0) * len}
+            if Naval.InArc(hp, V3.Normalize(V3.Sub(localRel, off))) then
+                count = count + (tonumber(hp.count) or 1)
+                list[#list + 1] = idx
+            end
+        end
+    end
+    return count, list
+end
+
 function Naval.Combat(ship)
     local class = ship:Class()
-    local cc = Naval.ClassCombat(class)
+    local cc = Naval.ClassCombat(class, Naval.HardpointsFor(ship))
 
     ship.subs = istable(ship.subs) and ship.subs or {}
     local subs = ship.subs
@@ -76,6 +108,12 @@ function Naval.Combat(ship)
             local cap = cc.shields.perZone
             sh.zones[z] = {e = cap * sh.ratio, m = cap * (1 - sh.ratio)}
         end
+    end
+
+    -- Haltbarkeit der Geschuetzstellungen
+    subs.hphp = istable(subs.hphp) and subs.hphp or {}
+    for i, hp in ipairs(cc.hardpoints or {}) do
+        if subs.hphp[i] == nil then subs.hphp[i] = Naval.HardpointMax(class, hp) end
     end
 
     -- Munition
@@ -227,7 +265,7 @@ end
 -- Schaden anwenden (amount nach Multiplikator). Gibt shieldOnly zurueck.
 function Naval.ApplyHit(target, attacker, wtype, amount)
     if target.state == S.DESTROYED or target.state == S.DISABLED or target.state == S.HYPERSPACE then return end
-    local _, sh = Naval.Combat(target)
+    local tsubs, sh, tcc = Naval.Combat(target)
 
     -- Zone: Richtung zum Schuetzen in Schiffsachsen
     local zone = "front"
@@ -269,6 +307,24 @@ function Naval.ApplyHit(target, attacker, wtype, amount)
 
     if toHull > 0 then
         target.hull = math.max(0, (target.hull or 0) - toHull)
+
+        -- Geschuetzstellung auf der Seite zum Angreifer
+        if tcc.hardpoints and attacker and attacker.systemId == target.systemId and math.random() < 0.35 then
+            local toAtt = V3.Normalize(Q.RotateVec(Q.Conj(target.rot), V3.Sub(attacker.pos, target.pos)))
+            local candidates = {}
+            for idx, hp in ipairs(tcc.hardpoints) do
+                if (tsubs.hphp[idx] or 0) > 0 and V3.Dot(Naval.HardpointDir(hp), toAtt) > 0.2 then candidates[#candidates + 1] = idx end
+            end
+            local idx = candidates[math.random(math.max(#candidates, 1))]
+            if idx then
+                tsubs.hphp[idx] = math.max(0, tsubs.hphp[idx] - toHull * 0.6)
+                if tsubs.hphp[idx] <= 0 then
+                    local hp = tcc.hardpoints[idx]
+                    Naval.Event(target, "hardpoint_lost", {idx = idx, group = hp.group})
+                    if target:IsPlayerShip() then target:Log("damage", "", "Geschützstellung ausgefallen: " .. (hp.group or hp.type or "?")) end
+                end
+            end
+        end
     end
     if toSub > 0 then
         local focus = attacker and attacker.subs and attacker.subs.target == target.id and attacker.subs.targetSub or nil
@@ -319,7 +375,7 @@ local function Hostile(a, b)
 end
 
 function Naval.MaxWeaponRange(ship)
-    local cc = Naval.ClassCombat(ship:Class())
+    local cc = Naval.ClassCombat(ship:Class(), Naval.HardpointsFor(ship))
     local r = 0
     for _, b in ipairs(cc.weapons) do
         local wt = Naval.WeaponTypes[b.type]
@@ -370,7 +426,7 @@ function Naval.HitChance(ship, target, wt, dist)
     -- Punktverteidigung des Ziels gegen Raketen/Torpedos
     if wt.dmgType == "matter" then
         local pd = 0
-        for _, b in ipairs(Naval.ClassCombat(target:Class()).weapons) do
+        for _, b in ipairs(Naval.ClassCombat(target:Class(), Naval.HardpointsFor(target)).weapons) do
             if b.type == "pd" then pd = pd + (b.count or 0) end
         end
         chance = chance * (1 - math.min(0.6, pd * 0.015))
@@ -389,16 +445,23 @@ local function Fire(ship, target, dt, focusSystem, sink)
 
     local rel = V3.Sub(target.pos, ship.pos)
     local dist = V3.Len(rel)
-    local zone = Naval.ZoneOf(Q.RotateVec(Q.Conj(ship.rot), rel))
+    local localRel = Q.RotateVec(Q.Conj(ship.rot), rel)
+    local zone = Naval.ZoneOf(localRel)
     local mult = Naval.Settings.combat_damage_mult or 0.5
 
     for i, b in ipairs(cc.weapons) do
         local wt = Naval.WeaponTypes[b.type]
-        local inArc = false
-        for _, a in ipairs(b.arc or {}) do if a == zone then inArc = true break end end
+        local inArc, active, sources = false, b.count or 1, nil
+        if b.hps then
+            -- Geschuetzstellungen: nur die mit dem Ziel im Bogen
+            active, sources = Naval.HardpointsInArc(ship, cc, b, localRel)
+            inArc = active > 0
+        else
+            for _, a in ipairs(b.arc or {}) do if a == zone then inArc = true break end end
+        end
 
         if wt and not subs.off[i] and inArc and dist <= wt.range and (not wt.ammo or (subs.ammo[i] or 0) > 0) then
-            subs.due[i] = (subs.due[i] or 0) + (b.count or 1) * wt.rof / 60 * dt * wf
+            subs.due[i] = (subs.due[i] or 0) + active * wt.rof / 60 * dt * wf
             local shots = math.floor(subs.due[i])
 
             if shots > 0 then
@@ -424,7 +487,8 @@ local function Fire(ship, target, dt, focusSystem, sink)
                 -- Sichtbare Schuesse (begrenzt) im System des Map-Schiffs
                 if ship.systemId == focusSystem and not wt.pointDefense then
                     for n = 1, math.min(shots, 3) do
-                        visual[#visual + 1] = {ship.id, target.id, Naval.WeaponTypeIndex[b.type] or 1, n <= hits, travel}
+                        local src = sources and sources[math.random(#sources)] or 0
+                        visual[#visual + 1] = {ship.id, target.id, Naval.WeaponTypeIndex[b.type] or 1, n <= hits, travel, src}
                     end
                 end
 
@@ -556,6 +620,7 @@ function Naval.CombatTick()
                     net.WriteUInt(v[3], 4)
                     net.WriteBool(v[4])
                     net.WriteFloat(v[5])
+                    net.WriteUInt(math.Clamp(v[6] or 0, 0, 255), 8)
                 end
             net.Send(recipients)
         end
@@ -578,7 +643,7 @@ end)
 function Naval.Repair(ship)
     local class = ship:Class()
     -- Einstellungen (Energie, ROE, Schildverteilung) bleiben erhalten
-    if istable(ship.subs) then ship.subs.hp = nil ship.subs.ammo = nil ship.subs.due = nil end
+    if istable(ship.subs) then ship.subs.hp = nil ship.subs.ammo = nil ship.subs.due = nil ship.subs.hphp = nil end
     if istable(ship.shields) then ship.shields.zones = nil end
     ship.hull = class and class.hull or 1000
     if ship.state == S.DISABLED or ship.state == S.DESTROYED then ship.state = S.NORMAL end

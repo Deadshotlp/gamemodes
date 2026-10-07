@@ -60,14 +60,30 @@ function Naval.CombatStatus(ship)
             hull = math.Round((target.hull or 0) / math.max((target:Class() or {}).hull or 1, 1) * 100), state = target.state}
     end
 
+    local localRel = target and target.systemId == ship.systemId and Naval.Q.RotateVec(Naval.Q.Conj(ship.rot), V3.Sub(target.pos, ship.pos))
     local batteries = {}
     for i, b in ipairs(cc.weapons) do
         local wt = Naval.WeaponTypes[b.type] or {}
         local inArc = false
-        for _, a in ipairs(b.arc or {}) do if a == zone then inArc = true end end
+        local alive, inArcCount
+
+        if b.hps then
+            -- Geschuetzstellungen: intakte und im Bogen liegende zaehlen
+            alive = 0
+            for _, idx in ipairs(b.hps) do
+                if (subs.hphp[idx] or 1) > 0 then alive = alive + (tonumber(cc.hardpoints[idx].count) or 1) end
+            end
+            if localRel then
+                inArcCount = Naval.HardpointsInArc(ship, cc, b, localRel)
+                inArc = inArcCount > 0
+            end
+        else
+            for _, a in ipairs(b.arc or {}) do if a == zone then inArc = true end end
+        end
 
         batteries[i] = {
-            type = b.type, name = wt.name or b.type, count = b.count, arc = b.arc,
+            type = b.type, name = b.group or wt.name or b.type, count = b.count, arc = b.arc,
+            alive = alive, inArcCount = inArcCount, stations = b.hps and #b.hps or nil,
             ammo = wt.ammo and subs.ammo[i] or nil, maxAmmo = wt.ammo and (b.ammo or 50) or nil,
             on = not subs.off[i], range = wt.range,
             inArc = target and inArc or nil,

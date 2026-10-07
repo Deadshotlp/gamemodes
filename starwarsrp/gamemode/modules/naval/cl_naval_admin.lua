@@ -267,6 +267,7 @@ function Naval.AdminMenu(base)
     R.Buttons({
         {"Pause an/aus", function() Send("pause") end, COL.warn},
         {"Flottenkommando öffnen", function() Naval.OpenFleetCommand() end, COL.ok},
+        {"Geschützstellungen", function() if Naval.OpenHardpointEditor then Naval.OpenHardpointEditor() end end},
     })
     Send("watch", {on = true})
     holder.OnRemove = function() Send("watch", {on = false}) end

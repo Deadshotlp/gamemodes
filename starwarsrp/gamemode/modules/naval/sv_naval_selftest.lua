@@ -218,6 +218,27 @@ function Naval.SimSelfTest()
             ok and ("kleinster Abstand %.0f m"):format(minGap) or tostring(runErr))
     end
 
+    -- 13. Geschuetzstellungen: Bogen nach vorn erfasst vorn, nicht hinten;
+    -- zerstoerte Stellung feuert nicht
+    if Naval.HardpointsInArc then
+        local probe = TestShip("venator")
+        local list = {
+            {group = "Bug", type = "turbolaser", count = 2, x = 0.3, y = 0, z = 0.05, yaw = 0, pitch = 0, arcH = 60, arcV = 40},
+            {group = "Heck", type = "laser", count = 4, x = -0.4, y = 0, z = 0.05, yaw = 180, pitch = 0, arcH = 70, arcV = 40},
+        }
+        local cc = Naval.ClassCombat(probe:Class(), list)
+        probe.subs = {hphp = {}}
+        local front, back = {x = 20000, y = 2000, z = 0}, {x = -20000, y = 0, z = 0}
+        local bugFront = Naval.HardpointsInArc(probe, cc, cc.weapons[1], front)
+        local bugBack = Naval.HardpointsInArc(probe, cc, cc.weapons[1], back)
+        local heckBack = Naval.HardpointsInArc(probe, cc, cc.weapons[2], back)
+        probe.subs.hphp[1] = 0
+        local bugDead = Naval.HardpointsInArc(probe, cc, cc.weapons[1], front)
+
+        check("Geschützstellungen: Feuerbögen", #cc.weapons == 2 and bugFront == 2 and bugBack == 0 and heckBack == 4 and bugDead == 0,
+            ("Bug vorn %d, Bug hinten %d, Heck hinten %d, Bug zerstört %d"):format(bugFront, bugBack, heckBack, bugDead))
+    end
+
     -- 12. Moral: schwer beschaedigtes Schiff will fliehen
     if Naval.MoraleTarget then
         local probe = TestShip("munificent")
