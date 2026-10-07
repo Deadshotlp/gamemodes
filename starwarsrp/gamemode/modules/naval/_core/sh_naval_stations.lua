@@ -206,3 +206,18 @@ PD.Naval.Stations.relocation = {
     desc = "Landezone auf dem Planeten im Orbit wählen, Rückflug zum Schiff",
     offline = true,
 }
+
+-- Demo-Konsolen fuer die beiden Konsolenmodelle: Admins legen dort Flaechen
+-- fest, die spaeter Knoepfe und Anzeigen tragen (cl_naval_layouts.lua)
+PD.Naval.Stations.demo_large = {
+    name = "Demo: große Konsole",
+    model = "models/lordtrilobite/starwars/isd/imp_console_large01.mdl",
+    desc = "Flächen für Knöpfe und Anzeigen festlegen (Admins)",
+    offline = true,
+}
+PD.Naval.Stations.demo_medium = {
+    name = "Demo: mittlere Konsole",
+    model = "models/lordtrilobite/starwars/isd/imp_console_medium03.mdl",
+    desc = "Flächen für Knöpfe und Anzeigen festlegen (Admins)",
+    offline = true,
+}
