@@ -201,12 +201,102 @@ local function SlotOffset(formation, k, n, s)
     return {x = 0, y = side * rank * s, z = 0}
 end
 
-function Naval.FormationSlot(fleet, ship, flag)
+--[[
+    Platzvergabe: jedes Schiff bekommt einen moeglichst nahen Platz. Alle
+    Paare (Schiff, Platz) nach Abstand sortiert, die kuerzesten zuerst
+    vergeben. Neu verteilt wird, wenn sich Mitglieder, Formation oder Abstand
+    aendern, sonst alle 5 s - und nur, wenn die neue Verteilung den Gesamtweg
+    um mehr als 15 % verkuerzt (sonst springen Schiffe zwischen Plaetzen hin
+    und her).
+]]
+local function SlotPositions(fleet, flag, members)
+    local s = Spacing(fleet, members, flag)
+    local list = {}
+    for k = 1, #members do
+        list[k] = V3.Add(flag.pos, Q.RotateVec(flag.rot, SlotOffset(fleet.formation, k, #members, s)))
+    end
+    return list, s
+end
+
+local function TotalDistance(members, slots, assign)
+    local total = 0
+    for _, m in ipairs(members) do
+        local slot = slots[assign[m.id] or 0]
+        total = total + (slot and V3.Dist(m.pos, slot) or 1e12)
+    end
+    return total
+end
+
+local function GreedyAssign(members, slots)
+    local pairs_ = {}
+    for _, m in ipairs(members) do
+        for k, slot in ipairs(slots) do
+            pairs_[#pairs_ + 1] = {m = m, k = k, d = V3.LenSqr(V3.Sub(m.pos, slot))}
+        end
+    end
+    table.sort(pairs_, function(a, b) return a.d < b.d end)
+
+    local assign, usedSlot = {}, {}
+    for _, p in ipairs(pairs_) do
+        if not assign[p.m.id] and not usedSlot[p.k] then
+            assign[p.m.id] = p.k
+            usedSlot[p.k] = true
+        end
+    end
+    return assign
+end
+
+local function Assignment(fleet, flag)
     local members = Naval.FleetMembers(fleet)
-    local k, n = 1, #members
-    for i, m in ipairs(members) do if m == ship then k = i end end
-    local off = SlotOffset(fleet.formation, k, math.max(n, 1), Spacing(fleet, members, flag))
-    return V3.Add(flag.pos, Q.RotateVec(flag.rot, off))
+    local slots, spacing = SlotPositions(fleet, flag, members)
+
+    local ids = {}
+    for _, m in ipairs(members) do ids[#ids + 1] = m.id end
+    local key = table.concat(ids, ",") .. "|" .. fleet.formation .. "|" .. math.Round(spacing)
+
+    local now = CurTime()
+    if fleet.assignKey ~= key or not fleet.assign then
+        fleet.assign = GreedyAssign(members, slots)
+        fleet.assignKey = key
+        fleet.assignAt = now
+    elseif now - (fleet.assignAt or 0) > 5 then
+        fleet.assignAt = now
+        local better = GreedyAssign(members, slots)
+        if TotalDistance(members, slots, better) < TotalDistance(members, slots, fleet.assign) * 0.85 then
+            fleet.assign = better
+        end
+    end
+
+    return fleet.assign, slots
+end
+
+function Naval.FormationSlot(fleet, ship, flag)
+    local assign, slots = Assignment(fleet, flag)
+    return slots[assign[ship.id] or 1] or flag.pos
+end
+
+-- Abstand zu allen anderen Schiffen im Umkreis: Ausweichgeschwindigkeit weg
+-- von zu nahen Schiffen (staerker, je naeher)
+local function Separation(ship, maxSpeed)
+    local myLen = (ship:Class() or {}).lengthM or 300
+    local push = {x = 0, y = 0, z = 0}
+
+    for _, other in pairs(Naval.Ships) do
+        if other ~= ship and other.systemId == ship.systemId and other.state ~= S.HYPERSPACE and other.state ~= S.DESTROYED then
+            local rel = V3.Sub(ship.pos, other.pos)
+            local d = V3.Len(rel)
+            local safe = (myLen + ((other:Class() or {}).lengthM or 300)) * 0.75 + 300
+            -- Wirkt erst knapp ausserhalb des Sicherheitsabstands, damit sich
+            -- Nachbarn in der Formation (2,5 Schiffslaengen) nicht wegdruecken
+            local reach = safe * 1.2
+            if d < reach and d > 1 then
+                local strength = (reach - d) / reach * maxSpeed * 1.2
+                push = V3.Add(push, V3.Scale(rel, strength / d))
+            end
+        end
+    end
+
+    return push
 end
 
 -- Platz halten: gleiche Fahrt wie das Flaggschiff plus Korrektur zum Platz
@@ -232,6 +322,9 @@ local function HoldSlot(ship, flag, slot)
         local approach = math.min(maxSpeed, math.sqrt(2 * decel * 0.8 * d) + 30)
         desired = V3.Add(flagVel, V3.Scale(err, approach / d))
     end
+
+    -- Nicht durch andere Schiffe fliegen
+    desired = V3.Add(desired, Separation(ship, maxSpeed))
 
     local speed = V3.Len(desired)
     if speed < 15 then

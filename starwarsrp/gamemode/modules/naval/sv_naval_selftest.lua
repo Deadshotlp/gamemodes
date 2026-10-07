@@ -160,38 +160,62 @@ function Naval.SimSelfTest()
             ("angekommen nach %s s, %.0f m über das Ziel hinaus"):format(arrivedAt and math.Round(arrivedAt) or "-", overshoot))
     end
 
-    -- 11. Flotte: Begleitschiff findet seinen Platz im Keil hinter einem
-    -- fahrenden Flaggschiff und haelt ihn
+    -- 11. Flotte: drei Begleitschiffe starten ueber Kreuz zu ihren Plaetzen im
+    -- Keil hinter einem fahrenden Flaggschiff; jedes soll den naechsten Platz
+    -- nehmen, keines durch ein anderes fliegen
     if Naval.FleetStep and Naval.FormationSlot then
-        local flag, escort = TestShip("venator"), TestShip("arquitens")
-        flag.id, escort.id = 64011, 64012
+        local flag = TestShip("venator")
+        flag.id = 64011
         flag.flags = {test = true, hidden = true}
-        escort.flags = {test = true, hidden = true}
-        flag.systemId, escort.systemId = "__test__", "__test__"
-        escort.pos = {x = -20000, y = 15000, z = 3000}
+        flag.systemId = "__test__"
         flag.ctrl.throttle = 0.3
 
         local fleet = {id = 64000, name = "Test", flagshipId = flag.id, formation = "wedge", mode = "formation"}
-        flag.fleetId, escort.fleetId = fleet.id, fleet.id
-        Naval.Ships[flag.id], Naval.Ships[escort.id] = flag, escort
+        flag.fleetId = fleet.id
+        Naval.Ships[flag.id] = flag
         Naval.Fleets[fleet.id] = fleet
 
+        -- Platz 1 liegt links hinten, Platz 2 rechts hinten: Schiff mit der
+        -- kleinsten ID startet rechts, das zweite links (ueber Kreuz)
+        local starts = {{x = -8000, y = -9000, z = 0}, {x = -8000, y = 9000, z = 0}, {x = -15000, y = 0, z = 2000}}
+        local escorts = {}
+        for i, p in ipairs(starts) do
+            local e = TestShip("arquitens")
+            e.id = 64011 + i
+            e.flags = {test = true, hidden = true}
+            e.systemId = "__test__"
+            e.pos = p
+            e.fleetId = fleet.id
+            Naval.Ships[e.id] = e
+            escorts[i] = e
+        end
+
+        local all = {flag, unpack(escorts)}
+        local minGap = math.huge
         local ok, runErr = pcall(function()
             for _ = 1, 1200 do -- 600 s
-                Naval.FleetStep(escort)
+                for _, e in ipairs(escorts) do Naval.FleetStep(e) end
                 for _ = 1, 5 do
-                    Naval.StepShip(flag, 0.1)
-                    Naval.StepShip(escort, 0.1)
+                    for _, sh in ipairs(all) do Naval.StepShip(sh, 0.1) end
+                end
+                for i = 1, #all do
+                    for j = i + 1, #all do minGap = math.min(minGap, V3.Dist(all[i].pos, all[j].pos)) end
                 end
             end
         end)
 
-        local slotDist = ok and V3.Dist(escort.pos, Naval.FormationSlot(fleet, escort, flag)) or -1
-        Naval.Ships[flag.id], Naval.Ships[escort.id] = nil, nil
+        local worst = 0
+        if ok then
+            for _, e in ipairs(escorts) do worst = math.max(worst, V3.Dist(e.pos, Naval.FormationSlot(fleet, e, flag))) end
+        end
+        for _, sh in ipairs(all) do Naval.Ships[sh.id] = nil end
         Naval.Fleets[fleet.id] = nil
 
-        check("Flotte: Begleitschiff hält Formation", ok and slotDist >= 0 and slotDist < 3000,
-            ok and ("%.1f km vom Platz, Flaggschiff fährt %.0f m/s"):format(slotDist / 1000, flag:Speed()) or tostring(runErr))
+        local len = flag:Class().lengthM
+        check("Flotte: drei Begleitschiffe in Formation", ok and worst < 3000,
+            ok and ("schlechtester Platz %.1f km, Flaggschiff %.0f m/s"):format(worst / 1000, flag:Speed()) or tostring(runErr))
+        check("Flotte: kein Schiff fliegt durch ein anderes", ok and minGap > len * 0.6,
+            ok and ("kleinster Abstand %.0f m"):format(minGap) or tostring(runErr))
     end
 
     -- 12. Moral: schwer beschaedigtes Schiff will fliehen
