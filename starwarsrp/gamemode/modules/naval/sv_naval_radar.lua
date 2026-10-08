@@ -240,14 +240,17 @@ local function Detect(observer, others, jammers, now)
             if not blocked then
                 local sig = Signature(target, observer) * Environment(target)
                 local jam = JamFactor(observer, target, jammers)
+                -- Reichweiten sind Obergrenzen: Signatur, Energie und Stoerung verkuerzen sie,
+                -- verlaengern sie aber nicht (Rundum bleibt bei 100 km, Drehradar bei 250 km)
+                local k = math.min(1, sig * sens * jam)
                 local src, q
                 if d <= optical * Environment(target) then
                     src, q = "optical", 1
-                elseif active and r.lock == target.id and d <= far * sig * sens * jam then
+                elseif active and r.lock == target.id and d <= far * k then
                     src, q = "track", 1
-                elseif active and d <= near * sig * sens * jam then
+                elseif active and d <= near * k then
                     src, q = "near", 0.9
-                elseif active and not r.lock and d <= far * sig * sens * jam and SweepCovers(r, Azimuth(observer, target.pos)) then
+                elseif active and not r.lock and d <= far * k and SweepCovers(r, Azimuth(observer, target.pos)) then
                     src, q = "sweep", 0.8
                 end
                 if src then tr.precise = {src = src, pos = V3.Copy(target.pos), t = now, q = q} end
@@ -309,7 +312,10 @@ local function DataLink(ship, others, now)
                 if id ~= ship.id and t.precise and now - t.precise.t < 5 then
                     local mine = own[id] or {}
                     own[id] = mine
-                    if not mine.precise or mine.precise.t < t.precise.t - 1 then
+                    -- Nur ergaenzen, was das eigene Radar laenger nicht gemessen hat
+                    -- (sonst springt eine Drehradar-Spur zwischen zwei Umlaeufen)
+                    local stale = not mine.precise or now - mine.precise.t > Setting("radar_sweep_period", 12) * 1.5
+                    if stale and (not mine.precise or mine.precise.t < t.precise.t - 1) then
                         mine.precise = {src = "link", pos = t.precise.pos, t = t.precise.t, q = 0.7}
                     end
                 end
