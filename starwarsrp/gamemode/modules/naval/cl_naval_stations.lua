@@ -451,6 +451,7 @@ local logFrame
 
 net.Receive("PD.Naval.ShipLog", function()
     local rows = util.JSONToTable(net.ReadString()) or {}
+    Naval.ShipLogRows = rows
     if IsValid(logFrame) and logFrame.SetRows then logFrame.SetRows(rows) end
 end)
 

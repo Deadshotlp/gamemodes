@@ -215,3 +215,13 @@ PD.Naval.Stations.demo_medium = {
     desc = "Flächen für Knöpfe und Anzeigen festlegen (Admins)",
     offline = true,
 }
+
+-- 3D2D-Bedienung direkt auf der Konsole (cl_naval_console3d*.lua) statt Menue.
+-- Die alten Menues bleiben im Code; zum Zurueckschalten eine Station aus
+-- dieser Liste nehmen.
+for _, id in ipairs({
+    "helm", "navcomputer", "hyperdrive", "shiplog", "weapons", "shields", "engineering", "holo_control",
+    "damagecontrol", "sensors", "alert", "comms", "fleetcmd", "tractor", "logistics", "relocation",
+}) do
+    if PD.Naval.Stations[id] then PD.Naval.Stations[id].ui3d = true end
+end

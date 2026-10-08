@@ -474,6 +474,11 @@ end
 net.Receive("PD.Naval.ModGame", function()
     local f = net.ReadFloat()
     local p = net.ReadUInt(9)
+    local def = Naval.Stations and Naval.Stations.shields
+    if def and def.ui3d and Naval.Console3D and Naval.Console3D.shields then
+        Naval.ModGame = {tf = f, tp = p, f = 5, p = 180, start = CurTime()}
+        return
+    end
     OpenModGame(f, p)
 end)
 

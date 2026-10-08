@@ -3,10 +3,13 @@
 
     Statt eines Menues zeichnen Stationen mit ui3d = true ihre Anzeigen und
     Knoepfe auf die Flaechen, die an den Demo-Konsolen je Modell festgelegt
-    wurden (Naval.Layouts, cl_naval_layouts.lua). Rollen der Flaechen:
-      main   groesste Anzeige (Hauptbildschirm)
-      s1, s2 weitere Anzeigen (kleine Bildschirme, von links nach rechts)
-      keys   groesste Knopf-Flaeche (Tastenfeld)
+    wurden (Naval.Layouts, cl_naval_layouts.lua). Rollen der Flaechen
+    (links/rechts so, wie man vor der Konsole steht):
+      main         grosse Anzeige (bei zwei grossen: die linke)
+      main2        zweite grosse Anzeige (rechts, nur grosse Konsole)
+      s1, s2       kleine Anzeigen, von links nach rechts
+      keys         groesste Knopf-Flaeche (Tastenfeld)
+      b1, b2, b3   weitere Knopf-Flaechen, von links nach rechts
     Bedienung: mit dem Fadenkreuz zielen, E oder Linksklick. Halten wird
     unterstuetzt (z. B. Drehen an der Steuer).
 
@@ -35,7 +38,8 @@ surface.CreateFont("PD.N3D.Small", {font = "Roboto", size = 30, weight = 500, ex
 surface.CreateFont("PD.N3D.Btn", {font = "Roboto", size = 34, weight = 700, extended = true})
 
 local COL = {
-    bg = Color(8, 14, 22, 235), panel = Color(18, 28, 40, 240), line = Color(60, 120, 170),
+    bg = Color(0, 0, 0, 252), keypad = Color(62, 66, 72, 252), panel = Color(18, 28, 40, 240), line = Color(60, 120, 170),
+    btn = Color(44, 47, 53, 255),
     text = Color(215, 232, 245), dim = Color(120, 150, 175), accent = Color(90, 180, 255),
     ok = Color(90, 220, 130), warn = Color(240, 190, 70), bad = Color(240, 90, 80),
 }
@@ -70,20 +74,30 @@ local function Roles(model)
     local cached = roleCache[model]
     if cached and cached.src == areas then return cached.roles end
 
-    local displays, keys = {}, nil
+    local displays, buttons = {}, {}
     for _, a in ipairs(areas) do
-        if a.kind == "button" then
-            if not keys or a.w * a.h > keys.w * keys.h then keys = a end
-        else
-            displays[#displays + 1] = a
-        end
+        if a.kind == "button" then buttons[#buttons + 1] = a else displays[#displays + 1] = a end
     end
-    table.sort(displays, function(a, b) return a.w * a.h > b.w * b.h end)
-    local roles = {main = displays[1], keys = keys}
+    local function Size(a) return a.w * a.h end
+    local function LeftToRight(a, b) return a.pos.y < b.pos.y end
+
+    -- Anzeigen: grosse (mind. 60 % der groessten) und kleine
+    table.sort(displays, function(a, b) return Size(a) > Size(b) end)
+    local big, small = {}, {}
+    for _, a in ipairs(displays) do
+        if Size(a) >= Size(displays[1]) * 0.6 then big[#big + 1] = a else small[#small + 1] = a end
+    end
+    table.sort(big, LeftToRight)
+    table.sort(small, LeftToRight)
+    local roles = {main = big[1], main2 = big[2], s1 = small[1], s2 = small[2]}
+
+    -- Knoepfe: groesste = Tastenfeld, der Rest von links nach rechts
+    table.sort(buttons, function(a, b) return Size(a) > Size(b) end)
+    roles.keys = buttons[1]
     local rest = {}
-    for i = 2, #displays do rest[#rest + 1] = displays[i] end
-    table.sort(rest, function(a, b) return a.pos.y > b.pos.y end)
-    roles.s1, roles.s2 = rest[1], rest[2]
+    for i = 2, #buttons do rest[#rest + 1] = buttons[i] end
+    table.sort(rest, LeftToRight)
+    roles.b1, roles.b2, roles.b3 = rest[1], rest[2], rest[3]
 
     roleCache[model] = {src = areas, roles = roles}
     return roles
@@ -113,7 +127,7 @@ function UI:Button(x, y, w, h, text, opts)
 
     local bg = opts.active and Color(col.r * 0.45, col.g * 0.45, col.b * 0.45, 245)
         or (held and Color(col.r * 0.5, col.g * 0.5, col.b * 0.5, 245))
-        or (hover and Color(col.r * 0.25, col.g * 0.25, col.b * 0.25, 245)) or COL.panel
+        or (hover and Color(col.r * 0.3, col.g * 0.3, col.b * 0.3, 255)) or COL.btn
     draw.RoundedBox(6, x, y, w, h, bg)
     surface.SetDrawColor(col)
     surface.DrawOutlinedRect(x, y, w, h, (hover or opts.active) and 4 or 2)
@@ -131,12 +145,79 @@ function UI:Bar(x, y, w, h, frac, col)
     draw.RoundedBox(4, x, y, w * math.Clamp(frac, 0, 1), h, col or COL.accent)
 end
 
+-- Anzeige: schwarz mit runden Ecken
 function UI:Frame(w, h, title)
-    draw.RoundedBox(8, 0, 0, w, h, COL.bg)
-    surface.SetDrawColor(COL.line)
-    surface.DrawOutlinedRect(0, 0, w, h, 2)
-    if title then draw.SimpleText(title, "PD.N3D.Small", 14, 8, COL.dim) end
+    draw.RoundedBox(math.min(32, h * 0.12), 0, 0, w, h, COL.bg)
+    if title then draw.SimpleText(title, "PD.N3D.Small", 22, 12, COL.dim) end
 end
+
+-- Knopf-Flaeche: grau
+function UI:Keypad(w, h)
+    draw.RoundedBox(6, 0, 0, w, h, COL.keypad)
+end
+
+-- Zweistufiger Knopf: erst "Bestätigen?", dann ausloesen (3 s Zeit)
+function UI:Confirm(state, key, x, y, w, h, text, opts)
+    state.confirm = state.confirm or {}
+    local armed = (state.confirm[key] or 0) > CurTime()
+    opts = table.Copy(opts or {})
+    if armed then opts.col = COL.warn opts.active = true end
+    if self:Button(x, y, w, h, armed and "Bestätigen?" or text, opts) then
+        if armed then
+            state.confirm[key] = nil
+            return true
+        end
+        state.confirm[key] = CurTime() + 3
+    end
+    return false
+end
+
+-- Liste mit Antippen. opts: rowH, scroll, selected (id), draw(item, x, y, w, h, sel)
+-- Gibt den angetippten Eintrag zurueck.
+function UI:List(x, y, w, h, items, opts)
+    local rowH = opts.rowH or 70
+    local first = math.Clamp(opts.scroll or 0, 0, math.max(0, #items - 1))
+    local rows = math.floor(h / rowH)
+    local clicked
+    for i = 1, rows do
+        local item = items[first + i]
+        if not item then break end
+        local ry = y + (i - 1) * rowH
+        local sel = opts.selected ~= nil and item.id == opts.selected
+        local hover = self.active and self:Hover(x, ry, w, rowH - 4)
+        draw.RoundedBox(6, x, ry, w, rowH - 4, sel and Color(30, 60, 95) or (hover and Color(24, 36, 52) or Color(12, 16, 22)))
+        opts.draw(item, x, ry, w, rowH - 4, sel)
+        if hover and input3d.pressed then
+            surface.PlaySound("buttons/button15.wav")
+            clicked = item
+        end
+    end
+    if #items > rows then
+        draw.SimpleText(("%d-%d von %d"):format(first + 1, math.min(first + rows, #items), #items), "PD.N3D.Small", x + w, y + h - 4, COL.dim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM)
+    end
+    return clicked, rows
+end
+
+-- Text umbrechen (Zeichenzahl je Zeile)
+function UI.Wrap(text, chars)
+    local lines, line = {}, ""
+    for word in string.gmatch(text or "", "%S+") do
+        if #line + #word + 1 > chars and line ~= "" then lines[#lines + 1] = line line = word
+        else line = line == "" and word or (line .. " " .. word) end
+    end
+    if line ~= "" then lines[#lines + 1] = line end
+    return lines
+end
+
+-- Zustand je Konsole (Auswahl, Blaettern, Ansicht)
+local consoleState = setmetatable({}, {__mode = "k"})
+function Naval.Console3DState(ent)
+    consoleState[ent] = consoleState[ent] or {scroll = 0}
+    return consoleState[ent]
+end
+
+-- Gemeinsame Hilfen fuer die Stationen (cl_naval_console3d_stations.lua)
+Naval.Console3DLib = {COL = COL, Input = input3d}
 
 local function DrawArea(ent, def, role, a, eye, aim, canUse)
     local pos = ent:LocalToWorld(Vector(a.pos.x, a.pos.y, a.pos.z))
@@ -163,8 +244,12 @@ local function DrawArea(ent, def, role, a, eye, aim, canUse)
     cam.Start3D2D(origin, ang, SCALE)
         local ok, err = pcall(def.draw, role, w, h, ui, ent)
         if not ok then
-            draw.SimpleText("Fehler", "PD.N3D.Med", 10, 10, COL.bad)
-            ErrorNoHaltWithStack(err)
+            draw.SimpleText("Fehler", "PD.N3D.Med", 20, 20, COL.bad)
+            def.errors = def.errors or {}
+            if not def.errors[err] then
+                def.errors[err] = true
+                ErrorNoHalt("[Naval] 3D-Konsole: " .. tostring(err) .. "\n")
+            end
         end
         if ui.mx then
             surface.SetDrawColor(255, 255, 255, 200)
@@ -191,7 +276,7 @@ hook.Add("PostDrawTranslucentRenderables", "PD.Naval.Console3D", function(depth,
             local roles = Roles(string.lower(ent:GetModel() or ""))
             if roles then
                 local canUse = not ent:GetLocked() or ply:IsAdmin()
-                for _, role in ipairs({"main", "s1", "s2", "keys"}) do
+                for _, role in ipairs({"main", "main2", "s1", "s2", "keys", "b1", "b2", "b3"}) do
                     if roles[role] and DrawArea(ent, def, role, roles[role], eye, aim, canUse) then any = true end
                 end
             end
@@ -308,7 +393,7 @@ end
 local function DrawKeys(w, h, ui)
     local st = C.status or {}
     helm.keysFrame = FrameNumber()
-    ui:Frame(w, h)
+    ui:Keypad(w, h)
     local pad, cols = 12, 6
     local bw = (w - pad * (cols + 1)) / cols
     local bh = (h - pad * 4) / 3

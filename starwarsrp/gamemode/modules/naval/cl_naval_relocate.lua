@@ -21,6 +21,9 @@ local function Send(action, id)
     net.SendToServer()
 end
 
+Naval.RelocateSend = Send
+function Naval.RelocateGetState() return state end
+
 local function OpenRelocation(console)
     local UI = Naval.UI
     local COL = UI.COL

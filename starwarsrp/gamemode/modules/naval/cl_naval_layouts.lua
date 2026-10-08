@@ -49,10 +49,15 @@ local function DrawArea(ent, a, selected)
     local col = Color(c[1], c[2], c[3])
 
     cam.Start3D2D(pos, ang, SCALE)
-        surface.SetDrawColor(col.r, col.g, col.b, a.kind == "button" and 90 or 50)
-        surface.DrawRect(-w / 2, -h / 2, w, h)
-        surface.SetDrawColor(selected and Color(255, 230, 90) or col)
-        surface.DrawOutlinedRect(-w / 2, -h / 2, w, h, selected and 4 or 2)
+        if a.kind == "button" then
+            draw.RoundedBox(4, -w / 2, -h / 2, w, h, Color(62, 66, 72, 250))
+        else
+            draw.RoundedBox(math.min(16, h * 0.12), -w / 2, -h / 2, w, h, Color(0, 0, 0, 250))
+        end
+        if selected then
+            surface.SetDrawColor(255, 230, 90)
+            surface.DrawOutlinedRect(-w / 2, -h / 2, w, h, 4)
+        end
         draw.SimpleText(a.label ~= "" and a.label or a.id, "PD.Naval.Layout", 0, -6, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
         draw.SimpleText(a.kind == "button" and "KNOPF" or "ANZEIGE", "PD.Naval.LayoutSmall", 0, 22, Color(col.r, col.g, col.b, 220), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
     cam.End3D2D()
