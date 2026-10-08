@@ -545,7 +545,7 @@ local function CreateSystemMap(parent, onSelect)
         local REL = Naval.RelationColors or {}
         for id, sh in pairs(view.ships or {}) do
             local info = C.info[id]
-            if info and sh.state ~= "destroyed" then
+            if info and sh.state ~= "destroyed" and sh.det ~= false then
                 local x, y = ToScreen(s, sh.pos)
                 if x > -10 and x < w + 10 and y > -10 and y < h + 10 then
                     local col = REL[Naval.ClientRelation(myFaction, info.factionId)] or COL.text

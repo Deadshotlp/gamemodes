@@ -195,7 +195,8 @@ local function DrawTactical(center, radius, labels, flicker)
     local seen = {map = true}
     for id, s in pairs(view.ships or {}) do
         local info = C.info[id]
-        local class = info and static.classes[info.classId]
+        -- Das Hologramm ist eine Sensoranzeige: nur, was erfasst ist
+        local class = info and s.det ~= false and static.classes[info.classId]
         local rel = Naval.V3.Sub(s.pos, view.pos)
         local dist = Naval.V3.Len(rel)
 

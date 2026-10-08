@@ -152,6 +152,7 @@ net.Receive("PD.Naval.Snap", function()
             rot = ReadQuatSmall(),
             state = StateName[net.ReadUInt(4)] or "normal",
             hull = net.ReadUInt(7),
+            det = net.ReadBool(),
         }
     end
 
@@ -165,7 +166,7 @@ net.Receive("PD.Naval.Snap", function()
         if old then
             local abs = {x = prev.pos.x + old.rel.x, y = prev.pos.y + old.rel.y, z = prev.pos.z + old.rel.z}
             snap.ships[id] = {rel = {x = abs.x - snap.pos.x, y = abs.y - snap.pos.y, z = abs.z - snap.pos.z},
-                rot = old.rot, state = old.state, hull = old.hull}
+                rot = old.rot, state = old.state, hull = old.hull, det = old.det}
         end
     end
 
@@ -229,9 +230,9 @@ BuildView = function(t)
             local relA = V3.Add(a.pos, sa.rel)
 
             if sb then
-                view.ships[id] = {pos = V3.Lerp(relA, V3.Add(b.pos, sb.rel), f), rot = Q.Slerp(sa.rot, sb.rot, f), state = sb.state, hull = sb.hull}
+                view.ships[id] = {pos = V3.Lerp(relA, V3.Add(b.pos, sb.rel), f), rot = Q.Slerp(sa.rot, sb.rot, f), state = sb.state, hull = sb.hull, det = sb.det}
             else
-                view.ships[id] = {pos = relA, rot = sa.rot, state = sa.state, hull = sa.hull}
+                view.ships[id] = {pos = relA, rot = sa.rot, state = sa.state, hull = sa.hull, det = sa.det}
             end
         end
     else
@@ -252,7 +253,7 @@ BuildView = function(t)
                 pos = V3.Add(pos, V3.Scale(V3.Sub(pos, old), dt / span))
             end
 
-            view.ships[id] = {pos = pos, rot = sa.rot, state = sa.state, hull = sa.hull}
+            view.ships[id] = {pos = pos, rot = sa.rot, state = sa.state, hull = sa.hull, det = sa.det}
         end
     end
 

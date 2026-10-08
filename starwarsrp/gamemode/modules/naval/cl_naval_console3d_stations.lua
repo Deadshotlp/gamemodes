@@ -83,7 +83,7 @@ BuildContacts = function(hostileFirst)
     local sens = C.status and C.status.sensors and C.status.sensors.contacts or {}
     for id, s in pairs(view.ships or {}) do
         local info = C.info[id]
-        if info and s.state ~= "destroyed" then
+        if info and s.state ~= "destroyed" and s.det ~= false then
             local c = sens[tostring(id)] or {}
             list[#list + 1] = {id = id, name = info.name, classId = info.classId, factionId = info.factionId, level = info.ident or 2,
                 dist = V3.Dist(s.pos, view.pos), hull = s.hull or 100, state = s.state, surrendered = c.surrendered,

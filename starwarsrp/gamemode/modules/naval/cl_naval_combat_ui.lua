@@ -67,7 +67,7 @@ local function OpenWeapons(console)
         local myFaction = Naval.MapShipFaction and Naval.MapShipFaction()
         for id, s in pairs(view.ships or {}) do
             local info = C.info[id]
-            if info and s.state ~= "destroyed" then
+            if info and s.state ~= "destroyed" and s.det ~= false then
                 local rel = Naval.V3.Sub(s.pos, view.pos)
                 list[#list + 1] = {id = id, name = info.name, classId = info.classId, dist = Naval.V3.Len(rel), hull = s.hull or 100,
                     relation = Naval.ClientRelation and Naval.ClientRelation(myFaction, info.factionId) or "neutral", state = s.state}

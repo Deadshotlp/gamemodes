@@ -194,7 +194,9 @@ local function VisibleShips(mapShip)
         if ship ~= mapShip and ship.systemId == mapShip.systemId and ship.state ~= Naval.State.HYPERSPACE
             and not (ship.flags and ship.flags.hidden)
             and V3.LenSqr(V3.Sub(ship.pos, mapShip.pos)) <= rangeSqr
-            and not (Naval.Concealed and Naval.Concealed(mapShip, ship)) then
+            -- Durchs Fenster sieht man mit eigenen Augen: alles, was nicht hinter
+            -- einem Himmelskoerper liegt. Was das Radar erfasst, steht im Merker "det".
+            and not (Naval.RadarBlocked and Naval.RadarBlocked(mapShip.systemId, mapShip.pos, ship.pos)) then
             list[#list + 1] = ship
         end
     end
@@ -321,12 +323,14 @@ local function SendSnap()
 
         net.WriteUInt(#full, 12)
         for _, ship in ipairs(full) do
-            local rel = V3.Sub(Naval.TrackPos and Naval.TrackPos(mapShip, ship) or ship.pos, mapShip.pos)
+            local rel = V3.Sub(ship.pos, mapShip.pos)
             net.WriteUInt(ship.id, 16)
             net.WriteFloat(rel.x) net.WriteFloat(rel.y) net.WriteFloat(rel.z)
             WriteQuatSmall(ship.rot)
             net.WriteUInt(Naval.StateIndex[ship.state] or 1, 4)
             net.WriteUInt(HullPct(ship), 7)
+            -- Von den Sensoren erfasst? (Konsolen und Hologramm zeigen nur diese)
+            net.WriteBool(not (Naval.Concealed and Naval.Concealed(mapShip, ship)))
         end
         net.WriteUInt(#keep, 12)
         for _, id in ipairs(keep) do net.WriteUInt(id, 16) end

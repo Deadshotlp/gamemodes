@@ -187,7 +187,7 @@ local function OpenSensors(console)
         local myFaction = Naval.MapShipFaction and Naval.MapShipFaction()
         for id, s in pairs(view.ships or {}) do
             local info = C.info[id]
-            if info and s.state ~= "destroyed" then
+            if info and s.state ~= "destroyed" and s.det ~= false then
                 list[#list + 1] = {id = id, name = info.name, classId = info.classId, level = info.ident or 2,
                     dist = Naval.V3.Dist(s.pos, view.pos), hull = s.hull or 100, state = s.state,
                     relation = Naval.ClientRelation and Naval.ClientRelation(myFaction, info.factionId) or "neutral", factionId = info.factionId}
