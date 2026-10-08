@@ -75,6 +75,9 @@ function Naval.OpenStation(ply, ent)
 
     ply.PD_NavalStation = ent
 
+    -- 3D2D-Konsolen bedient man direkt, es gibt nichts zu oeffnen
+    if def.ui3d then return end
+
     net.Start("PD.Naval.Station.Open")
     net.WriteString(ent:GetStation())
     net.WriteEntity(ent)
@@ -440,6 +443,10 @@ end)
 local SLOW_EXTRAS = {tractor = true, logistics = true, fleet = true, sensors = true}
 local slowCache, statusTicks = {}, 0
 
+-- Nur geaenderte Teile senden (Funkprotokoll, Kursplan, Flotte usw. aendern
+-- sich selten). Vollstaendig alle 5 s und sobald ein neuer Empfaenger dabei ist.
+local lastSent, lastRecipients = {}, {}
+
 timer.Create("PD.Naval.Status", 0.5, 0, function()
     if not Naval.SimRunning then return end
 
@@ -495,9 +502,30 @@ timer.Create("PD.Naval.Status", 0.5, 0, function()
     local body, dist, limit = Naval.MassShadow(ship)
     if body then status.shadow = {name = body.name, dist = dist, limit = limit} end
 
-    -- Komprimiert: der Status ist mit Kampf, Sensoren, Funk usw. gross, und er
-    -- geht 2x pro Sekunde zuverlaessig an alle
-    local data = util.Compress(util.TableToJSON(status) or "{}") or ""
+    local full = statusTicks % 10 == 0
+    local seen = {}
+    for _, ply in ipairs(recipients) do
+        seen[ply] = true
+        if not lastRecipients[ply] then full = true end
+    end
+    lastRecipients = seen
+
+    local packet = {set = {}, del = {}, full = full or nil}
+    local nowSent = {}
+    for key, value in pairs(status) do
+        local json = util.TableToJSON({v = value}) or ""
+        nowSent[key] = json
+        if full or lastSent[key] ~= json then packet.set[key] = value end
+    end
+    if not full then
+        for key in pairs(lastSent) do
+            if nowSent[key] == nil then packet.del[#packet.del + 1] = key end
+        end
+    end
+    lastSent = nowSent
+
+    -- Komprimiert: geht 2x pro Sekunde zuverlaessig an alle
+    local data = util.Compress(util.TableToJSON(packet) or "{}") or ""
     if #data > 60000 then return end
 
     net.Start("PD.Naval.Status")

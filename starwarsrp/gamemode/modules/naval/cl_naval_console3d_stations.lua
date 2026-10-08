@@ -204,7 +204,7 @@ Register("shiplog", function(role, w, h, ui, ent, st)
     local rows = Naval.ShipLogRows or {}
     if role == "main" then
         if Near(ent, 220) and CurTime() > (st.nextList or 0) then
-            st.nextList = CurTime() + 8
+            st.nextList = CurTime() + 20
             net.Start("PD.Naval.ShipLog") net.WriteString("list") net.SendToServer()
         end
         ui:Frame(w, h, "LOGBUCH")

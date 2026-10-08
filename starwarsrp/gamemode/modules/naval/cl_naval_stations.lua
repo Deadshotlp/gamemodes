@@ -32,7 +32,14 @@ UI.COL = {bg = COL_BG, panel = COL_PANEL, accent = COL_ACCENT, ok = COL_OK, warn
 net.Receive("PD.Naval.Status", function()
     local size = net.ReadUInt(16)
     local json = util.Decompress(net.ReadData(size))
-    C.status = json and util.JSONToTable(json) or C.status or {}
+    local packet = json and util.JSONToTable(json)
+    if not packet then return end
+
+    -- Nur geaenderte Teile (sv_naval_stations.lua); vollstaendig ersetzt alles
+    local status = packet.full and {} or (C.status or {})
+    for key, value in pairs(packet.set or {}) do status[key] = value end
+    for _, key in ipairs(packet.del or {}) do status[key] = nil end
+    C.status = status
     C.statusTime = CurTime()
 end)
 

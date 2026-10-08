@@ -266,10 +266,15 @@ end
 net.Receive("PD.Naval.Event", function()
     local kind = net.ReadString()
     local data = util.JSONToTable(net.ReadString()) or {}
-    local hyper = util.JSONToTable(net.ReadString()) or {}
+    local hyperJson = net.ReadString()
     local t = net.ReadDouble()
 
-    C.hyper = hyper
+    -- Nur Sprung-Ereignisse tragen den Hyperraum-Zustand
+    local hyper = C.hyper or {}
+    if hyperJson ~= "" then
+        hyper = util.JSONToTable(hyperJson) or {}
+        C.hyper = hyper
+    end
     C.lastEvent = {kind = kind, data = data, t = t}
 
     hook.Run("PD.Naval.ClientEvent", kind, data, hyper, t)
