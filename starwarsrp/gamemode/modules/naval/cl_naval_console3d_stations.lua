@@ -36,8 +36,11 @@ local function Frac(f)
     return f > 0.5 and COL.ok or (f > 0.25 and COL.warn or COL.bad)
 end
 
-local function Text(text, font, x, y, col, ax, ay)
-    draw.SimpleText(text, font or "PD.N3D.Small", x, y, col or COL.text, ax, ay)
+-- maxW: Schrift so weit verkleinern, dass der Text hineinpasst
+local function Text(text, font, x, y, col, ax, ay, maxW)
+    font = font or "PD.N3D.Small"
+    if maxW and Naval.Console3DFit then font = Naval.Console3DFit(text, font, maxW) end
+    draw.SimpleText(text, font, x, y, col or COL.text, ax, ay)
 end
 
 -- Tastenfeld-Raster: Zelle (c, r) mit Breite span
@@ -86,7 +89,7 @@ local function ContactRow(c, x, y, w, h)
     local rel = Naval.RelationColors and Naval.RelationColors[c.relation] or COL.text
     surface.SetDrawColor(rel)
     surface.DrawRect(x, y, 6, h)
-    Text(c.name, "PD.N3D.Small", x + 16, y + 6, COL.text)
+    Text(c.name, "PD.N3D.Small", x + 16, y + 6, COL.text, nil, nil, w * 0.62)
     local sub = c.surrendered and "kapituliert" or (c.level == 0 and "unbekannt" or "")
     Text(sub, "PD.N3D.Small", x + 16, y + h - 6, c.surrendered and COL.warn or COL.dim, nil, TEXT_ALIGN_BOTTOM)
     Text(Dist(c.dist), "PD.N3D.Small", x + w - 10, y + 6, COL.text, TEXT_ALIGN_RIGHT)
@@ -98,8 +101,8 @@ end
 
 local function Small(ui, w, h, title, value, col, sub)
     ui:Frame(w, h, title)
-    Text(value or "-", "PD.N3D.Big", w / 2, h / 2 + 6, col or COL.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-    if sub then Text(sub, "PD.N3D.Small", w / 2, h - 16, COL.dim, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM) end
+    Text(value or "-", "PD.N3D.Big", w / 2, h / 2 + 6, col or COL.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 28)
+    if sub then Text(sub, "PD.N3D.Small", w / 2, h - 16, COL.dim, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM, w - 28) end
 end
 
 local function Register(station, fn)
@@ -170,11 +173,11 @@ Register("hyperdrive", function(role, w, h, ui)
         ui:Keypad(w, h)
         local cell = Grid(w, h, 3, 1)
         local x, y, bw, bh = cell(1, 1)
-        if ui:Button(x, y, bw, bh, "AUSRICHTEN", {disabled = not (st.state == "normal" and nav and nav.ready and nav.valid)}) then SendHyper("align") end
+        if ui:Button(x, y, bw, bh, "AUSRICHTEN", {font = "PD.N3D.Big", disabled = not (st.state == "normal" and nav and nav.ready and nav.valid)}) then SendHyper("align") end
         x, y, bw, bh = cell(2, 1)
         if ui:Button(x, y, bw, bh, "SPRINGEN", {col = COL.ok, disabled = not ready, font = "PD.N3D.Big"}) then SendHyper("jump") end
         x, y, bw, bh = cell(3, 1)
-        if ui:Button(x, y, bw, bh, "ABBRECHEN", {col = COL.bad, disabled = st.state ~= "spooling"}) then SendHyper("abort") end
+        if ui:Button(x, y, bw, bh, "ABBRECHEN", {col = COL.bad, font = "PD.N3D.Big", disabled = st.state ~= "spooling"}) then SendHyper("abort") end
     end
 end)
 
@@ -242,9 +245,10 @@ end)
 -- Schildkontrolle (mit Modulations-Minispiel auf dem Hauptbildschirm)
 --------------------------------------------------------------------------------
 
+-- Kreuz: Bug oben, Heck unten, Backbord links, Steuerbord rechts; Oben/Unten rechts
 local ZONES = {
     {"front", "Bug", 2, 1}, {"left", "Backbord", 1, 2}, {"right", "Steuerbord", 3, 2}, {"back", "Heck", 2, 3},
-    {"top", "Oben", 4, 1.5}, {"bottom", "Unten", 4, 2.5},
+    {"top", "Oben", 3, 1}, {"bottom", "Unten", 3, 3},
 }
 
 local function Combat() return C.status and C.status.combat end
@@ -287,19 +291,20 @@ Register("shields", function(role, w, h, ui, ent, st)
         end
         ui:Frame(w, h, "SCHILDZONEN")
         if not cs then return end
-        local bw, bh = (w - 50) / 4, (h - 90) / 3
+        local bw, bh = (w - 40) / 3, 84
+        local gap = ((h - 100) - bh * 3) / 2
         for _, z in ipairs(ZONES) do
             local zone = cs.zones[z[1]]
-            local x, y = 14 + (z[3] - 1) * (bw + 6), 46 + (z[4] - 1) * (bh + 6)
+            local x, y = 14 + (z[3] - 1) * (bw + 6), 50 + (z[4] - 1) * (bh + gap)
             local total = (zone.e + zone.m) / math.max(zone.ce + zone.cm, 1)
             local hover = ui.active and ui:Hover(x, y, bw, bh)
             draw.RoundedBox(6, x, y, bw, bh, hover and Color(24, 36, 52) or Color(12, 16, 22))
             surface.SetDrawColor(st.zone == z[1] and Color(255, 230, 90) or (total > 0.5 and COL.accent or (total > 0.2 and COL.warn or COL.bad)))
             surface.DrawOutlinedRect(x, y, bw, bh, st.zone == z[1] and 4 or 2)
-            Text(z[2], "PD.N3D.Small", x + bw / 2, y + 6, COL.text, TEXT_ALIGN_CENTER)
-            ui:Bar(x + 8, y + 44, bw - 16, 8, zone.e / math.max(zone.ce, 1), Color(110, 180, 255))
-            ui:Bar(x + 8, y + 58, bw - 16, 8, zone.m / math.max(zone.cm, 1), Color(255, 190, 90))
-            Text(("%d %%"):format(zone.w / 6 * 100), "PD.N3D.Small", x + bw / 2, y + bh - 6, COL.dim, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+            Text(z[2], "PD.N3D.Small", x + bw / 2, y + 4, COL.text, TEXT_ALIGN_CENTER, nil, bw - 12)
+            Text(("%d%%"):format(zone.w / 6 * 100), "PD.N3D.Tiny", x + 8, y + bh - 22, COL.dim, nil, TEXT_ALIGN_CENTER)
+            ui:Bar(x + 64, y + bh - 34, bw - 72, 8, zone.e / math.max(zone.ce, 1), Color(110, 180, 255))
+            ui:Bar(x + 64, y + bh - 20, bw - 72, 8, zone.m / math.max(zone.cm, 1), Color(255, 190, 90))
             if hover and Lib.Input.pressed then st.zone = z[1] surface.PlaySound("buttons/button15.wav") end
         end
         Text(("Strahlen %d %%  /  Partikel %d %%"):format(math.Round(cs.ratio * 100), math.Round((1 - cs.ratio) * 100)), "PD.N3D.Small", 22, h - 40, COL.text)
@@ -799,6 +804,19 @@ Register("navcomputer", function(role, w, h, ui, ent, st)
     local bodies = Bodies()
     st.speed = st.speed or 1
 
+    -- Auswahl: standardmaessig das erste Ziel der Liste, Pfeile bewegen sie
+    local selIndex
+    for i, b in ipairs(bodies) do if b.id == st.selBody then selIndex = i end end
+    if not selIndex and bodies[1] then st.selBody, selIndex = bodies[1].id, 1 end
+    local function MoveSel(d)
+        if #bodies == 0 then return end
+        selIndex = math.Clamp((selIndex or 1) + d, 1, #bodies)
+        st.selBody = bodies[selIndex].id
+        local rows = st.rows or 5
+        if selIndex <= (st.scroll or 0) then st.scroll = selIndex - 1
+        elseif selIndex > (st.scroll or 0) + rows then st.scroll = selIndex - rows end
+    end
+
     if role == "main" then
         ui:Frame(w, h, "HYPERRAUM-KURS")
         local y = 50
@@ -863,15 +881,15 @@ Register("navcomputer", function(role, w, h, ui, ent, st)
         x, y, bw, bh = cell(4, 1)
         if ui:Button(x, y, bw, bh, "Autopilot aus", {col = COL.bad, disabled = s.auto == nil, font = "PD.N3D.Small"}) then SendNav("auto_off") end
         x, y, bw, bh = cell(1, 2, 2)
-        if ui:Button(x, y, bw, bh, "Zum Sprungpunkt", {disabled = not (nav and nav.ready and nav.valid) or not normal}) then
-            SendNav("auto", util.TableToJSON({kind = "jumppoint", speed = st.speed}))
-        end
+        if ui:Button(x, y, bw, bh, "▲") then MoveSel(-1) end
         x, y, bw, bh = cell(3, 2, 2)
         if ui:Confirm(st, "clear", x, y, bw, bh, "Kurs verwerfen", {col = COL.warn, disabled = not nav}) then SendNav("clear") end
         x, y, bw, bh = cell(1, 3, 2)
-        if ui:Button(x, y, bw, bh, "Ziel im Hologramm", {disabled = not nav, font = "PD.N3D.Small"}) then SendNav("holo_focus", nav.target) end
+        if ui:Button(x, y, bw, bh, "▼") then MoveSel(1) end
         x, y, bw, bh = cell(3, 3, 2)
-        if ui:Button(x, y, bw, bh, "Hologramm: unsere Position", {font = "PD.N3D.Small"}) then SendNav("holo_focus", "") end
+        if ui:Button(x, y, bw, bh, "Zum Sprungpunkt", {disabled = not (nav and nav.ready and nav.valid) or not normal}) then
+            SendNav("auto", util.TableToJSON({kind = "jumppoint", speed = st.speed}))
+        end
     elseif role == "b1" then
         ui:Keypad(w, h)
         if ui:Button(10, 10, w - 20, h - 20, "KARTE", {col = COL.ok}) and Naval.StationUI.navcomputer then
@@ -879,10 +897,10 @@ Register("navcomputer", function(role, w, h, ui, ent, st)
         end
     elseif role == "b2" then
         ui:Keypad(w, h)
-        if ui:Button(10, 10, w - 20, h - 20, "▲") then Scroll(st, -1, #bodies, st.rows) end
+        if ui:Button(10, 10, w - 20, h - 20, "Ziel im\nHolo-\ngramm", {disabled = not nav}) then SendNav("holo_focus", nav.target) end
     elseif role == "b3" then
         ui:Keypad(w, h)
-        if ui:Button(10, 10, w - 20, h - 20, "▼") then Scroll(st, 1, #bodies, st.rows) end
+        if ui:Button(10, 10, w - 20, h - 20, "Holo-\ngramm:\nunsere\nPosition") then SendNav("holo_focus", "") end
     end
 end)
 
@@ -993,7 +1011,7 @@ Register("engineering", function(role, w, h, ui, ent, st)
     local sum = 0
     for _, v in pairs(st.values) do sum = sum + v end
 
-    if role == "main" then
+    if role == "main2" then
         ui:Frame(w, h, "ENERGIEVERTEILUNG")
         if not cs then return end
         local y = 50
@@ -1007,18 +1025,19 @@ Register("engineering", function(role, w, h, ui, ent, st)
         end
         Text(("Reaktor %d %%  -  verteilt %d %%"):format(cs.output, sum), "PD.N3D.Small", 22, y, sum > 100 and COL.bad or (sum > cs.output and COL.warn or COL.ok))
         if sum > 100 then Text("ÜBERLAST", "PD.N3D.Med", 22, y + 36, COL.bad) end
-    elseif role == "main2" then
+    elseif role == "main" then
         ui:Frame(w, h, "ZUSTAND")
         if not cs then return end
-        Text(("Hülle %d / %d"):format(cs.hull, cs.hullMax), "PD.N3D.Small", 22, 48, COL.text)
-        ui:Bar(22, 82, w - 44, 12, cs.hull / math.max(cs.hullMax, 1), Frac(cs.hull / math.max(cs.hullMax, 1)))
-        local y = 108
-        for _, sub in ipairs(cs.systems or {}) do
-            if y > h - 30 then break end
+        Text(("Hülle %d / %d"):format(cs.hull, cs.hullMax), "PD.N3D.Small", 22, 46, COL.text)
+        ui:Bar(22, 80, w - 44, 12, cs.hull / math.max(cs.hullMax, 1), Frac(cs.hull / math.max(cs.hullMax, 1)))
+        local systems = cs.systems or {}
+        local step = math.min(30, (h - 120) / math.max(#systems, 1))
+        local y = 104
+        for _, sub in ipairs(systems) do
             local f = sub.hp / math.max(sub.max, 1)
-            Text(Naval.SubsystemNames[sub.id] or sub.id, "PD.N3D.Small", 22, y, f <= 0 and COL.bad or COL.text)
-            ui:Bar(w * 0.62, y + 10, w * 0.32, 10, f, Frac(f))
-            y = y + 32
+            Text(Naval.SubsystemNames[sub.id] or sub.id, "PD.N3D.Tiny", 22, y, f <= 0 and COL.bad or COL.text, nil, nil, w * 0.55)
+            ui:Bar(w * 0.62, y + 8, w * 0.32, 8, f, Frac(f))
+            y = y + step
         end
     elseif role == "s1" then
         Small(ui, w, h, "REAKTOR", cs and (cs.output .. " %") or "-", COL.accent)
@@ -1065,15 +1084,15 @@ Register("damagecontrol", function(role, w, h, ui, ent, st)
         ui:Frame(w, h, "SUBSYSTEME")
         if not cs then return end
         local y = 48
+        local step = math.min(34, (h - 64) / math.max(#(cs.systems or {}), 1))
         for _, sub in ipairs(cs.systems or {}) do
-            if y > h - 30 then break end
             local f = sub.hp / math.max(sub.max, 1)
             local working = {}
             for i = 1, dc.teamCount or 0 do if (dc.teams or {})[i] == sub.id then working[#working + 1] = tostring(i) end end
-            Text(Naval.SubsystemNames[sub.id] or sub.id, "PD.N3D.Small", 22, y, f <= 0 and COL.bad or COL.text)
-            if #working > 0 then Text("T" .. table.concat(working, ","), "PD.N3D.Small", w * 0.6, y, COL.accent, TEXT_ALIGN_RIGHT) end
-            ui:Bar(w * 0.64, y + 10, w * 0.3, 10, f, Frac(f))
-            y = y + 34
+            Text(Naval.SubsystemNames[sub.id] or sub.id, "PD.N3D.Tiny", 22, y, f <= 0 and COL.bad or COL.text, nil, nil, w * 0.42)
+            if #working > 0 then Text("T" .. table.concat(working, ","), "PD.N3D.Tiny", w * 0.6, y, COL.accent, TEXT_ALIGN_RIGHT) end
+            ui:Bar(w * 0.64, y + 8, w * 0.3, 8, f, Frac(f))
+            y = y + step
         end
     elseif role == "main2" then
         ui:Frame(w, h, "SCHÄDEN AN BORD")
@@ -1142,31 +1161,40 @@ Register("fleetcmd", function(role, w, h, ui, ent, st)
     local f = C.status and C.status.fleet
     local lead = f and f.isFlagship
 
-    if role == "main" or role == "main2" then
-        ui:Frame(w, h, role == "main" and "FLOTTE" or "VERBAND")
+    local members = f and f.members or {}
+    local selM
+    for _, m in ipairs(members) do if m.id == st.selMember then selM = m end end
+    if not selM and members[1] then selM = members[1] st.selMember = selM.id end
+
+    if role == "main" then
+        ui:Frame(w, h, "FLOTTE - Schiff antippen")
         if not f then
             for i, line in ipairs(ui.Wrap("Dieses Schiff führt keine Flotte. Begleitschiffe teilt die Spielleitung zu.", 30)) do
                 Text(line, "PD.N3D.Small", 22, 52 + (i - 1) * 32, COL.dim)
             end
             return
         end
-        local members = f.members or {}
-        local start = role == "main" and 1 or 6
-        local y = 48
-        if role == "main" then
-            Text(f.name, "PD.N3D.Med", 22, y, COL.text)
-            Text(lead and (#members .. " Begleitschiffe") or ("Wir folgen " .. (f.flagship or "?")), "PD.N3D.Small", 22, y + 44, lead and COL.dim or COL.warn)
-            y = y + 86
-        end
-        for i = start, #members do
-            local m = members[i]
-            if y > h - 60 then break end
+        Text(f.name, "PD.N3D.Med", 22, 46, COL.text, nil, nil, w - 44)
+        Text(lead and (#members .. " Begleitschiffe") or ("Wir folgen " .. (f.flagship or "?")), "PD.N3D.Small", 22, 90, lead and COL.dim or COL.warn, nil, nil, w - 44)
+        local clicked, n = ui:List(14, 128, w - 28, h - 142, members, {rowH = 70, scroll = st.scroll, selected = st.selMember, draw = function(m, x, y, iw, ih)
             local hf = (m.hull or 0) / 100
-            Text(string.sub(m.name, 1, 18), "PD.N3D.Small", 22, y, m.surrendered and COL.warn or COL.text)
-            Text(MemberLine(m), "PD.N3D.Small", w - 22, y, COL.dim, TEXT_ALIGN_RIGHT)
-            ui:Bar(22, y + 34, w - 44, 8, hf, Frac(hf))
-            y = y + 56
-        end
+            Text(m.name, "PD.N3D.Small", x + 10, y + 4, m.surrendered and COL.warn or COL.text, nil, nil, iw * 0.55)
+            Text(MemberLine(m), "PD.N3D.Small", x + iw - 10, y + 4, COL.dim, TEXT_ALIGN_RIGHT, nil, iw * 0.4)
+            ui:Bar(x + 10, y + ih - 16, iw - 20, 8, hf, Frac(hf))
+        end})
+        st.rows = n
+        if clicked then st.selMember = clicked.id end
+    elseif role == "main2" then
+        ui:Frame(w, h, "GEWÄHLTES SCHIFF")
+        if not selM then Text("Kein Begleitschiff", "PD.N3D.Small", 22, 52, COL.dim) return end
+        local class = C.static and C.static.classes[selM.classId]
+        local y = 50
+        Text(selM.name, "PD.N3D.Med", 22, y, COL.text, nil, nil, w - 44) y = y + 46
+        Text(class and class.name or selM.classId, "PD.N3D.Small", 22, y, COL.dim, nil, nil, w - 44) y = y + 40
+        Text(("Hülle %d %%"):format(selM.hull or 0), "PD.N3D.Small", 22, y, Frac((selM.hull or 0) / 100)) y = y + 36
+        if selM.morale then Text(("Moral %d %%"):format(selM.morale), "PD.N3D.Small", 22, y, Frac(selM.morale / 100)) y = y + 36 end
+        Text(MemberLine(selM), "PD.N3D.Small", 22, y, COL.accent, nil, nil, w - 44)
+        Feedback(ui, w, h)
     elseif role == "s1" then
         local name = "-"
         for _, e in ipairs(Naval.Formations) do if f and e.id == f.formation then name = e.name end end
@@ -1194,6 +1222,30 @@ Register("fleetcmd", function(role, w, h, ui, ent, st)
         if ui:Button(x, y, bw, bh, "Enger (−25 %)", {disabled = not lead}) then Cmd("fleetcmd", "spacing", {factor = 0.75}) end
         x, y, bw, bh = cell(4, 3, 3)
         if ui:Button(x, y, bw, bh, "Weiter (+33 %)", {disabled = not lead}) then Cmd("fleetcmd", "spacing", {factor = 1.33}) end
+    elseif role == "b1" then
+        ui:Keypad(w, h)
+        if ui:Button(10, 10, w - 20, h - 20, "Nächstes\nSchiff", {disabled = #members < 2}) then
+            local idx = 1
+            for i, m in ipairs(members) do if m.id == st.selMember then idx = i end end
+            local ni = idx % #members + 1
+            st.selMember = members[ni].id
+            local rows = st.rows or 3
+            if ni <= (st.scroll or 0) then st.scroll = ni - 1 elseif ni > (st.scroll or 0) + rows then st.scroll = ni - rows end
+        end
+    elseif role == "b2" then
+        ui:Keypad(w, h)
+        if ui:Button(10, 10, w - 20, h - 20, "Zu uns\nrufen", {col = COL.ok, disabled = not lead or not selM}) then
+            Cmd("fleetcmd", "recall", {id = selM.id})
+        end
+    elseif role == "b3" then
+        ui:Keypad(w, h)
+        if ui:Button(10, 10, w - 20, h - 20, "In anderes\nSystem\nbeordern", {col = COL.warn, disabled = not lead or not selM}) then
+            local id = selM.id
+            local nav = C.status and C.status.nav
+            Derma_StringRequest("Flottenführung", "System für " .. selM.name .. ":", nav and Naval.SystemName(nav.target) or "", function(text)
+                if string.Trim(text) ~= "" then Cmd("fleetcmd", "send", {id = id, system = text}) end
+            end)
+        end
     end
 end)
 

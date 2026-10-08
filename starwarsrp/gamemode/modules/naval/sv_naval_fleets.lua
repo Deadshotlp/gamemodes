@@ -571,6 +571,38 @@ FC.mode = function(ply, ship, args)
     ship:Log("fleet", ply:Nick(), fleet.name .. ": " .. args.id)
 end
 
+-- Ein Begleitschiff der eigenen Flotte
+local function OwnMember(ply, ship, args)
+    local fleet = OwnFleet(ply, ship)
+    if not fleet then return nil end
+    local m = Naval.Ships[tonumber(args.id) or -1]
+    if not m or m.fleetId ~= fleet.id or m == ship then Naval.Feedback(ply, "Schiff gehört nicht zur Flotte") return nil end
+    return m, fleet
+end
+
+-- Zum Flaggschiff rufen: eigene Befehle loeschen, dann folgt es der Flotte
+-- (springt bei Bedarf hinterher)
+FC.recall = function(ply, ship, args)
+    local m, fleet = OwnMember(ply, ship, args)
+    if not m then return end
+    Naval.SetOrders(m, {}, ply:Nick())
+    ship:Log("fleet", ply:Nick(), fleet.name .. ": " .. m.name .. " zum Flaggschiff gerufen")
+    Naval.Feedback(ply, m.name .. " kommt zu uns", true)
+end
+
+-- In ein anderes System beordern: springt dorthin und haelt dort Position
+FC.send = function(ply, ship, args)
+    local m, fleet = OwnMember(ply, ship, args)
+    if not m then return end
+    local sys = Naval.FindSystem and Naval.FindSystem(tostring(args.system or ""))
+    if not sys then Naval.Feedback(ply, "System nicht gefunden") return end
+    if not sys.jumpable then Naval.Feedback(ply, sys.name .. " ist gesperrt") return end
+    if sys.id == m.systemId then Naval.Feedback(ply, m.name .. " ist bereits in " .. sys.name) return end
+    Naval.SetOrders(m, {{type = "jump", systemId = sys.id}, {type = "hold"}}, ply:Nick())
+    ship:Log("fleet", ply:Nick(), fleet.name .. ": " .. m.name .. " nach " .. sys.name .. " beordert")
+    Naval.Feedback(ply, m.name .. " springt nach " .. sys.name, true)
+end
+
 FC.spacing = function(ply, ship, args)
     local fleet = OwnFleet(ply, ship)
     if not fleet then return end

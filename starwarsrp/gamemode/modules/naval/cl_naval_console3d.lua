@@ -36,6 +36,21 @@ surface.CreateFont("PD.N3D.Big", {font = "Roboto", size = 52, weight = 700, exte
 surface.CreateFont("PD.N3D.Med", {font = "Roboto", size = 38, weight = 600, extended = true})
 surface.CreateFont("PD.N3D.Small", {font = "Roboto", size = 30, weight = 500, extended = true})
 surface.CreateFont("PD.N3D.Btn", {font = "Roboto", size = 34, weight = 700, extended = true})
+surface.CreateFont("PD.N3D.Tiny", {font = "Roboto", size = 24, weight = 600, extended = true})
+
+-- Schriften von gross nach klein: Text wird so weit verkleinert, bis er passt
+local FIT = {"PD.N3D.Huge", "PD.N3D.Big", "PD.N3D.Med", "PD.N3D.Btn", "PD.N3D.Small", "PD.N3D.Tiny"}
+local FIT_INDEX = {}
+for i, f in ipairs(FIT) do FIT_INDEX[f] = i end
+
+local function FitFont(text, font, maxW)
+    for i = FIT_INDEX[font] or 1, #FIT do
+        surface.SetFont(FIT[i])
+        if surface.GetTextSize(text) <= maxW then return FIT[i] end
+    end
+    return FIT[#FIT]
+end
+Naval.Console3DFit = FitFont
 
 local COL = {
     bg = Color(0, 0, 0, 252), keypad = Color(62, 66, 72, 252), panel = Color(18, 28, 40, 240), line = Color(60, 120, 170),
@@ -131,7 +146,23 @@ function UI:Button(x, y, w, h, text, opts)
     draw.RoundedBox(6, x, y, w, h, bg)
     surface.SetDrawColor(col)
     surface.DrawOutlinedRect(x, y, w, h, (hover or opts.active) and 4 or 2)
-    draw.SimpleText(text, opts.font or "PD.N3D.Btn", x + w / 2, y + h / 2, opts.disabled and COL.dim or COL.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+
+    -- Beschriftung (mehrzeilig mit "\n"), so weit verkleinert, dass sie passt
+    local lines = string.Explode("\n", text)
+    local longest = lines[1]
+    for _, l in ipairs(lines) do if #l > #longest then longest = l end end
+    local font = FitFont(longest, opts.font or "PD.N3D.Btn", w - 16)
+    surface.SetFont(font)
+    local _, lh = surface.GetTextSize("Ag")
+    while #lines * lh > h - 8 and FIT_INDEX[font] < #FIT do
+        font = FIT[FIT_INDEX[font] + 1]
+        surface.SetFont(font)
+        _, lh = surface.GetTextSize("Ag")
+    end
+    local top = y + h / 2 - #lines * lh / 2
+    for i, l in ipairs(lines) do
+        draw.SimpleText(l, font, x + w / 2, top + (i - 1) * lh, opts.disabled and COL.dim or COL.text, TEXT_ALIGN_CENTER)
+    end
 
     if hover and input3d.pressed then
         surface.PlaySound("buttons/button15.wav")
@@ -225,6 +256,7 @@ local function DrawArea(ent, def, role, a, eye, aim, canUse)
     local normal = ang:Up()
     if (pos - eye):Dot(normal) >= 0 then return end -- von hinten
 
+    pos = pos + normal * 0.12
     local w, h = a.w / SCALE, a.h / SCALE
     local ui = setmetatable({active = canUse}, UI)
 
