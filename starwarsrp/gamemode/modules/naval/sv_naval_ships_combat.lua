@@ -289,6 +289,7 @@ function Naval.ApplyHit(target, attacker, wtype, amount)
         eff = 1 - math.Clamp(Naval.Settings.shield_mod_bonus or 0.35, 0, 0.9)
     end
 
+    if kind == "matter" then target.lastMatterHit = CurTime() end
     local key = kind == "matter" and "m" or "e"
     local cost = toShield * eff
     local absorbedCost = math.min(z[key], cost)
@@ -424,6 +425,8 @@ function Naval.HitChance(ship, target, wt, dist)
     local evade = 1 - math.min(0.35, target:Speed() / 20000)
     local chance = wt.accuracy * size * evade * math.max(0.4, Naval.SubFactor(ship, "sensors"))
     if Naval.FieldHitFactor then chance = chance * Naval.FieldHitFactor(ship, target) end
+    -- Feuerleitung nach Guete der Radarspur (sv_naval_radar.lua)
+    if Naval.TrackFactor then chance = chance * Naval.TrackFactor(ship, target, wt) end
 
     -- Punktverteidigung des Ziels gegen Raketen/Torpedos
     if wt.dmgType == "matter" then
@@ -467,11 +470,13 @@ local function Fire(ship, target, dt, focusSystem, sink)
         end
 
         local endless = Naval.SupplyEnabled and not Naval.SupplyEnabled()
-        if wt and not subs.off[i] and inArc and dist <= wt.range and (not wt.ammo or endless or (subs.ammo[i] or 0) > 0) then
+        local tracked = not Naval.TrackFactor or not wt or Naval.TrackFactor(ship, target, wt) > 0
+        if wt and tracked and not subs.off[i] and inArc and dist <= wt.range and (not wt.ammo or endless or (subs.ammo[i] or 0) > 0) then
             subs.due[i] = (subs.due[i] or 0) + active * wt.rof / 60 * dt * wf
             local shots = math.floor(subs.due[i])
 
             if shots > 0 then
+                ship.lastFired = CurTime()
                 subs.due[i] = subs.due[i] - shots
                 if wt.ammo and not endless then
                     shots = math.min(shots, subs.ammo[i])

@@ -334,6 +334,34 @@ function Naval.SimSelfTest()
             ok and ("Magazin %d (%s), Hülle %d %% (Grenze %d %%)"):format(ammoAfter, tostring(sship.ammoText), sship.hull / hullMax * 100, capPct) or tostring(runErr))
     end
 
+    -- 18. Radar: Planet verdeckt, freie Sicht wird erfasst
+    if Naval.RadarDetectForTest and Naval.RadarBlocked then
+        local sysId, body
+        for id, list in pairs(Naval.BodiesBySystem) do
+            for _, b in ipairs(list) do
+                if b.type == "planet" and (b.radius or 0) > 5000 then sysId, body = id, b break end
+            end
+            if body then break end
+        end
+        if body then
+            local c = Naval.BodyPos(body, Naval.Bodies)
+            local obs, hid, free = TestShip("venator"), TestShip("munificent"), TestShip("munificent")
+            obs.id, hid.id, free.id = 64061, 64062, 64063
+            for _, s in ipairs({obs, hid, free}) do s.flags = {test = true} s.systemId = sysId end
+            obs.pos = V3.Add(c, {x = -body.radius * 3, y = 0, z = 0})
+            hid.pos = V3.Add(c, {x = body.radius * 3, y = 0, z = 0})
+            free.pos = V3.Add(obs.pos, {x = 0, y = 20000, z = 0})
+            Naval.Combat(obs) Naval.Combat(hid) Naval.Combat(free)
+            local ok, runErr = pcall(function() Naval.RadarDetectForTest(obs, {obs, hid, free}, {}, CurTime()) end)
+            local tracks = Naval.Tracks[obs.id] or {}
+            local seenFree = tracks[free.id] and tracks[free.id].precise ~= nil
+            local seenHid = tracks[hid.id] and tracks[hid.id].precise ~= nil
+            Naval.Tracks[obs.id] = nil
+            check("Radar: Planet wirft Radarschatten, freie Sicht wird erfasst", ok and seenFree and not seenHid,
+                ok and ("frei erfasst: %s, hinter %s erfasst: %s"):format(tostring(seenFree), body.name, tostring(seenHid)) or tostring(runErr))
+        end
+    end
+
     -- 12. Moral: schwer beschaedigtes Schiff will fliehen
     if Naval.MoraleTarget then
         local probe = TestShip("munificent")

@@ -302,6 +302,7 @@ end
 
 -- Versteckt sich target vor observer?
 function Naval.Concealed(observer, target)
+    if Naval.RadarConcealed then return Naval.RadarConcealed(observer, target) end
     if not target.fieldKind then return false end
     local hide = target.fieldKind == "nebula" and Setting("field_nebula_hide", 20000) or Setting("field_asteroid_hide", 40000)
     if target.fieldNebula then hide = math.min(hide, Setting("field_nebula_hide", 20000)) end

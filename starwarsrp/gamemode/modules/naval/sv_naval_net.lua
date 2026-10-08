@@ -321,7 +321,7 @@ local function SendSnap()
 
         net.WriteUInt(#full, 12)
         for _, ship in ipairs(full) do
-            local rel = V3.Sub(ship.pos, mapShip.pos)
+            local rel = V3.Sub(Naval.TrackPos and Naval.TrackPos(mapShip, ship) or ship.pos, mapShip.pos)
             net.WriteUInt(ship.id, 16)
             net.WriteFloat(rel.x) net.WriteFloat(rel.y) net.WriteFloat(rel.z)
             WriteQuatSmall(ship.rot)

@@ -1343,3 +1343,283 @@ Register("tractor", function(role, w, h, ui, ent, st)
         end
     end
 end)
+
+--------------------------------------------------------------------------------
+-- Radar (grosse Konsole): 3D-Radar, Spurenliste, Verfolgung, Gegenmassnahmen
+-- Daten: C.status.radar (sv_naval_radar.lua)
+--------------------------------------------------------------------------------
+
+local SRC_NAME = {optical = "Optik", near = "Rundum", sweep = "Drehradar", track = "Verfolgung", link = "Datenlink", em = "EM-Peilung", mass = "Masse"}
+local TILTS = {{0, "Draufsicht"}, {35, "Schräg"}, {60, "Flach"}}
+
+net.Receive("PD.Naval.EccmGame", function()
+    local f = net.ReadFloat()
+    local p = net.ReadUInt(9)
+    Naval.EccmGame = {tf = f, tp = p, f = 5, p = 180, start = CurTime()}
+end)
+
+local function RadarData() return C.status and C.status.radar end
+
+-- Lage relativ zum Map-Schiff in Schiffsachsen (x vorn, y links, z oben)
+local function ToLocal(rel)
+    local view = C.View and C.View()
+    if not view or not view.rot then return rel end
+    return Naval.Q.RotateVec(Naval.Q.Conj(view.rot), rel)
+end
+
+local function TrackName(t)
+    if t.decoy then return "Radarkontakt" end
+    local info = C.info[t.id]
+    if info and t.src ~= "em" and t.src ~= "mass" then return info.name end
+    return t.src == "em" and "EM-Quelle" or (t.src == "mass" and "Masse-Anomalie" or "Radarkontakt")
+end
+
+local function TrackColor(t)
+    if t.src == "em" then return Color(200, 140, 255) end
+    if t.src == "mass" then return Color(150, 160, 175) end
+    if t.decoy then return COL.warn end
+    local info = C.info[t.id]
+    if info and (info.ident or 2) >= 1 then
+        local rel = Naval.ClientRelation and Naval.ClientRelation(Naval.MapShipFaction(), info.factionId) or "neutral"
+        return (Naval.RelationColors or {})[rel] or COL.text
+    end
+    return t.hostile and COL.bad or COL.warn
+end
+
+local function TrackDist(t)
+    if t.p then return math.sqrt(t.p[1] ^ 2 + t.p[2] ^ 2 + t.p[3] ^ 2) end
+    return t.dist or 0
+end
+
+-- Projektion: Bug nach oben, Neigung tilt (0 = Draufsicht)
+local function Project(l, cx, cy, scale, tilt)
+    local t = math.rad(tilt)
+    return cx - l.y * scale, cy - l.x * scale * math.cos(t) - l.z * scale * math.sin(t)
+end
+
+local function DrawRing(cx, cy, r, tilt, col)
+    local last
+    surface.SetDrawColor(col)
+    for a = 0, 360, 6 do
+        local x, y = Project({x = math.cos(math.rad(a)) * r, y = math.sin(math.rad(a)) * r, z = 0}, cx, cy, 1, tilt)
+        if last then surface.DrawLine(last[1], last[2], x, y) end
+        last = {x, y}
+    end
+end
+
+local function DrawRadar(ui, w, h, st, rd)
+    ui:Frame(w, h, "RADAR")
+    local range = st.zoom == 1 and rd.near or rd.far
+    local tilt = TILTS[st.tilt or 2][1]
+    local cx, cy = w / 2, h / 2 + 12
+    local R = math.min(w, h) / 2 - 28
+    local scale = R / range
+
+    -- Ringe: Rundum (100 km) und Drehradar-Reichweite
+    DrawRing(cx, cy, R, tilt, Color(60, 120, 170, 160))
+    DrawRing(cx, cy, R * 0.5, tilt, Color(60, 120, 170, 80))
+    if st.zoom ~= 1 then DrawRing(cx, cy, rd.near * scale, tilt, Color(90, 220, 130, 110)) end
+    Text(Dist(range), "PD.N3D.Tiny", w - 16, h - 14, COL.dim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM)
+
+    -- Bug-Markierung und eigenes Schiff
+    local fx, fy = Project({x = R, y = 0, z = 0}, cx, cy, 1, tilt)
+    surface.SetDrawColor(60, 120, 170, 120)
+    surface.DrawLine(cx, cy, fx, fy)
+    draw.RoundedBox(4, cx - 5, cy - 5, 10, 10, COL.ok)
+
+    -- Drehradar: umlaufender Strahl mit Nachleuchten
+    if rd.active and not rd.lock and not rd.emcon then
+        local az = (CurTime() / rd.period * 360 + rd.sweepOffset) % 360
+        for k = 0, 8 do
+            local a = math.rad(az - k * 2.5)
+            local x, y = Project({x = math.cos(a) * R, y = math.sin(a) * R, z = 0}, cx, cy, 1, tilt)
+            surface.SetDrawColor(90, 220, 130, 200 - k * 22)
+            surface.DrawLine(cx, cy, x, y)
+        end
+    end
+
+    -- Spuren
+    st.hits = {}
+    for _, t in ipairs(rd.tracks or {}) do
+        local col = TrackColor(t)
+        if t.src == "em" and t.dir then
+            -- Peilung: Strahl in Richtung der Quelle
+            local l = ToLocal({x = t.dir[1], y = t.dir[2], z = t.dir[3]})
+            local ex, ey = Project({x = l.x * R, y = l.y * R, z = l.z * R}, cx, cy, 1, tilt)
+            surface.SetDrawColor(col.r, col.g, col.b, 140)
+            surface.DrawLine(cx, cy, ex, ey)
+            draw.SimpleText(t.jam and "STÖRER" or "EM", "PD.N3D.Tiny", ex, ey, col, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+            st.hits[#st.hits + 1] = {id = t.id, x = ex, y = ey}
+        elseif t.p then
+            local l = ToLocal({x = t.p[1], y = t.p[2], z = t.p[3]})
+            if math.sqrt(l.x ^ 2 + l.y ^ 2 + l.z ^ 2) <= range * 1.05 then
+                local x, y = Project(l, cx, cy, scale, tilt)
+                local gx, gy = Project({x = l.x, y = l.y, z = 0}, cx, cy, scale, tilt)
+                local fade = t.age and math.Clamp(1 - t.age / 30, 0.25, 1) or 1
+                surface.SetDrawColor(col.r, col.g, col.b, 90 * fade)
+                surface.DrawLine(gx, gy, x, y) -- Hoehenstrich
+                if t.src == "mass" then
+                    local er = math.max(6, (t.err or 0) * scale)
+                    surface.SetDrawColor(col.r, col.g, col.b, 120)
+                    for a = 0, 360, 30 do
+                        local a1, a2 = math.rad(a), math.rad(a + 15)
+                        surface.DrawLine(x + math.cos(a1) * er, y + math.sin(a1) * er, x + math.cos(a2) * er, y + math.sin(a2) * er)
+                    end
+                else
+                    local size = st.sel == t.id and 14 or 9
+                    draw.RoundedBox(2, x - size / 2, y - size / 2, size, size, Color(col.r, col.g, col.b, 255 * fade))
+                    if rd.lock == t.id then
+                        surface.SetDrawColor(COL.bad)
+                        surface.DrawOutlinedRect(x - 14, y - 14, 28, 28, 2)
+                        surface.DrawLine(cx, cy, x, y)
+                    end
+                end
+                if st.sel == t.id then
+                    surface.SetDrawColor(255, 230, 90)
+                    surface.DrawOutlinedRect(x - 12, y - 12, 24, 24, 2)
+                end
+                st.hits[#st.hits + 1] = {id = t.id, x = x, y = y}
+            end
+        end
+    end
+
+    -- Angekuendigte Hyperraum-Austritte
+    for _, inc in ipairs(rd.incoming or {}) do
+        local l = ToLocal({x = inc.p[1], y = inc.p[2], z = inc.p[3]})
+        local x, y = Project(l, cx, cy, scale, tilt)
+        local pulse = 10 + math.sin(CurTime() * 6) * 4
+        surface.SetDrawColor(COL.bad)
+        surface.DrawOutlinedRect(x - pulse, y - pulse, pulse * 2, pulse * 2, 2)
+        draw.SimpleText("Austritt " .. inc.eta .. " s", "PD.N3D.Tiny", x, y - pulse - 2, COL.bad, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+    end
+
+    -- Antippen = Spur waehlen
+    if ui.active and ui.mx and Lib.Input.pressed then
+        local best, bestD = nil, 30 * 30
+        for _, hgt in ipairs(st.hits) do
+            local d = (hgt.x - ui.mx) ^ 2 + (hgt.y - ui.my) ^ 2
+            if d < bestD then best, bestD = hgt, d end
+        end
+        if best then st.sel = best.id surface.PlaySound("buttons/button15.wav") end
+    end
+end
+
+local function DrawEccm(ui, w, h)
+    local g = Naval.EccmGame
+    ui:Frame(w, h, "FREQUENZABGLEICH")
+    DrawWave(14, 50, w - 28, h - 130, g.tf, g.tp, Color(255, 110, 90), true)
+    DrawWave(14, 50, w - 28, h - 130, g.f, g.p, Color(110, 200, 255), false)
+    Text(("Frequenz %.1f   Phase %d°"):format(g.f, g.p), "PD.N3D.Small", 22, h - 72, Color(110, 200, 255))
+    Text(("noch %d s"):format(math.max(0, 30 - (CurTime() - g.start))), "PD.N3D.Small", w - 22, h - 72, COL.text, TEXT_ALIGN_RIGHT)
+end
+
+Register("radar", function(role, w, h, ui, ent, st)
+    local rd = RadarData()
+    local game = Naval.EccmGame
+    if game and CurTime() - game.start > 30 then Naval.EccmGame, game = nil, nil end
+    st.zoom = st.zoom or 2
+    st.tilt = st.tilt or 2
+
+    -- Spuren nach Entfernung (Liste und Auswahl)
+    local tracks = {}
+    for _, t in ipairs(rd and rd.tracks or {}) do tracks[#tracks + 1] = t end
+    table.sort(tracks, function(a, b) return TrackDist(a) < TrackDist(b) end)
+    local sel
+    for _, t in ipairs(tracks) do if t.id == st.sel then sel = t end end
+
+    if role == "main" then
+        if not rd then ui:Frame(w, h, "RADAR") Text("Keine Daten", "PD.N3D.Med", 22, 52, COL.dim) return end
+        if game then DrawEccm(ui, w, h) return end
+        DrawRadar(ui, w, h, st, rd)
+    elseif role == "main2" then
+        ui:Frame(w, h, "SPUREN - antippen = wählen")
+        local clicked, n = ui:List(14, 50, w - 28, h - 64, tracks, {rowH = 64, scroll = st.scroll, selected = st.sel, draw = function(t, x, y, iw, ih)
+            local col = TrackColor(t)
+            surface.SetDrawColor(col)
+            surface.DrawRect(x, y, 6, ih)
+            Text(TrackName(t), "PD.N3D.Small", x + 14, y + 2, COL.text, nil, nil, iw * 0.6)
+            local src = SRC_NAME[t.src] or t.src
+            if t.age and t.age >= 1 then src = src .. (" (%d s)"):format(t.age) end
+            Text(src, "PD.N3D.Tiny", x + 14, y + ih - 2, rd.lock == t.id and COL.bad or COL.dim, nil, TEXT_ALIGN_BOTTOM)
+            Text((t.src == "em" and "~" or "") .. Dist(TrackDist(t)), "PD.N3D.Small", x + iw - 10, y + 2, COL.text, TEXT_ALIGN_RIGHT)
+        end})
+        st.rows = n
+        if clicked then st.sel = clicked.id end
+    elseif role == "s1" then
+        local text, col, sub = "DREHT", COL.ok, nil
+        if not rd then text, col = "-", COL.dim
+        elseif rd.emcon then text, col = "SCHLEICHFAHRT", COL.warn
+        elseif rd.lock then
+            text, col = "VERFOLGUNG", COL.bad
+            local info = C.info[rd.lock]
+            sub = info and string.sub(info.name, 1, 14) or nil
+        elseif rd.lockLost then text, col = "ZIEL VERLOREN", COL.warn end
+        Small(ui, w, h, "RADAR", text, col, sub)
+    elseif role == "s2" then
+        local text, col, sub = "FREI", COL.ok, nil
+        if rd and rd.eccm > 0 then text, col = "ABGEGLICHEN", COL.ok sub = Time(rd.eccm)
+        elseif rd and rd.jammed then text, col = "GESTÖRT", COL.bad end
+        if rd and rd.ecm then sub = "eigener Störsender AN" end
+        Small(ui, w, h, "STÖRUNG", text, col, sub)
+    elseif role == "keys" then
+        ui:Keypad(w, h)
+        if not rd then return end
+        local cell = Grid(w, h, 5, 3)
+        local precise = sel and sel.p and sel.src ~= "mass"
+        local x, y, bw, bh = cell(1, 1)
+        if ui:Button(x, y, bw, bh, "VERFOLGEN", {col = COL.bad, disabled = not precise or sel.decoy or rd.emcon or rd.lock == st.sel}) then
+            Cmd("radar", "lock", {id = st.sel})
+        end
+        x, y, bw, bh = cell(2, 1)
+        if ui:Button(x, y, bw, bh, "Drehen", {active = not rd.lock and not rd.emcon, disabled = not rd.lock}) then Cmd("radar", "sweep") end
+        x, y, bw, bh = cell(3, 1)
+        if ui:Confirm(st, "emcon", x, y, bw, bh, rd.emcon and "Schleichfahrt\nbeenden" or "Schleich-\nfahrt", {col = COL.warn, active = rd.emcon}) then
+            Cmd("radar", "emcon", {on = not rd.emcon})
+        end
+        x, y, bw, bh = cell(4, 1)
+        if ui:Button(x, y, bw, bh, rd.ecm and "Störsender\nAUS" or "Störsender\nAN", {col = COL.warn, active = rd.ecm, disabled = rd.emcon}) then
+            Cmd("radar", "ecm", {on = not rd.ecm})
+        end
+        x, y, bw, bh = cell(5, 1)
+        if ui:Button(x, y, bw, bh, ("Täusch-\nkörper (%d)"):format(rd.decoys or 0), {col = COL.warn, disabled = (rd.decoys or 0) <= 0 or rd.decoyCd > 0}) then
+            Cmd("radar", "decoy")
+        end
+        x, y, bw, bh = cell(1, 2)
+        if ui:Button(x, y, bw, bh, "▲") then Scroll(st, -1, #tracks, st.rows) end
+        x, y, bw, bh = cell(2, 2)
+        if ui:Button(x, y, bw, bh, "▼") then Scroll(st, 1, #tracks, st.rows) end
+        x, y, bw, bh = cell(3, 2, 3)
+        if ui:Button(x, y, bw, bh, "Frequenzabgleich", {col = Color(110, 200, 255), disabled = not rd.jammed or game ~= nil}) then Cmd("radar", "eccm_start") end
+        if game then
+            local mod = {{"Freq. −", function() game.f = math.Clamp(game.f - 0.2, 1, 9) end}, {"Freq. +", function() game.f = math.Clamp(game.f + 0.2, 1, 9) end},
+                {"Phase −", function() game.p = (game.p - 10) % 360 end}, {"Phase +", function() game.p = (game.p + 10) % 360 end}}
+            for i, b in ipairs(mod) do
+                x, y, bw, bh = cell(i, 3)
+                if ui:Button(x, y, bw, bh, b[1], {col = Color(110, 200, 255)}) then b[2]() end
+            end
+            x, y, bw, bh = cell(5, 3)
+            if ui:Button(x, y, bw, bh, "ÜBER-\nNEHMEN", {col = COL.ok}) then
+                Cmd("radar", "eccm_submit", {f = game.f, p = game.p})
+                Naval.EccmGame = nil
+            end
+        else
+            x, y, bw, bh = cell(1, 3, 5)
+            local info = sel and (SRC_NAME[sel.src] or sel.src) .. (sel.age and sel.age >= 1 and (" - %d s alt"):format(sel.age) or "")
+            Text(sel and (TrackName(sel) .. "  -  " .. info) or "Spur auf dem Radar oder in der Liste antippen", "PD.N3D.Small",
+                x + bw / 2, y + bh / 2, sel and TrackColor(sel) or COL.dim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, bw - 20)
+        end
+    elseif role == "b1" then
+        ui:Keypad(w, h)
+        if ui:Button(10, 10, w - 20, h - 20, st.zoom == 1 and "Zoom\n100 km" or "Zoom\n250 km") then st.zoom = st.zoom == 1 and 2 or 1 end
+    elseif role == "b2" then
+        ui:Keypad(w, h)
+        if ui:Button(10, 10, w - 20, h - 20, TILTS[st.tilt][2]) then st.tilt = st.tilt % #TILTS + 1 end
+    elseif role == "b3" then
+        ui:Keypad(w, h)
+        if ui:Button(10, 10, w - 20, h - 20, "Nächster\nFeind", {col = COL.bad}) then
+            for _, t in ipairs(tracks) do
+                if t.hostile and t.p and not t.decoy then st.sel = t.id break end
+            end
+        end
+    end
+end)

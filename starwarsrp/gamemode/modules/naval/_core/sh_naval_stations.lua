@@ -221,7 +221,15 @@ PD.Naval.Stations.demo_medium = {
 -- dieser Liste nehmen.
 for _, id in ipairs({
     "helm", "navcomputer", "hyperdrive", "shiplog", "weapons", "shields", "engineering", "holo_control",
-    "damagecontrol", "sensors", "alert", "comms", "fleetcmd", "tractor", "logistics", "relocation",
+    "damagecontrol", "sensors", "alert", "comms", "fleetcmd", "tractor", "logistics", "relocation", "radar",
 }) do
     if PD.Naval.Stations[id] then PD.Naval.Stations[id].ui3d = true end
 end
+
+-- Radar-Konsole (grosse Konsole, 3D-Radar)
+PD.Naval.Stations.radar = {
+    name = "Radar",
+    model = "models/lordtrilobite/starwars/isd/imp_console_large01.mdl",
+    desc = "3D-Radar, Verfolgung, Störsender, Schleichfahrt, Täuschkörper",
+    ui3d = true,
+}
