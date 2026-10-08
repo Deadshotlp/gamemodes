@@ -11,7 +11,7 @@
       3. Spieler tragen sie (auch per Fahrzeug, Fahrzeuginventar) zur
          Nachschub-Annahme (Ortsmarker supply_intake). Dort abgestellt wird
          die Kiste verbucht: Munition in die Magazine, Ersatzteile auf die
-         Huelle (bis supply_parts_max %), Maschinen in den Hangar.
+         Huelle (bis supply_parts_max %).
     KI-Schiffe fuellen in eigenem Gebiet ausserhalb von Gefechten langsam
     selbst auf.
 
@@ -38,7 +38,6 @@ local function Setting(key, default)
 end
 
 -- Hauptschalter (supply_enabled): aus = Munition wird nicht verbraucht,
--- verlorene Maschinen kommen ausserhalb von Gefechten von selbst zurueck,
 -- keine Anforderungen
 function Naval.SupplyEnabled()
     return Setting("supply_enabled", 1) == 1
@@ -80,15 +79,6 @@ local function HullMax(ship)
     return (ship:Class() or {}).hull or 1000
 end
 
-local function Craft(ship)
-    if not Naval.Hangar then return 0, 0 end
-    local h, cap = Naval.Hangar(ship)
-    local out = ship.subs.hangarOut or {}
-    local ready = (h.fighter or 0) + (h.bomber or 0)
-    local max = ((cap.fighter or 0) + (cap.bomber or 0)) * 12
-    return ready + (out.fighter or 0) + (out.bomber or 0), max
-end
-
 -- Kiste verbuchen. Gibt den Text fuer die Meldung zurueck oder nil (nichts frei).
 local function Apply(ship, kind)
     local def = Naval.SupplyKinds[kind]
@@ -123,22 +113,6 @@ local function Apply(ship, kind)
         local add = math.min(max * Setting("supply_parts_hull", 5) / 100, cap - hull)
         ship.hull = hull + add
         return ("Hülle +%d (%d %%)"):format(math.Round(add), math.Round(ship.hull / max * 100))
-    end
-
-    if kind == "craft" and Naval.Hangar then
-        local total, max = Craft(ship)
-        if total >= max then return nil end
-        local h, cap = Naval.Hangar(ship)
-        local left = math.min(def.amount, max - total)
-        local added = left
-        -- Erst die Art auffuellen, die mehr fehlt
-        for _, k in ipairs({"fighter", "bomber"}) do
-            local missing = (cap[k] or 0) * 12 - (h[k] or 0) - ((ship.subs.hangarOut or {})[k] or 0)
-            local n = math.min(left, math.max(0, missing))
-            h[k] = (h[k] or 0) + n
-            left = left - n
-        end
-        return ("%d Maschinen im Hangar"):format(added - left)
     end
 end
 
@@ -233,18 +207,8 @@ local function Intake(ship)
 end
 
 -- KI-Schiffe in eigenem Gebiet ausserhalb von Gefechten
--- Abgeschaltet: Maschinen kommen bei allen Schiffen ausserhalb von Gefechten zurueck
-local function RefillCraft(ship)
-    if not Naval.Hangar or ship.state ~= S.NORMAL or (ship.lastAttacked or 0) > CurTime() - 120 then return end
-    local h, cap = Naval.Hangar(ship)
-    for _, k in ipairs({"fighter", "bomber"}) do
-        local max = (cap[k] or 0) * 12 - ((ship.subs.hangarOut or {})[k] or 0)
-        if (h[k] or 0) < max then h[k] = math.min(max, (h[k] or 0) + 2) ship.dirty = true end
-    end
-end
-
 local function NpcResupply(ship)
-    if not Naval.SupplyEnabled() then RefillCraft(ship) return end
+    if not Naval.SupplyEnabled() then return end
     if ship:IsPlayerShip() or ship.state ~= S.NORMAL or (ship.lastAttacked or 0) > CurTime() - 120 then return end
     if ship.flags and (ship.flags.surrendered or ship.flags.prisoner or ship.flags.hidden) then return end
     local terr = Naval.Territory and Naval.Territory[ship.systemId]
@@ -258,13 +222,6 @@ local function NpcResupply(ship)
         if wt and wt.ammo then
             local m = b.ammo or 50
             subs.ammo[i] = math.min(m, (subs.ammo[i] or m) + math.ceil(m * rate))
-        end
-    end
-    if Naval.Hangar then
-        local h, cap = Naval.Hangar(ship)
-        for _, k in ipairs({"fighter", "bomber"}) do
-            local max = (cap[k] or 0) * 12 - ((subs.hangarOut or {})[k] or 0)
-            if (h[k] or 0) < max then h[k] = math.min(max, (h[k] or 0) + 2) end
         end
     end
 end
@@ -379,7 +336,6 @@ Naval.StatusExtras.logistics = function(ship)
             ammo[kind] = {cur = cur, max = max}
         end
     end
-    local craftCur, craftMax = Craft(ship)
     local hullMax = HullMax(ship)
 
     local ok, reason = Naval.SupplyCheck(ship)
@@ -391,7 +347,7 @@ Naval.StatusExtras.logistics = function(ship)
 
     return {
         enabled = Naval.SupplyEnabled() or nil,
-        ammo = ammo, craft = {cur = craftCur, max = craftMax},
+        ammo = ammo,
         hull = math.Round(ship.hull or hullMax), hullMax = hullMax, partsMax = Setting("supply_parts_max", 80),
         delivery = subs.supply and {eta = math.max(0, (subs.supply.eta or 0) - os.time()), crates = subs.supply.crates} or nil,
         cooldown = math.max(0, (subs.supplyNext or 0) - os.time()),

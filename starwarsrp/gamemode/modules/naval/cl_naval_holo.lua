@@ -221,19 +221,6 @@ local function DrawTactical(center, radius, labels, flicker)
     render.SetBlend(1)
     render.SuppressEngineLighting(false)
 
-    -- Staffeln (cl_naval_hangar.lua)
-    if C.squadrons and Naval.SquadronPos then
-        render.SetColorMaterial()
-        for _, sq in ipairs(C.squadrons) do
-            local rel = Naval.V3.Sub(Naval.SquadronPos(sq), view.pos)
-            if Naval.V3.Len(rel) <= range then
-                local relation = Naval.ClientRelation and Naval.ClientRelation(myFaction, sq.factionId) or "neutral"
-                local col = REL_COLOR[relation] or COL_HOLO
-                Marker(ToHolo(rel), radius * (sq.bomber and 0.014 or 0.01), col, flicker)
-            end
-        end
-    end
-
     -- Asteroidenfelder und Nebel (cl_naval_fields.lua)
     if C.system and C.system.systemId == view.systemId and C.system.fields and Naval.HoloLayer("bodies") then
         render.SetColorMaterial()

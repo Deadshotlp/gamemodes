@@ -62,7 +62,6 @@ local function OpenLogistics(console)
             if a then Row(def.weapon == "torpedo" and "Protonentorpedos" or "Erschütterungsraketen", a.cur, a.max, def.color) end
         end
         Row("Hülle", l.hull, l.hullMax, COL.ok, ("Ersatzteile bis %d %%"):format(l.partsMax))
-        Row("Maschinen (Hangar)", l.craft.cur, l.craft.max, COL.accent)
     end
 
     -- Anforderung

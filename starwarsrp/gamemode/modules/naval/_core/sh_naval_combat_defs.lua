@@ -166,45 +166,6 @@ function Naval.ZoneOf(dir)
 end
 
 --[[
-    Hangar und Staffeln (Stufe 4e). Eine Staffel = 12 Maschinen.
-      fighter  Jaeger: gegen Staffeln, Begleitschutz, wenig gegen Schiffe
-      bomber   Bomber: Torpedos gegen Schiffe, schwach gegen Jaeger
-    Staffeln je Klasse: class.hangar = {fighter = n, bomber = m} (Panel),
-    sonst Naval.HangarDefaults.
-]]
-
-Naval.SquadronTypes = {
-    fighter = {name = "Jägerstaffel", craft = 12, speed = 900, vsCraft = 0.05, vsShip = 0.6, dmgType = "laser", pdHit = 1},
-    bomber = {name = "Bomberstaffel", craft = 12, speed = 600, vsCraft = 0.015, vsShip = 9, dmgType = "torpedo", pdHit = 1.4},
-}
-
-Naval.SquadronTasks = {
-    {id = "escort", name = "Begleitschutz"},
-    {id = "attack", name = "Ziel angreifen"},
-    {id = "intercept", name = "Staffeln abfangen"},
-}
-
-Naval.HangarDefaults = {
-    venator = {fighter = 4, bomber = 2},
-    acclamator = {fighter = 1},
-    providence = {fighter = 6, bomber = 4},
-    lucrehulk = {fighter = 12, bomber = 4},
-    recusant = {fighter = 1},
-    munificent = {fighter = 1},
-    bulwark = {fighter = 2},
-}
-
-function Naval.ClassHangar(class)
-    if not class then return {} end
-    local h = istable(class.hangar) and class.hangar or {}
-    if tonumber(h.fighter) or tonumber(h.bomber) then
-        return {fighter = tonumber(h.fighter) or 0, bomber = tonumber(h.bomber) or 0}
-    end
-    local d = Naval.HangarDefaults[class.id] or {}
-    return {fighter = d.fighter or 0, bomber = d.bomber or 0}
-end
-
---[[
     Traktorstrahl (Stufe 4e): Staerke je Klasse (0 = keiner). Bestimmt
     Reichweite und wie gut sich nicht wehrlose Ziele losreissen koennen.
     class.tractor (Panel) ueberschreibt Naval.TractorDefaults.
@@ -221,13 +182,12 @@ end
 
 --[[
     Nachschub (Stufe 4e): Kistenarten des Logistik-Leitstands.
-    amount: Schuss (Munition), Maschinen (craft); Ersatzteile siehe
+    amount: Schuss (Munition); Ersatzteile siehe
     supply_parts_hull / supply_parts_max.
 ]]
 Naval.SupplyKinds = {
     torpedo = {name = "Torpedokiste", desc = "12 Protonentorpedos", weapon = "torpedo", amount = 12, unit = "Torpedos", color = Color(255, 150, 70)},
     missile = {name = "Raketenkiste", desc = "24 Erschütterungsraketen", weapon = "missile", amount = 24, unit = "Raketen", color = Color(255, 210, 90)},
     parts = {name = "Ersatzteile", desc = "Hüllenreparatur", color = Color(120, 200, 255)},
-    craft = {name = "Ersatzmaschinen", desc = "6 Jäger oder Bomber für den Hangar", amount = 6, color = Color(150, 230, 150)},
 }
-Naval.SupplyOrder = {"torpedo", "missile", "parts", "craft"}
+Naval.SupplyOrder = {"torpedo", "missile", "parts"}

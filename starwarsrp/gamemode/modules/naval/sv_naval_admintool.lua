@@ -255,15 +255,8 @@ local function LiveData()
     local log = Naval.CommsLog or {}
     for i = math.max(1, #log - 19), #log do comms[#comms + 1] = log[i] end
 
-    local squadrons = {}
-    for id, sq in pairs(Naval.Squadrons or {}) do
-        squadrons[#squadrons + 1] = {id = id, carrierId = sq.carrierId, factionId = sq.factionId, systemId = sq.systemId,
-            kind = sq.kind, craft = math.ceil(sq.craft), state = sq.state, task = sq.task, p = P(sq.pos)}
-    end
-
     local mapShip = Naval.GetMapShip()
     return {
-        squadrons = squadrons,
         time = os.time(), paused = Naval.Paused == true,
         mapShipId = mapShip and mapShip.id, alert = Naval.GetAlert and Naval.GetAlert() or 0,
         ships = ships, fleets = fleets, comms = comms,

@@ -564,8 +564,8 @@ function Naval.RenderSpace()
             local sunDir = DrawBodies(view, M, camOffset, ang, fov)
             render.ClearDepth()
 
-            -- Kampfeffekte (cl_naval_fx.lua), Staffeln (cl_naval_hangar.lua),
-            -- Felder (cl_naval_fields.lua), Traktorstrahl (cl_naval_tractor.lua)
+            -- Kampfeffekte (cl_naval_fx.lua), Felder (cl_naval_fields.lua),
+            -- Traktorstrahl (cl_naval_tractor.lua)
             local scale, far = Scale(), Far()
             local function toRender(p)
                 local rel = V3.Sub(p, view.pos)
@@ -583,7 +583,6 @@ function Naval.RenderSpace()
 
             if Naval.DrawFieldClouds then Naval.DrawFieldClouds(view, toRender) end
             if Naval.DrawFX then Naval.DrawFX(view, toRender) end
-            if Naval.DrawSquadrons then Naval.DrawSquadrons(view, toRender) end
             if Naval.DrawTractor then Naval.DrawTractor(view, toRender) end
         cam.End3D()
     end
