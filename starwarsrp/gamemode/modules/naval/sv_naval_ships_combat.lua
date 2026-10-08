@@ -427,11 +427,15 @@ function Naval.HitChance(ship, target, wt, dist)
 
     -- Punktverteidigung des Ziels gegen Raketen/Torpedos
     if wt.dmgType == "matter" then
-        local pd = 0
-        for _, b in ipairs(Naval.ClassCombat(target:Class(), Naval.HardpointsFor(target)).weapons) do
-            if b.type == "pd" then pd = pd + (b.count or 0) end
+        local tcc = Naval.ClassCombat(target:Class(), Naval.HardpointsFor(target))
+        if not tcc.pdCount then
+            local pd = 0
+            for _, b in ipairs(tcc.weapons) do
+                if b.type == "pd" then pd = pd + (b.count or 0) end
+            end
+            tcc.pdCount = pd
         end
-        chance = chance * (1 - math.min(0.6, pd * 0.015))
+        chance = chance * (1 - math.min(0.6, tcc.pdCount * 0.015))
     end
 
     return math.Clamp(chance, 0.02, 0.98)
@@ -547,6 +551,9 @@ end
 
 Naval.CombatRegen = Regen
 
+local FAR_EVERY = 4
+local combatTicks = 0
+
 function Naval.CombatTick()
     if Naval.Paused then return end
 
@@ -562,15 +569,22 @@ function Naval.CombatTick()
     end
 
     visual = {}
+    combatTicks = combatTicks + 1
 
     for _, ship in pairs(Naval.Ships) do
+        -- Schiffe ausserhalb des Systems des Map-Schiffs nur jeden FAR_EVERY.
+        -- Takt (mit entsprechend laengerem Zeitschritt)
+        local near = ship.systemId == focusSystem
+        local dt = near and TICK or TICK * FAR_EVERY
+        if not near and (combatTicks + ship.id) % FAR_EVERY ~= 0 then continue end
+
         Naval.Combat(ship)
 
         if ship.state == S.DESTROYED then
             if ship.wreckUntil and now > ship.wreckUntil then Naval.RemoveShip(ship.id) end
         elseif ship.state ~= S.HYPERSPACE then
-            Regen(ship, TICK)
-            Overload(ship, TICK)
+            Regen(ship, dt)
+            Overload(ship, dt)
 
             -- Map-Schiff feuert nur mit "Feuer frei" vom Waffenleitstand,
             -- KI-Schiffe nach ihrer ROE
@@ -583,7 +597,7 @@ function Naval.CombatTick()
 
             if canFire and ship.state == S.NORMAL then
                 local target = PickTarget(ship, bySystem)
-                if target then Fire(ship, target, TICK, focusSystem) end
+                if target then Fire(ship, target, dt, focusSystem) end
             end
         end
     end

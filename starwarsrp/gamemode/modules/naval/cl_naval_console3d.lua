@@ -43,12 +43,31 @@ local FIT = {"PD.N3D.Huge", "PD.N3D.Big", "PD.N3D.Med", "PD.N3D.Btn", "PD.N3D.Sm
 local FIT_INDEX = {}
 for i, f in ipairs(FIT) do FIT_INDEX[f] = i end
 
+-- Ergebnis gemerkt (Textbreite messen ist teuer, Knoepfe werden jedes Bild gezeichnet)
+local fitCache, fitCount = {}, 0
 local function FitFont(text, font, maxW)
+    local key = text .. "\0" .. font .. "\0" .. math.floor(maxW)
+    local cached = fitCache[key]
+    if cached then return cached end
+    local result = FIT[#FIT]
     for i = FIT_INDEX[font] or 1, #FIT do
         surface.SetFont(FIT[i])
-        if surface.GetTextSize(text) <= maxW then return FIT[i] end
+        if surface.GetTextSize(text) <= maxW then result = FIT[i] break end
     end
-    return FIT[#FIT]
+    fitCount = fitCount + 1
+    if fitCount > 4000 then fitCache, fitCount = {}, 0 end
+    fitCache[key] = result
+    return result
+end
+
+-- Alle Naval-Konsolen (eine Liste fuer alle Zeichen-Hooks, 1x pro Sekunde neu)
+local consoleList, consoleListAt = {}, 0
+function Naval.ConsoleEntities()
+    if CurTime() > consoleListAt then
+        consoleListAt = CurTime() + 1
+        consoleList = ents.FindByClass("pd_naval_console")
+    end
+    return consoleList
 end
 Naval.Console3DFit = FitFont
 
@@ -125,6 +144,8 @@ end
 local UI = {}
 UI.__index = UI
 
+local lineCache = {}
+
 function UI:Hover(x, y, w, h)
     return self.mx ~= nil and self.mx >= x and self.mx <= x + w and self.my >= y and self.my <= y + h
 end
@@ -152,12 +173,18 @@ function UI:Button(x, y, w, h, text, opts)
     local longest = lines[1]
     for _, l in ipairs(lines) do if #l > #longest then longest = l end end
     local font = FitFont(longest, opts.font or "PD.N3D.Btn", w - 16)
-    surface.SetFont(font)
-    local _, lh = surface.GetTextSize("Ag")
+    local function LineH(f)
+        if not lineCache[f] then
+            surface.SetFont(f)
+            local _, hh = surface.GetTextSize("Ag")
+            lineCache[f] = hh
+        end
+        return lineCache[f]
+    end
+    local lh = LineH(font)
     while #lines * lh > h - 8 and FIT_INDEX[font] < #FIT do
         font = FIT[FIT_INDEX[font] + 1]
-        surface.SetFont(font)
-        _, lh = surface.GetTextSize("Ag")
+        lh = LineH(font)
     end
     local top = y + h / 2 - #lines * lh / 2
     for i, l in ipairs(lines) do
@@ -301,8 +328,8 @@ hook.Add("PostDrawTranslucentRenderables", "PD.Naval.Console3D", function(depth,
     local eye, aim = ply:EyePos(), ply:GetAimVector()
     local any = false
 
-    for _, ent in ipairs(ents.FindByClass("pd_naval_console")) do
-        local station = ent.GetStation and ent:GetStation()
+    for _, ent in ipairs(Naval.ConsoleEntities()) do
+        local station = IsValid(ent) and ent.GetStation and ent:GetStation()
         local def = station and Naval.Console3D[station]
         if def and eye:DistToSqr(ent:GetPos()) < DRAW_DIST then
             local roles = Roles(string.lower(ent:GetModel() or ""))

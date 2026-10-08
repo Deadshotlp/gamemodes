@@ -237,6 +237,28 @@ local function WriteQuat(q)
     net.WriteFloat(q.w) net.WriteFloat(q.x) net.WriteFloat(q.y) net.WriteFloat(q.z)
 end
 
+-- Drehung kompakt ("smallest three"): groesste Komponente weglassen (2 Bit
+-- Index), die drei anderen liegen in +-0.7072 -> je 16 Bit. 50 statt 128 Bit.
+local QMAX = 0.7072
+local function WriteQuatSmall(q)
+    local c = {q.w, q.x, q.y, q.z}
+    local mi, mv = 1, -1
+    for i = 1, 4 do
+        local a = math.abs(c[i])
+        if a > mv then mi, mv = i, a end
+    end
+    local sign = c[mi] < 0 and -1 or 1
+    net.WriteUInt(mi - 1, 2)
+    for i = 1, 4 do
+        if i ~= mi then net.WriteInt(math.Clamp(math.Round(c[i] * sign / QMAX * 32767), -32767, 32767), 16) end
+    end
+end
+
+-- Ferne Schiffe (nur Punkte am Himmel) nur jeden 3. Snapshot vollstaendig;
+-- dazwischen nur ihre Kennung, der Client schreibt die letzte Lage fort.
+local FAR_SNAP = 100000 -- m
+local snapCount = 0
+
 local lastSystem
 
 local function HullPct(ship)
@@ -257,17 +279,33 @@ local function SendSnap()
         Naval.SendSystem(recipients)
     end
 
+    snapCount = snapCount + 1
     local list = VisibleShips(mapShip)
-    local ids = {}
-    for _, s in ipairs(list) do ids[#ids + 1] = s.id .. ":" .. s.factionId .. ":" .. s.name .. ":" .. Ident(mapShip, s) end
-    local key = table.concat(ids, ",")
 
-    if key ~= visibleKey then
-        visibleKey = key
-        SendShipInfo(list, recipients)
+    -- Neue/geaenderte Kontakte: Kennungen pruefen. Nur, wenn sich die Anzahl
+    -- aendert, oder einmal pro Sekunde (der Schluessel ist teuer).
+    if #list ~= #visible or snapCount % 10 == 0 then
+        local ids = {}
+        for _, s in ipairs(list) do ids[#ids + 1] = s.id .. ":" .. s.factionId .. ":" .. s.name .. ":" .. Ident(mapShip, s) end
+        local key = table.concat(ids, ",")
+
+        if key ~= visibleKey then
+            visibleKey = key
+            SendShipInfo(list, recipients)
+        end
     end
 
     visible = list
+
+    local full, keep = {}, {}
+    local farFull = snapCount % 3 == 0
+    for _, ship in ipairs(list) do
+        if farFull or V3.LenSqr(V3.Sub(ship.pos, mapShip.pos)) <= FAR_SNAP * FAR_SNAP then
+            full[#full + 1] = ship
+        else
+            keep[#keep + 1] = ship.id
+        end
+    end
 
     net.Start("PD.Naval.Snap", true)
         net.WriteDouble(Naval.SimTime or Naval.Now())
@@ -281,15 +319,17 @@ local function SendSnap()
         net.WriteFloat(mapShip.ctrl.throttle or 0)
         net.WriteUInt(HullPct(mapShip), 7)
 
-        net.WriteUInt(#list, 12)
-        for _, ship in ipairs(list) do
+        net.WriteUInt(#full, 12)
+        for _, ship in ipairs(full) do
             local rel = V3.Sub(ship.pos, mapShip.pos)
             net.WriteUInt(ship.id, 16)
             net.WriteFloat(rel.x) net.WriteFloat(rel.y) net.WriteFloat(rel.z)
-            WriteQuat(ship.rot)
+            WriteQuatSmall(ship.rot)
             net.WriteUInt(Naval.StateIndex[ship.state] or 1, 4)
             net.WriteUInt(HullPct(ship), 7)
         end
+        net.WriteUInt(#keep, 12)
+        for _, id in ipairs(keep) do net.WriteUInt(id, 16) end
     net.Send(recipients)
 end
 

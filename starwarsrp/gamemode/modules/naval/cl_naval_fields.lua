@@ -56,32 +56,22 @@ end
 
 local mtx = Matrix()
 
--- Felsbrocken einer Zelle; gibt die neue Anzahl gezeichneter zurueck
-local function DrawCell(ix, iy, iz, center, f, toRender, scale, drawn)
+-- Felsbrocken einer Zelle (nur die Daten; gleicher Startwert je Zelle)
+local function CellRocks(ix, iy, iz, center, f, out)
     local rnd = CellRng(ix, iy, iz, 1013)
     local count = math.floor(rnd() * 2.4 * (f.density or 1))
-    local now = CurTime()
     for _ = 1, count do
-        if drawn >= MAX_ROCKS then return drawn end
-        local rp = {x = center.x + (rnd() - 0.5) * CELL, y = center.y + (rnd() - 0.5) * CELL, z = center.z + (rnd() - 0.5) * CELL}
-        local size = 30 + rnd() ^ 3 * 650
-        local ent = RockEnt(math.floor(rnd() * #ROCK_MODELS) + 1)
-        local spin = (rnd() - 0.5) * 12
-        local ang = Angle(rnd() * 360, rnd() * 360 + now * spin, rnd() * 360)
-        local pos = toRender(rp)
-        if ent and pos then
-            local k = size / scale / math.max(ent:GetModelRadius(), 1)
-            mtx:SetScale(Vector(k, k, k))
-            ent:EnableMatrix("RenderMultiply", mtx)
-            ent:SetRenderOrigin(pos)
-            ent:SetRenderAngles(ang)
-            ent:SetupBones()
-            ent:DrawModel()
-            drawn = drawn + 1
-        end
+        if #out >= MAX_ROCKS then return end
+        out[#out + 1] = {
+            p = {x = center.x + (rnd() - 0.5) * CELL, y = center.y + (rnd() - 0.5) * CELL, z = center.z + (rnd() - 0.5) * CELL},
+            size = 30 + rnd() ^ 3 * 650, model = math.floor(rnd() * #ROCK_MODELS) + 1,
+            spin = (rnd() - 0.5) * 12, a = {rnd() * 360, rnd() * 360, rnd() * 360},
+        }
     end
-    return drawn
 end
+
+-- Liste der nahen Felsbrocken; nur neu, wenn man die Zelle wechselt
+local rockCache = {key = nil, list = {}}
 
 -- Nahe Felsbrocken (im beleuchteten Teil des Renderpasses)
 function Naval.DrawFieldRocks(view, toRender, scale)
@@ -96,18 +86,36 @@ function Naval.DrawFieldRocks(view, toRender, scale)
 
     local p = view.pos
     local x0, y0, z0 = math.floor((p.x - NEAR) / CELL), math.floor((p.y - NEAR) / CELL), math.floor(((p.z or 0) - NEAR) / CELL)
-    local n = math.ceil(NEAR * 2 / CELL)
-    local drawn = 0
-    render.SetColorModulation(0.62, 0.58, 0.54)
-
-    for ix = x0, x0 + n do
-        for iy = y0, y0 + n do
-            for iz = z0, z0 + n do
-                local center = {x = (ix + 0.5) * CELL, y = (iy + 0.5) * CELL, z = (iz + 0.5) * CELL}
-                local f = V3.Dist(center, p) <= NEAR and Naval.FieldAt(near, center) or nil
-                if f then drawn = DrawCell(ix, iy, iz, center, f, toRender, scale, drawn) end
-                if drawn >= MAX_ROCKS then break end
+    local key = x0 .. ":" .. y0 .. ":" .. z0 .. ":" .. tostring(C.system)
+    if rockCache.key ~= key then
+        rockCache.key = key
+        local list = {}
+        local n = math.ceil(NEAR * 2 / CELL)
+        for ix = x0, x0 + n do
+            for iy = y0, y0 + n do
+                for iz = z0, z0 + n do
+                    local center = {x = (ix + 0.5) * CELL, y = (iy + 0.5) * CELL, z = (iz + 0.5) * CELL}
+                    local f = V3.Dist(center, p) <= NEAR + CELL and Naval.FieldAt(near, center) or nil
+                    if f then CellRocks(ix, iy, iz, center, f, list) end
+                end
             end
+        end
+        rockCache.list = list
+    end
+
+    local now = CurTime()
+    render.SetColorModulation(0.62, 0.58, 0.54)
+    for _, r in ipairs(rockCache.list) do
+        local ent = RockEnt(r.model)
+        local pos = ent and toRender(r.p)
+        if pos then
+            local k = r.size / scale / math.max(ent:GetModelRadius(), 1)
+            mtx:SetScale(Vector(k, k, k))
+            ent:EnableMatrix("RenderMultiply", mtx)
+            ent:SetRenderOrigin(pos)
+            ent:SetRenderAngles(Angle(r.a[1], r.a[2] + now * r.spin, r.a[3]))
+            ent:SetupBones()
+            ent:DrawModel()
         end
     end
     render.SetColorModulation(1, 1, 1)
@@ -140,10 +148,70 @@ local function FarPoints(f)
     return pts
 end
 
+-- Staub: ein Mesh mit Quadraten auf der Fernkugel in Universumsrichtung.
+-- Neu gebaut, wenn sich das Schiff 5 km bewegt hat oder das System wechselt;
+-- gezeichnet mit der Drehung Universum -> Map (wie der Sternenhimmel).
+local MAT_DUST_MESH = CreateMaterial("PD_NavalDust", "UnlitGeneric", {
+    ["$basetexture"] = "sprites/light_glow02", ["$additive"] = "1", ["$vertexcolor"] = "1", ["$vertexalpha"] = "1", ["$nocull"] = "1",
+})
+local dust = {mesh = nil, pos = nil, key = nil}
+local dustMatrix = Matrix()
+
+local function BuildDust(view, fields, far)
+    if dust.mesh then dust.mesh:Destroy() dust.mesh = nil end
+    local quads = {}
+    for _, f in ipairs(fields) do
+        if f.kind ~= "nebula" then
+            for _, pt in ipairs(FarPoints(f)) do
+                local d = Vector(pt.p.x - view.pos.x, pt.p.y - view.pos.y, (pt.p.z or 0) - (view.pos.z or 0))
+                if d:LengthSqr() > 1 then
+                    d:Normalize()
+                    quads[#quads + 1] = {d, far * 0.002 * pt.s}
+                end
+            end
+        end
+    end
+    if #quads == 0 then return end
+    local m = Mesh()
+    mesh.Begin(m, MATERIAL_QUADS, #quads)
+    for _, q in ipairs(quads) do
+        local dir, size = q[1], q[2]
+        local up = math.abs(dir.z) < 0.99 and Vector(0, 0, 1) or Vector(1, 0, 0)
+        local u = dir:Cross(up) u:Normalize()
+        local v = dir:Cross(u) v:Normalize()
+        local c = dir * far
+        u, v = u * size, v * size
+        mesh.Position(c - u - v) mesh.TexCoord(0, 0, 0) mesh.Color(170, 150, 125, 90) mesh.AdvanceVertex()
+        mesh.Position(c + u - v) mesh.TexCoord(0, 1, 0) mesh.Color(170, 150, 125, 90) mesh.AdvanceVertex()
+        mesh.Position(c + u + v) mesh.TexCoord(0, 1, 1) mesh.Color(170, 150, 125, 90) mesh.AdvanceVertex()
+        mesh.Position(c - u + v) mesh.TexCoord(0, 0, 1) mesh.Color(170, 150, 125, 90) mesh.AdvanceVertex()
+    end
+    mesh.End()
+    dust.mesh = m
+end
+
 -- Staub, Nebelwolken und Schleier (nach den Kampfeffekten)
-function Naval.DrawFieldClouds(view, toRender)
+function Naval.DrawFieldClouds(view, toRender, M, camOffset)
     local fields = Fields()
     if #fields == 0 then return end
+
+    -- Staub der Asteroidenfelder
+    if M then
+        local far = (C.static and C.static.settings and C.static.settings.render_far) or 40000
+        local key = tostring(C.system)
+        if dust.key ~= key or not dust.pos or V3.Dist(dust.pos, view.pos) > 5000 then
+            dust.key, dust.pos = key, V3.Copy(view.pos)
+            BuildDust(view, fields, far)
+        end
+        if dust.mesh then
+            dustMatrix:SetAngles(Naval.Q.ToAngle(M))
+            dustMatrix:SetTranslation(-(camOffset or Vector(0, 0, 0)))
+            render.SetMaterial(MAT_DUST_MESH)
+            cam.PushModelMatrix(dustMatrix)
+                dust.mesh:Draw()
+            cam.PopModelMatrix()
+        end
+    end
 
     for _, f in ipairs(fields) do
         local pts = FarPoints(f)
@@ -159,7 +227,7 @@ function Naval.DrawFieldClouds(view, toRender)
                     render.DrawQuadEasy(pos, -pos:GetNormalized(), size, size, Color(col[1], col[2], col[3], 38), pt.rot)
                 end
             end
-        else
+        elseif not M then
             render.SetMaterial(MAT_DUST)
             for _, pt in ipairs(pts) do
                 local pos = toRender(pt.p)
@@ -188,6 +256,7 @@ end
 hook.Add("PD.Naval.SystemReceived", "PD.Naval.Fields", function() farPoints = {} end)
 
 hook.Add("ShutDown", "PD.Naval.Fields", function()
+    if dust.mesh then pcall(dust.mesh.Destroy, dust.mesh) dust.mesh = nil end
     for i, e in pairs(rockEnts) do
         if IsValid(e) then e:Remove() end
         rockEnts[i] = nil

@@ -105,6 +105,22 @@ local function ReadQuat()
     return {w = net.ReadFloat(), x = net.ReadFloat(), y = net.ReadFloat(), z = net.ReadFloat()}
 end
 
+-- Kompakte Drehung ("smallest three", sv_naval_net.lua)
+local QMAX = 0.7072
+local function ReadQuatSmall()
+    local mi = net.ReadUInt(2) + 1
+    local c, sum = {}, 0
+    for i = 1, 4 do
+        if i ~= mi then
+            local v = net.ReadInt(16) / 32767 * QMAX
+            c[i] = v
+            sum = sum + v * v
+        end
+    end
+    c[mi] = math.sqrt(math.max(0, 1 - sum))
+    return {w = c[1], x = c[2], y = c[3], z = c[4]}
+end
+
 net.Receive("PD.Naval.Snap", function()
     local serverNow = net.ReadDouble()
 
@@ -133,10 +149,24 @@ net.Receive("PD.Naval.Snap", function()
         local id = net.ReadUInt(16)
         snap.ships[id] = {
             rel = {x = net.ReadFloat(), y = net.ReadFloat(), z = net.ReadFloat()},
-            rot = ReadQuat(),
+            rot = ReadQuatSmall(),
             state = StateName[net.ReadUInt(4)] or "normal",
             hull = net.ReadUInt(7),
         }
+    end
+
+    -- Ferne Schiffe ohne neue Daten: letzte Lage uebernehmen (relativ zur
+    -- neuen Position des Map-Schiffs umgerechnet)
+    local prev = C.snaps[#C.snaps]
+    local keepCount = net.ReadUInt(12)
+    for _ = 1, keepCount do
+        local id = net.ReadUInt(16)
+        local old = prev and prev.systemId == snap.systemId and prev.ships[id]
+        if old then
+            local abs = {x = prev.pos.x + old.rel.x, y = prev.pos.y + old.rel.y, z = prev.pos.z + old.rel.z}
+            snap.ships[id] = {rel = {x = abs.x - snap.pos.x, y = abs.y - snap.pos.y, z = abs.z - snap.pos.z},
+                rot = old.rot, state = old.state, hull = old.hull}
+        end
     end
 
     -- Systemwechsel: alter Puffer gilt nicht mehr
@@ -157,7 +187,22 @@ end)
 
 -- Interpolierte Lage zum Zeitpunkt t (Standard: jetzt - Verzoegerung).
 -- Liefert {pos, rot, vel, state, systemId, ships = {id -> {pos, rot, state}}}
+-- Ohne Zeitangabe einmal pro Bild berechnen: Renderpass, Hologramm und
+-- jede 3D-Konsole fragen die Lage mehrfach pro Bild ab (Ergebnis nicht aendern!)
+local viewFrame, viewCache = -1, nil
+local BuildView
+
 function C.View(t)
+    if t ~= nil then return BuildView(t) end
+    local frame = FrameNumber()
+    if frame ~= viewFrame then
+        viewFrame = frame
+        viewCache = BuildView()
+    end
+    return viewCache
+end
+
+BuildView = function(t)
     local snaps = C.snaps
     if #snaps == 0 then return nil end
 

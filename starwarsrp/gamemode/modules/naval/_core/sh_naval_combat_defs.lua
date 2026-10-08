@@ -138,7 +138,7 @@ end
 -- Kampfwerte einer Klasse: Panel-Daten (class.combat) vor Standard.
 -- hardpoints (optional): Stellungen, die die Batterien ersetzen (Map-Profil);
 -- sonst die der Klasse.
-function Naval.ClassCombat(class, hardpoints)
+local function BuildClassCombat(class, hardpoints)
     if not class then return {weapons = {}, shields = {perZone = 0, regen = 0, ratio = 0.7}, reactor = 100} end
 
     local custom = istable(class.combat) and class.combat or {}
@@ -155,6 +155,25 @@ function Naval.ClassCombat(class, hardpoints)
         },
         reactor = tonumber(custom.reactor) or 100,
     }
+end
+
+-- Zwischenspeicher je Klassentabelle und Stellungsliste: Klassen und
+-- Stellungen werden beim Neuladen als neue Tabellen angelegt, damit verfaellt
+-- der Eintrag von selbst. Das Ergebnis wird nirgends veraendert.
+local ccCache = setmetatable({}, {__mode = "k"})
+local EMPTY_CC
+
+function Naval.ClassCombat(class, hardpoints)
+    if not class then
+        EMPTY_CC = EMPTY_CC or BuildClassCombat(nil)
+        return EMPTY_CC
+    end
+    local key = hardpoints or false
+    local e = ccCache[class]
+    if e and e.hp == key then return e.cc end
+    local cc = BuildClassCombat(class, hardpoints)
+    ccCache[class] = {hp = key, cc = cc}
+    return cc
 end
 
 -- Zone, in der eine Richtung (Schiffsachsen) liegt

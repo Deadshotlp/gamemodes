@@ -265,8 +265,20 @@ end
 
 Naval.LiveDataForTest = LiveData
 
+-- Die Strategieansicht des Web-Panels meldet beim Abruf die Zeile
+-- server_key = "__viewed__" (updated_at = jetzt). Geschrieben wird nur, wenn
+-- in den letzten 90 s jemand hingeschaut hat.
+local liveViewedAt = 0
+timer.Create("PD.Naval.LiveViewed", 5, 0, function()
+    if not Naval.SimRunning then return end
+    PD.SQL.FetchOne("SELECT `updated_at` FROM `pd_naval_live` WHERE `server_key` = '__viewed__'", function(row)
+        liveViewedAt = row and tonumber(row.updated_at) or 0
+    end)
+end)
+
 timer.Create("PD.Naval.Live", 2, 0, function()
     if not Naval.SimRunning then return end
+    if os.time() - liveViewedAt > 90 then return end
     local ok, json = pcall(function() return util.TableToJSON(LiveData()) end)
     if not ok or not json then return end
 

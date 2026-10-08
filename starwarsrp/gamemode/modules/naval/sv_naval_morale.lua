@@ -36,7 +36,7 @@ local function Strength(ship)
     return (ship.hull or 0) * ((ship.state == S.DISABLED or (ship.flags and ship.flags.surrendered)) and 0 or 1)
 end
 
-function Naval.MoraleTarget(ship)
+function Naval.MoraleTarget(ship, sameSystem)
     local subs = ship.subs or {}
     local target = 85 * math.sqrt(HullFrac(ship))
 
@@ -47,7 +47,7 @@ function Naval.MoraleTarget(ship)
 
     -- Kraefteverhaeltnis
     local friends, foes = Strength(ship), 0
-    for _, other in pairs(Naval.Ships) do
+    for _, other in pairs(sameSystem or Naval.Ships) do
         if other ~= ship and other.systemId == ship.systemId and other.state ~= S.HYPERSPACE and other.state ~= S.DESTROYED
             and V3.Dist(other.pos, ship.pos) <= RANGE then
             local rel = Naval.GetRelation(ship.factionId, other.factionId)
@@ -126,11 +126,19 @@ end
 timer.Create("PD.Naval.Morale", 1, 0, function()
     if not Naval.SimRunning or Naval.Paused then return end
 
+    -- Schiffe je System (sonst vergleicht jedes Schiff mit allen)
+    local bySystem = {}
+    for _, ship in pairs(Naval.Ships) do
+        local list = bySystem[ship.systemId] or {}
+        bySystem[ship.systemId] = list
+        list[#list + 1] = ship
+    end
+
     for _, ship in pairs(Naval.Ships) do
         if not ship:IsPlayerShip() and ship.state == S.NORMAL and not (ship.flags and ship.flags.surrendered) then
             ship.subs = ship.subs or {}
             local current = ship.subs.morale or 75
-            local delta = Naval.MoraleTarget(ship) - current
+            local delta = Naval.MoraleTarget(ship, bySystem[ship.systemId]) - current
             ship.subs.morale = math.Clamp(current + math.Clamp(delta, -3, 1.5), 0, 100)
         end
     end

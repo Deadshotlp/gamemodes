@@ -176,8 +176,8 @@ hook.Add("PostDrawTranslucentRenderables", "PD.Naval.SupplyMarkers", function(de
     if not IsValid(ply) then return end
     local eye = ply:EyePos()
 
-    for _, ent in ipairs(ents.FindByClass("pd_naval_console")) do
-        local t = ent.GetStation and MARKER_TEXT[ent:GetStation()]
+    for _, ent in ipairs(Naval.ConsoleEntities and Naval.ConsoleEntities() or ents.FindByClass("pd_naval_console")) do
+        local t = IsValid(ent) and ent.GetStation and MARKER_TEXT[ent:GetStation()]
         if t and eye:DistToSqr(ent:GetPos()) < 700 * 700 then
             local pos = ent:GetPos()
             -- Ring am Boden

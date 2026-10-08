@@ -73,7 +73,8 @@ end
 hook.Add("PostDrawTranslucentRenderables", "PD.Naval.Layouts", function(depth, sky)
     if depth or sky or Naval.ClientShutdown then return end
     local eye = EyePos()
-    for _, ent in ipairs(ents.FindByClass("pd_naval_console")) do
+    for _, ent in ipairs(Naval.ConsoleEntities and Naval.ConsoleEntities() or ents.FindByClass("pd_naval_console")) do
+        if not IsValid(ent) then continue end
         if ent.GetStation and DEMO[ent:GetStation()] and eye:DistToSqr(ent:GetPos()) < DRAW_DIST then
             local isEdit = editing and editing.ent == ent
             local areas = isEdit and editing.areas or Naval.Layouts[ModelKey(ent)] or {}

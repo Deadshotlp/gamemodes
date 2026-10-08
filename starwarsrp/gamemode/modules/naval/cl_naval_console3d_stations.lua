@@ -62,8 +62,20 @@ local function Scroll(st, delta, count, rows)
     st.scroll = math.Clamp((st.scroll or 0) + delta * math.max(1, (rows or 4) - 1), 0, math.max(0, (count or 0) - 1))
 end
 
--- Kontakte aus der Sicht des Map-Schiffs
+-- Kontakte aus der Sicht des Map-Schiffs (einmal pro Bild je Sortierung)
+local contactCache = {}
+local BuildContacts
+
 local function Contacts(hostileFirst)
+    local key = hostileFirst and 1 or 0
+    local e = contactCache[key]
+    if e and e.frame == FrameNumber() then return e.list end
+    local list = BuildContacts(hostileFirst)
+    contactCache[key] = {frame = FrameNumber(), list = list}
+    return list
+end
+
+BuildContacts = function(hostileFirst)
     local view = C.View and C.View()
     local list = {}
     if not view then return list end
@@ -783,10 +795,14 @@ local function SendNav(action, arg)
     net.SendToServer()
 end
 
+local bodyCache = {frame = -1}
 local function Bodies()
+    if bodyCache.frame == FrameNumber() then return bodyCache.list end
+    bodyCache.frame = FrameNumber()
+    bodyCache.list = {}
     local view = C.View and C.View()
     local sys = C.system
-    local list = {}
+    local list = bodyCache.list
     if not view or not sys or sys.systemId ~= view.systemId or not sys.bodiesById then return list end
     local now = Naval.Now()
     for id, b in pairs(sys.bodiesById) do

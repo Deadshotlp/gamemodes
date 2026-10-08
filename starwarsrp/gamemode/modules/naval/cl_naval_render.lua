@@ -37,6 +37,43 @@ local MAT_GLOW = Material("sprites/light_glow02_add")
 local MAT_STAR = Material("sprites/light_ignorez")
 local MAT_DOT = Material("sprites/glow04_noz")
 
+-- Kugeln einmal je Detailstufe bauen statt jedes Bild neu (render.DrawSphere).
+-- Abschaltbar (pd_naval_sphere_mesh 0), falls eine Textur damit falsch aussieht.
+local SPHERE_MESH = CreateClientConVar("pd_naval_sphere_mesh", "1", true, false, "Planeten als vorgebaute Kugel-Meshes zeichnen")
+local SPHERE_LEVELS = {12, 20, 32, 48, 64}
+local sphereMeshes = {}
+
+local function SphereMesh(seg)
+    local level = SPHERE_LEVELS[#SPHERE_LEVELS]
+    for _, l in ipairs(SPHERE_LEVELS) do
+        if l >= seg then level = l break end
+    end
+    if sphereMeshes[level] then return sphereMeshes[level] end
+
+    local m = Mesh()
+    local function Vert(i, j)
+        local th, ph = i / level * math.pi, j / level * math.pi * 2
+        local n = Vector(math.sin(th) * math.cos(ph), math.sin(th) * math.sin(ph), math.cos(th))
+        mesh.Position(n)
+        mesh.Normal(n)
+        mesh.TangentS(Vector(-math.sin(ph), math.cos(ph), 0))
+        mesh.TangentT(Vector(math.cos(th) * math.cos(ph), math.cos(th) * math.sin(ph), -math.sin(th)))
+        mesh.TexCoord(0, j / level, i / level)
+        mesh.Color(255, 255, 255, 255)
+        mesh.AdvanceVertex()
+    end
+    mesh.Begin(m, MATERIAL_TRIANGLES, level * level * 2)
+    for i = 0, level - 1 do
+        for j = 0, level - 1 do
+            Vert(i, j) Vert(i + 1, j) Vert(i + 1, j + 1)
+            Vert(i, j) Vert(i + 1, j + 1) Vert(i, j + 1)
+        end
+    end
+    mesh.End()
+    sphereMeshes[level] = m
+    return m
+end
+
 local function Settings()
     return (C.static and C.static.settings) or {}
 end
@@ -199,10 +236,20 @@ local function DrawBodies(view, M, camOffset, ang, fov)
     -- Textur nach den Map-Achsen an - ohne Drehung wanderte sie beim Wenden
     -- des Schiffs mit und man saehe immer dieselbe Seite.
     local bodyAng = Q.ToAngle(M)
+    local useMesh = SPHERE_MESH:GetBool()
     local function Sphere(pos, radius, seg, col)
         local mtx = Matrix()
         mtx:SetTranslation(pos)
         mtx:SetAngles(bodyAng)
+        if useMesh then
+            mtx:Scale(Vector(radius, radius, radius))
+            cam.PushModelMatrix(mtx)
+                if col.a < 255 then render.SetBlend(col.a / 255) end
+                SphereMesh(seg):Draw()
+                if col.a < 255 then render.SetBlend(1) end
+            cam.PopModelMatrix()
+            return
+        end
         cam.PushModelMatrix(mtx)
             render.DrawSphere(Vector(0, 0, 0), radius, seg, seg, col)
         cam.PopModelMatrix()
@@ -425,13 +472,18 @@ local function FactionColor(factionId)
     return Color(200, 200, 200)
 end
 
-local function DrawShips(view, M, camOffset)
+local shipMatrix = Matrix()
+
+local function DrawShips(view, M, camOffset, ang, fov)
     local static = C.static
     if not static then return end
 
     local scale, far = Scale(), Far()
     local nearRange = Settings().near_ship_range or 50000
     local seen = {}
+    -- Sichtfeld: grosszuegig (Breitbild, Schiffsgroesse), Schiffe dahinter auslassen
+    local fwd = ang and ang:Forward()
+    local halfFov = math.rad(math.min(85, (fov or 90) * 0.75))
 
     for id, s in pairs(view.ships) do
         local info = C.info[id]
@@ -448,20 +500,26 @@ local function DrawShips(view, M, camOffset)
             local dist = math.min(distM / scale, far)
             local pos = dir * dist - camOffset
 
-            if distM > nearRange then
+            local inView = true
+            if fwd then
+                local angR = math.atan2((class.lengthM or 300) * 0.6, math.max(distM, 1))
+                inView = dir:Dot(fwd) >= math.cos(math.min(math.pi, halfFov + angR))
+            end
+
+            -- ausserhalb des Sichtfelds: nicht zeichnen (das Modell bleibt im Pool)
+            if inView and distM > nearRange then
                 local size = math.max(dist * 0.006, 2)
                 render.SetMaterial(MAT_DOT)
                 render.DrawSprite(pos, size, size, FactionColor(info.factionId))
-            else
+            elseif inView then
                 local m = ShipModel(id, class.model)
 
                 if m then
                     local length = (class.lengthM or 300) / scale * (dist / math.max(distM / scale, 0.001))
                     local f = length / m.PD_Length
-                    local mat = Matrix()
-                    mat:Scale(Vector(f, f, f))
+                    shipMatrix:SetScale(Vector(f, f, f))
 
-                    m:EnableMatrix("RenderMultiply", mat)
+                    m:EnableMatrix("RenderMultiply", shipMatrix)
                     m:SetPos(pos)
                     m:SetAngles(Q.ToAngle(Q.Mul(M, s.rot)))
                     m:SetupBones()
@@ -590,11 +648,11 @@ function Naval.RenderSpace()
             end
 
             Lighting(sunDir)
-            DrawShips(view, M, camOffset)
+            DrawShips(view, M, camOffset, ang, fov)
             if Naval.DrawFieldRocks then Naval.DrawFieldRocks(view, toRender, scale) end
             render.SuppressEngineLighting(false)
 
-            if Naval.DrawFieldClouds then Naval.DrawFieldClouds(view, toRender) end
+            if Naval.DrawFieldClouds then Naval.DrawFieldClouds(view, toRender, M, camOffset) end
             if Naval.DrawFX then Naval.DrawFX(view, toRender) end
             if Naval.DrawTractor then Naval.DrawTractor(view, toRender) end
         cam.End3D()
@@ -653,6 +711,14 @@ timer.Create("PD.Naval.RenderGuard", 1, 0, function()
     if missing and not useFallback then
         useFallback = true
         print("[Naval] PostDraw2DSkyBox laeuft nicht (verschluckt?) - nutze PreDrawSkyBox. pd_naval_hookaudit zeigt die Hooks.")
+    end
+end)
+
+-- Kugel-Meshes beim Verlassen der Map freigeben
+hook.Add("ShutDown", "PD.Naval.RenderSpheres", function()
+    for l, m in pairs(sphereMeshes) do
+        pcall(m.Destroy, m)
+        sphereMeshes[l] = nil
     end
 end)
 

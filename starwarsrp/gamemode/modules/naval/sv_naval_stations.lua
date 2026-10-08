@@ -435,11 +435,24 @@ end)
 -- Status an alle (2 Hz)
 --------------------------------------------------------------------------------
 
+-- Teure Zusaetze (Schleifen ueber alle Schiffe, Entity-Suche) nur jede
+-- Sekunde neu, dazwischen der letzte Wert
+local SLOW_EXTRAS = {tractor = true, logistics = true, fleet = true, sensors = true}
+local slowCache, statusTicks = {}, 0
+
 timer.Create("PD.Naval.Status", 0.5, 0, function()
     if not Naval.SimRunning then return end
 
     local ship = Naval.GetMapShip()
     if not ship then return end
+
+    local recipients = {}
+    for _, ply in ipairs(player.GetHumans()) do
+        if ply.PD_NavalReady then recipients[#recipients + 1] = ply end
+    end
+    if #recipients == 0 then return end
+    statusTicks = statusTicks + 1
+    local refreshSlow = statusTicks % 2 == 0
 
     local status = {
         system = ship.systemId,
@@ -468,18 +481,19 @@ timer.Create("PD.Naval.Status", 0.5, 0, function()
 
     -- Schadenskontrolle, Sensoren, Alarm, Autopilot haengen sich hier an
     for key, fn in pairs(Naval.StatusExtras or {}) do
-        local ok, value = pcall(fn, ship)
-        if ok then status[key] = value end
+        if SLOW_EXTRAS[key] and not refreshSlow and slowCache[key] ~= nil then
+            status[key] = slowCache[key] or nil
+        else
+            local ok, value = pcall(fn, ship)
+            if ok then
+                status[key] = value
+                if SLOW_EXTRAS[key] then slowCache[key] = value or false end
+            end
+        end
     end
 
     local body, dist, limit = Naval.MassShadow(ship)
     if body then status.shadow = {name = body.name, dist = dist, limit = limit} end
-
-    local recipients = {}
-    for _, ply in ipairs(player.GetHumans()) do
-        if ply.PD_NavalReady then recipients[#recipients + 1] = ply end
-    end
-    if #recipients == 0 then return end
 
     -- Komprimiert: der Status ist mit Kampf, Sensoren, Funk usw. gross, und er
     -- geht 2x pro Sekunde zuverlaessig an alle

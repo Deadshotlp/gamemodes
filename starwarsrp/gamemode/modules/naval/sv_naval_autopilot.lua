@@ -278,10 +278,21 @@ local function Steer(ship, points, speeds, tolerance, speedCap)
 end
 
 -- Fuer KI-Befehle: true, wenn angekommen
+-- Die Ausweichroute wird gemerkt und nur neu berechnet, wenn sich das Ziel
+-- aendert, der naechste Wegpunkt erreicht ist oder alle 3 Sekunden.
 function Naval.AutoSteer(ship, target, tolerance, speedCap)
     tolerance = tolerance or (((ship:Class() or {}).lengthM or 300) * 3 + 1000)
-    local path = Naval.AvoidPath(ship.systemId, ship.pos, target, Motion(ship))
-    return Steer(ship, path, CornerSpeeds(ship, path, tolerance, 0), tolerance, speedCap), path
+    local c = ship.steerCache
+    local now = CurTime()
+    if not c or c.systemId ~= ship.systemId or now > c.expires or V3.Dist(c.target, target) > 1
+        or (c.path[2] and V3.Dist(ship.pos, c.path[2]) < tolerance) then
+        local path = Naval.AvoidPath(ship.systemId, ship.pos, target, Motion(ship))
+        c = {systemId = ship.systemId, target = V3.Copy(target), expires = now + 3, path = path,
+            speeds = CornerSpeeds(ship, path, tolerance, 0)}
+        ship.steerCache = c
+    end
+    c.path[1] = ship.pos
+    return Steer(ship, c.path, c.speeds, tolerance, speedCap), c.path
 end
 
 --------------------------------------------------------------------------------
