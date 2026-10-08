@@ -245,9 +245,10 @@ end)
 -- Schildkontrolle (mit Modulations-Minispiel auf dem Hauptbildschirm)
 --------------------------------------------------------------------------------
 
--- Kreuz: Bug oben, Heck unten, Backbord links, Steuerbord rechts; Oben/Unten rechts
+-- Kreuz: Backbord und Steuerbord nebeneinander, Bug und Heck mittig darueber
+-- bzw. darunter (beginnen in der Mitte von Backbord); Oben/Unten rechts
 local ZONES = {
-    {"front", "Bug", 2, 1}, {"left", "Backbord", 1, 2}, {"right", "Steuerbord", 3, 2}, {"back", "Heck", 2, 3},
+    {"front", "Bug", 1.5, 1}, {"left", "Backbord", 1, 2}, {"right", "Steuerbord", 2, 2}, {"back", "Heck", 1.5, 3},
     {"top", "Oben", 3, 1}, {"bottom", "Unten", 3, 3},
 }
 
@@ -880,13 +881,13 @@ Register("navcomputer", function(role, w, h, ui, ent, st)
         end
         x, y, bw, bh = cell(4, 1)
         if ui:Button(x, y, bw, bh, "Autopilot aus", {col = COL.bad, disabled = s.auto == nil, font = "PD.N3D.Small"}) then SendNav("auto_off") end
-        x, y, bw, bh = cell(1, 2, 2)
+        x, y, bw, bh = cell(1, 2)
         if ui:Button(x, y, bw, bh, "▲") then MoveSel(-1) end
+        x, y, bw, bh = cell(2, 2)
+        if ui:Button(x, y, bw, bh, "▼") then MoveSel(1) end
         x, y, bw, bh = cell(3, 2, 2)
         if ui:Confirm(st, "clear", x, y, bw, bh, "Kurs verwerfen", {col = COL.warn, disabled = not nav}) then SendNav("clear") end
-        x, y, bw, bh = cell(1, 3, 2)
-        if ui:Button(x, y, bw, bh, "▼") then MoveSel(1) end
-        x, y, bw, bh = cell(3, 3, 2)
+        x, y, bw, bh = cell(1, 3, 4)
         if ui:Button(x, y, bw, bh, "Zum Sprungpunkt", {disabled = not (nav and nav.ready and nav.valid) or not normal}) then
             SendNav("auto", util.TableToJSON({kind = "jumppoint", speed = st.speed}))
         end

@@ -195,6 +195,19 @@ local function DrawBodies(view, M, camOffset, ang, fov)
     -- der naehere wird danach gezeichnet und deckt ab.
     table.sort(list, function(a, b) return a.real > b.real end)
 
+    -- Kugeln in Universumsausrichtung zeichnen: render.DrawSphere legt die
+    -- Textur nach den Map-Achsen an - ohne Drehung wanderte sie beim Wenden
+    -- des Schiffs mit und man saehe immer dieselbe Seite.
+    local bodyAng = Q.ToAngle(M)
+    local function Sphere(pos, radius, seg, col)
+        local mtx = Matrix()
+        mtx:SetTranslation(pos)
+        mtx:SetAngles(bodyAng)
+        cam.PushModelMatrix(mtx)
+            render.DrawSphere(Vector(0, 0, 0), radius, seg, seg, col)
+        cam.PopModelMatrix()
+    end
+
     -- Eigenes Sonnenlicht setzen: sonst uebernehmen die Planeten die
     -- Beleuchtung dessen, was zuletzt gezeichnet wurde (z. B. die Waffe)
     Lighting(sunDir)
@@ -215,7 +228,7 @@ local function DrawBodies(view, M, camOffset, ang, fov)
             if mat then
                 render.ResetModelLighting(1, 1, 1)
                 render.SetMaterial(mat)
-                render.DrawSphere(e.pos, e.radius, seg, seg, color_white)
+                Sphere(e.pos, e.radius, seg, color_white)
                 Lighting(sunDir)
             end
             render.SetMaterial(MAT_GLOW)
@@ -228,13 +241,13 @@ local function DrawBodies(view, M, camOffset, ang, fov)
             local mat = Mat(body.material)
             if mat then
                 render.SetMaterial(mat)
-                render.DrawSphere(e.pos, e.radius, seg, seg, color_white)
+                Sphere(e.pos, e.radius, seg, color_white)
             end
 
             local cloud = Mat(body.cloud)
             if cloud then
                 render.SetMaterial(cloud)
-                render.DrawSphere(e.pos, e.radius * 1.012, seg, seg, Color(255, 255, 255, 190))
+                Sphere(e.pos, e.radius * 1.012, seg, Color(255, 255, 255, 190))
             end
         end
 
