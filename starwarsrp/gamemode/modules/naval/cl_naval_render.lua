@@ -37,43 +37,6 @@ local MAT_GLOW = Material("sprites/light_glow02_add")
 local MAT_STAR = Material("sprites/light_ignorez")
 local MAT_DOT = Material("sprites/glow04_noz")
 
--- Kugeln einmal je Detailstufe bauen statt jedes Bild neu (render.DrawSphere).
--- Abschaltbar (pd_naval_sphere_mesh 0), falls eine Textur damit falsch aussieht.
-local SPHERE_MESH = CreateClientConVar("pd_naval_sphere_mesh", "1", true, false, "Planeten als vorgebaute Kugel-Meshes zeichnen")
-local SPHERE_LEVELS = {12, 20, 32, 48, 64}
-local sphereMeshes = {}
-
-local function SphereMesh(seg)
-    local level = SPHERE_LEVELS[#SPHERE_LEVELS]
-    for _, l in ipairs(SPHERE_LEVELS) do
-        if l >= seg then level = l break end
-    end
-    if sphereMeshes[level] then return sphereMeshes[level] end
-
-    local m = Mesh()
-    local function Vert(i, j)
-        local th, ph = i / level * math.pi, j / level * math.pi * 2
-        local n = Vector(math.sin(th) * math.cos(ph), math.sin(th) * math.sin(ph), math.cos(th))
-        mesh.Position(n)
-        mesh.Normal(n)
-        mesh.TangentS(Vector(-math.sin(ph), math.cos(ph), 0))
-        mesh.TangentT(Vector(math.cos(th) * math.cos(ph), math.cos(th) * math.sin(ph), -math.sin(th)))
-        mesh.TexCoord(0, j / level, i / level)
-        mesh.Color(255, 255, 255, 255)
-        mesh.AdvanceVertex()
-    end
-    mesh.Begin(m, MATERIAL_TRIANGLES, level * level * 2)
-    for i = 0, level - 1 do
-        for j = 0, level - 1 do
-            Vert(i, j) Vert(i + 1, j) Vert(i + 1, j + 1)
-            Vert(i, j) Vert(i + 1, j + 1) Vert(i, j + 1)
-        end
-    end
-    mesh.End()
-    sphereMeshes[level] = m
-    return m
-end
-
 local function Settings()
     return (C.static and C.static.settings) or {}
 end
@@ -236,20 +199,10 @@ local function DrawBodies(view, M, camOffset, ang, fov)
     -- Textur nach den Map-Achsen an - ohne Drehung wanderte sie beim Wenden
     -- des Schiffs mit und man saehe immer dieselbe Seite.
     local bodyAng = Q.ToAngle(M)
-    local useMesh = SPHERE_MESH:GetBool()
     local function Sphere(pos, radius, seg, col)
         local mtx = Matrix()
         mtx:SetTranslation(pos)
         mtx:SetAngles(bodyAng)
-        if useMesh then
-            mtx:Scale(Vector(radius, radius, radius))
-            cam.PushModelMatrix(mtx)
-                if col.a < 255 then render.SetBlend(col.a / 255) end
-                SphereMesh(seg):Draw()
-                if col.a < 255 then render.SetBlend(1) end
-            cam.PopModelMatrix()
-            return
-        end
         cam.PushModelMatrix(mtx)
             render.DrawSphere(Vector(0, 0, 0), radius, seg, seg, col)
         cam.PopModelMatrix()
@@ -711,14 +664,6 @@ timer.Create("PD.Naval.RenderGuard", 1, 0, function()
     if missing and not useFallback then
         useFallback = true
         print("[Naval] PostDraw2DSkyBox laeuft nicht (verschluckt?) - nutze PreDrawSkyBox. pd_naval_hookaudit zeigt die Hooks.")
-    end
-end)
-
--- Kugel-Meshes beim Verlassen der Map freigeben
-hook.Add("ShutDown", "PD.Naval.RenderSpheres", function()
-    for l, m in pairs(sphereMeshes) do
-        pcall(m.Destroy, m)
-        sphereMeshes[l] = nil
     end
 end)
 
