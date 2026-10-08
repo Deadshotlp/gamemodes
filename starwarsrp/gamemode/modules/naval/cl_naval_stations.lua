@@ -512,6 +512,11 @@ net.Receive("PD.Naval.Station.Open", function()
     local station = net.ReadString()
     local console = net.ReadEntity()
 
+    -- Stationen mit 3D2D-Bedienung oeffnen kein Menue mehr (das alte bleibt
+    -- im Code, bis alle Konsolen umgestellt sind)
+    local def = Naval.Stations and Naval.Stations[station]
+    if def and def.ui3d and Naval.Console3D and Naval.Console3D[station] then return end
+
     local open = Naval.StationUI[station]
     if open then open(console) end
 end)

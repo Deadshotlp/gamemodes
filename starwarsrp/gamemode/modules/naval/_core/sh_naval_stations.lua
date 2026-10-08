@@ -16,6 +16,7 @@ PD.Naval.Stations = {
         name = "Steuer",
         model = "models/lordtrilobite/starwars/isd/imp_console_medium03.mdl",
         desc = "Schub, Drehung, Manövrierdüsen",
+        ui3d = true, -- Bedienung per 3D2D auf der Konsole (cl_naval_console3d.lua), kein Menue
     },
     navcomputer = {
         name = "Navigationscomputer",

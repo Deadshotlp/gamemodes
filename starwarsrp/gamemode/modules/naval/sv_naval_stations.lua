@@ -84,10 +84,26 @@ end
 -- Steht der Spieler (noch) an einer passenden Konsole?
 local function AtStation(ply, station)
     local ent = ply.PD_NavalStation
-    if not IsValid(ent) or ent:GetStation() ~= station then return false end
+    local range = Naval.StationUseRange * 1.5
+
+    -- 3D2D-Konsolen: man bedient direkt, ohne vorher ein Menue zu oeffnen ->
+    -- naechste Konsole dieser Station in Reichweite nehmen
+    if not IsValid(ent) or ent:GetStation() ~= station or ply:GetPos():Distance(ent:GetPos()) > range then
+        ent = nil
+        local def = Naval.Stations[station]
+        if def and def.ui3d then
+            local best
+            for _, c in ipairs(ents.FindByClass("pd_naval_console")) do
+                local d = c:GetStation() == station and ply:GetPos():Distance(c:GetPos())
+                if d and d <= range and (not best or d < best) then ent, best = c, d end
+            end
+            if ent then ply.PD_NavalStation = ent end
+        end
+    end
+    if not IsValid(ent) then return false end
     if ent:GetLocked() and not ply:IsAdmin() then return false end
 
-    return ply:GetPos():Distance(ent:GetPos()) <= Naval.StationUseRange * 1.5
+    return ply:GetPos():Distance(ent:GetPos()) <= range
 end
 
 Naval.AtStation = AtStation
