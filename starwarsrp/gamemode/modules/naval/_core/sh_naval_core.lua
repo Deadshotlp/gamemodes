@@ -68,3 +68,13 @@ function Naval.DebugLog(text)
 end
 
 -- GetProfile/IsNavalMap: siehe sh_naval_profiles.lua
+
+-- Stat-Modifikatoren (ship:Stat in sv_naval_ships.lua). Hier im Kern, weil
+-- Module, die alphabetisch vor sv_naval_ships.lua laden (Felder, Radar), beim
+-- Map-Start schon Modifikatoren anmelden.
+Naval.Modifiers = Naval.Modifiers or {}
+
+function Naval.RegisterModifier(stat, id, fn)
+    Naval.Modifiers[stat] = Naval.Modifiers[stat] or {}
+    Naval.Modifiers[stat][id] = fn
+end
