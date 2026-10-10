@@ -265,6 +265,28 @@ PD.Remote.Reloaders["funk"] = function(done)
     end)
 end
 
+PD.Remote.Reloaders["naval"] = function(done)
+    if not PD.Naval or not PD.Naval.ReloadConfig then
+        done("Naval-Modul nicht geladen")
+        return
+    end
+
+    PD.Naval.ReloadConfig(function(classes, factions)
+        done(classes .. " Schiffsklassen, " .. factions .. " Fraktionen geladen")
+    end)
+end
+
+PD.Remote.Reloaders["naval_galaxy"] = function(done)
+    if not PD.Naval or not PD.Naval.ReloadGalaxy then
+        done("Naval-Modul nicht geladen")
+        return
+    end
+
+    PD.Naval.ReloadGalaxy(function(systems, bodies)
+        done(systems .. " Systeme, " .. bodies .. " Himmelskoerper geladen")
+    end)
+end
+
 PD.Remote.Reloaders["kisten"] = function(done)
     if not PD.Kiste or not PD.Kiste.LoadConfig then
         done("Transportkisten-Modul nicht geladen")
@@ -371,7 +393,7 @@ concommand.Add("pd_reload", function(ply, cmd, args)
     local area = string.lower(args[1] or "")
 
     if area == "" then
-        PD.RemoteLog("[Remote] Verwendung: pd_reload <jobs|fortbildung|waffen|arccw|fraktionen|armor|spawns|chars|charakter|funk|fahrzeuge|kisten|all>")
+        PD.RemoteLog("[Remote] Verwendung: pd_reload <jobs|fortbildung|waffen|arccw|fraktionen|armor|spawns|chars|charakter|funk|fahrzeuge|kisten|naval|naval_galaxy|all>")
         return
     end
 

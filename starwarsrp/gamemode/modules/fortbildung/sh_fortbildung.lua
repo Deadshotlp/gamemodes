@@ -53,7 +53,7 @@ function PD.FB.NewCourse()
         color = Color(60, 140, 60),
         equip = {},
         model = {},
-        badge = {skin = nil, bodygroups = {}},
+        badge = {skin = nil, bodygroups = {}, icon = nil},
         access = {units = {}, subunits = {}, jobs = {}},
         teach = {},
         requires = {},
@@ -262,4 +262,33 @@ function PD.FB.FormatRemaining(entry)
     end
 
     return "noch unter einer Stunde"
+end
+
+--[[
+    Kleines Icon einer Fortbildung (badge.icon, Material-Pfad wie
+    "icon16/star.png"). Gibt das Material oder nil zurueck.
+]]
+if CLIENT then
+    local iconCache = {}
+
+    function PD.FB.IconMaterial(course)
+        local path = course and course.badge and course.badge.icon
+        if not isstring(path) or path == "" or not string.match(path, "^[%w_/%-%.]+$") then return nil end
+        if iconCache[path] == nil then
+            local mat = Material(path, "smooth mips")
+            iconCache[path] = (mat and not mat:IsError()) and mat or false
+        end
+        return iconCache[path] or nil
+    end
+
+    -- Icon zeichnen (16 x 16 skaliert); gibt die Breite inkl. Abstand zurueck
+    function PD.FB.DrawIcon(course, x, y, size)
+        local mat = PD.FB.IconMaterial(course)
+        if not mat then return 0 end
+        size = size or 16
+        surface.SetMaterial(mat)
+        surface.SetDrawColor(255, 255, 255)
+        surface.DrawTexturedRect(x, y, size, size)
+        return size + 6
+    end
 end

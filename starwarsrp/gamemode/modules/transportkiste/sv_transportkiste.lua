@@ -410,6 +410,11 @@ net.Receive("PD.Kiste.Start", function(len, ply)
         if ent:GetClass() ~= PD.Kiste.CrateClass then return end
         if IsValid(ent:GetParent()) or ent:GetNoDraw() then return end
 
+        if not PD.Kiste.CanUnpack(ply) then
+            notify(ply, "Aufbauen können nur Engineers.")
+            return
+        end
+
         if not istable(ent.PD_Packed) then
             notify(ply, "Diese Kiste ist leer.")
             return

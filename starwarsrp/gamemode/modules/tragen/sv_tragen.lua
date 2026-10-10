@@ -485,6 +485,9 @@ local function shouldDrop(ply, rec)
     -- Etwa ein Admin hat es per Physgun eingefroren.
     if PD.Carry.IsFrozen(ent) then return true end
 
+    -- Waffe gewechselt: nur mit den Haenden wird getragen
+    if not PD.Carry.HoldsHands(ply) then return true end
+
     return false
 end
 

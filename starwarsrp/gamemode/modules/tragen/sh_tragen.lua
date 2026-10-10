@@ -125,10 +125,17 @@ end
     nach gehaltenem E angezeigt werden soll (zu schwer, eingefroren ...). Bei
     Fahrzeugen, Spielern usw. passiert still nichts.
 ]]
+-- Getragen wird nur mit den Haenden in der Hand
+function PD.Carry.HoldsHands(ply)
+    local wep = IsValid(ply) and ply:GetActiveWeapon()
+    return IsValid(wep) and wep:GetClass() == ((PD.Equip and PD.Equip.Hands) or "mhands")
+end
+
 function PD.Carry.CanPickup(ply, ent)
     local cfg = PD.Carry.Config
 
     if not IsValid(ply) or not ply:Alive() or ply:InVehicle() then return false, "Gerade nicht moeglich." end
+    if not PD.Carry.HoldsHands(ply) then return false, "Nur mit den Haenden." end
     if PD.Carry.IsCarrying(ply) then return false, "Du traegst bereits etwas." end
     if not IsValid(ent) or ent:IsWorld() then return false, "Nichts zum Tragen." end
     if ent:IsPlayer() or ent:IsNPC() or ent:IsNextBot() then return false, "Lebewesen lassen sich nicht tragen." end
